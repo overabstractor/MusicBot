@@ -12,6 +12,9 @@ public static class Program
 {
     [DllImport("kernel32.dll")] private static extern IntPtr GetConsoleWindow();
     [DllImport("user32.dll")]   private static extern bool  ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")]   private static extern bool  SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")]   private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+    [DllImport("user32.dll")]   private static extern bool  IsIconic(IntPtr hWnd);
 
     /// <summary>
     /// Sets a fixed AppUserModelID for this process so Windows and audio routers
@@ -22,10 +25,28 @@ public static class Program
     private static extern int SetCurrentProcessExplicitAppUserModelID(
         [MarshalAs(UnmanagedType.LPWStr)] string AppID);
 
+    // Held for the lifetime of the process to enforce single-instance
+    private static Mutex? _instanceMutex;
+
     [STAThread]
     public static void Main(string[] args)
     {
         VelopackApp.Build().Run();
+
+        // ── Single instance guard ─────────────────────────────────────────────
+        _instanceMutex = new Mutex(initiallyOwned: true, @"Global\MusicBot.SingleInstance", out bool createdNew);
+        if (!createdNew)
+        {
+            // Another instance is running — bring its window to the foreground and exit
+            var hWnd = FindWindow(null, "MusicBot");
+            if (hWnd != IntPtr.Zero)
+            {
+                if (IsIconic(hWnd)) ShowWindow(hWnd, 9); // SW_RESTORE
+                SetForegroundWindow(hWnd);
+            }
+            _instanceMutex.Dispose();
+            return;
+        }
 
         // Fix process identity for audio routers and taskbar grouping
         SetCurrentProcessExplicitAppUserModelID("MusicBot.Player");
@@ -84,6 +105,8 @@ public static class Program
         finally
         {
             Log.CloseAndFlush();
+            _instanceMutex?.ReleaseMutex();
+            _instanceMutex?.Dispose();
         }
     }
 }
