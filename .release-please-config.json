@@ -1,0 +1,15 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "bump-minor-pre-major": true,
+      "changelog-sections": [
+        { "type": "feat",  "section": "Features" },
+        { "type": "fix",   "section": "Bug Fixes" },
+        { "type": "perf",  "section": "Performance" },
+        { "type": "chore", "section": "Miscellaneous", "hidden": true },
+        { "type": "ci",    "section": "CI",             "hidden": true }
+      ]
+    }
+  }
+}

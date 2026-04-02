@@ -1,0 +1,50 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## Node (frontend)
+node_modules/
+dist/
+
+## React build output (generado por NUKE/Vite, no editar directamente)
+src/MusicBot.Web/wwwroot/
+
+## IDE
+.idea/
+
+## SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+## Music library (downloaded MP3s — large binary files, not tracked)
+**/music-library/
+
+## Logs
+**/logs/
+
+## Misc
+*.swp
+*~
+.env
+/publish
+/artifacts
+.nuke/temp/

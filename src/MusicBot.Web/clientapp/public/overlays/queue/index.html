@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cola (Horizontal) – MusicBot</title>
+  <script src="../shared/theme.js"></script>
+  <link rel="stylesheet" href="../shared/overlay.css">
+</head>
+<body>
+  <div id="queue-container" class="queue-container hidden">
+    <div class="queue-header">
+      <span class="queue-icon">♫</span>
+      <span>Cola</span>
+      <span id="queue-count" class="queue-count">0</span>
+    </div>
+    <div id="dl-banners"></div>
+    <div id="queue-list" class="queue-list"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <script src="../shared/signalr-client.js"></script>
+  <script src="../shared/toast.js"></script>
+  <script src="../shared/vote-widget.js"></script>
+  <script>
+    const PLATFORM_MAP = {
+      twitch:{label:"Twitch",cls:"platform-twitch"}, tiktok:{label:"TikTok",cls:"platform-tiktok"},
+      tikfinity:{label:"TikTok",cls:"platform-tiktok"}, youtube:{label:"YouTube",cls:"platform-youtube"},
+      kick:{label:"Kick",cls:"platform-kick"}, web:{label:"Web",cls:"platform-web"}, http:{label:"Web",cls:"platform-web"},
+    };
+    function badge(p) { const i=p&&PLATFORM_MAP[p.toLowerCase()]; return i?`<span class="platform-badge ${i.cls}">${i.label}</span>`:""; }
+    function esc(t)   { const d=document.createElement("div"); d.textContent=t; return d.innerHTML; }
+    function fmt(ms)  { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`; }
+
+    // ── DOM refs ──────────────────────────────────────────────────────────────
+    const container  = document.getElementById("queue-container");
+    const list       = document.getElementById("queue-list");
+    const countEl    = document.getElementById("queue-count");
+
+    // key → DOM element. "__np__" = now-playing row
+    const nodes = new Map();
+
+    // Progress state
+    let progressMs=0, durationMs=0, isPlaying=false, ticker=null;
+
+    function startTick() {
+      if (ticker) return;
+      ticker = setInterval(() => {
+        if (!isPlaying || durationMs <= 0) return;
+        progressMs = Math.min(progressMs + 100, durationMs);
+        const timeEl = document.getElementById("np-time-text");
+        if (timeEl) timeEl.textContent = `${fmt(progressMs)} / ${fmt(durationMs)}`;
+        const fillEl = document.getElementById("np-queue-fill");
+        if (fillEl) fillEl.style.width = `${Math.min(progressMs/durationMs*100,100)}%`;
+      }, 100);
+    }
+    function stopTick() { clearInterval(ticker); ticker=null; }
+
+    // ── Node builders ─────────────────────────────────────────────────────────
+    function applyMarquee(el) {
+      el.classList.remove("scrolling");
+      el.style.removeProperty("--marquee-end");
+      el.style.removeProperty("--marquee-dur");
+      requestAnimationFrame(() => {
+        const overflow = el.scrollWidth - el.parentElement.clientWidth;
+        if (overflow > 4) {
+          const scrollSec = Math.max(3, overflow / 60);
+          const total = parseFloat((scrollSec * 2 + 4).toFixed(1));
+          el.style.setProperty("--marquee-end", `-${overflow}px`);
+          el.style.setProperty("--marquee-dur", `${total}s`);
+          el.classList.add("scrolling");
+        }
+      });
+    }
+
+    function buildNowPlayingNode(song, item) {
+      const requestedBy = (item && item.requestedBy) || song.requestedBy;
+      const platform    = (item && item.platform)    || song.platform;
+      const div = document.createElement("div");
+      div.className = "queue-item now-playing-item entering";
+      div.innerHTML = `
+        <img class="queue-item-cover" src="${esc(song.coverUrl)}" alt="">
+        <div class="queue-item-info">
+          <div class="queue-item-title-wrap np-scroll-wrap">
+            <div class="queue-item-title-line">
+              ${esc(song.title)}<span class="artist"> — ${esc(song.artist)}</span>
+            </div>
+          </div>
+          <div class="queue-item-time playing" id="np-time-text">
+            ${fmt(progressMs)} / ${fmt(durationMs || song.durationMs)}
+          </div>
+          ${requestedBy ? `<div class="queue-item-requested-by">${badge(platform)} ${esc(requestedBy)}</div>` : ""}
+          <div class="np-queue-bar"><div class="np-queue-bar-fill" id="np-queue-fill" style="width:0%"></div></div>
+        </div>`;
+      div.addEventListener("animationend", () => div.classList.remove("entering"), { once: true });
+      const titleEl = div.querySelector(".queue-item-title-line");
+      if (titleEl) applyMarquee(titleEl);
+      return div;
+    }
+
+    const _dlStates  = {}; // spotifyUri → { pct, title, artist }
+    const _dlBanners = {}; // spotifyUri → banner DOM element
+    const dlBannersEl = document.getElementById("dl-banners");
+
+    function buildDlBanner(uri, title, artist, pct) {
+      const div = document.createElement("div");
+      div.className = "ov-dl-banner";
+      div.dataset.uri = uri;
+      div.innerHTML = `
+        <div class="ov-dl-banner-row">
+          <span class="ov-dl-banner-icon">⬇</span>
+          <div class="ov-dl-banner-info">
+            <span class="ov-dl-banner-label">Descargando</span>
+            <span class="ov-dl-banner-title">${esc(title || "...")}</span>
+          </div>
+          <span class="ov-dl-banner-pct">${pct}%</span>
+        </div>
+        <div class="ov-dl-banner-track">
+          <div class="ov-dl-banner-fill${pct === 0 ? " ov-dl-indeterminate" : ""}" style="${pct > 0 ? `width:${pct}%` : ""}"></div>
+        </div>`;
+      return div;
+    }
+
+    function updateDlBanner(uri) {
+      const dl = _dlStates[uri];
+      const el = _dlBanners[uri];
+      if (!el) return;
+      const pct = dl?.pct ?? 0;
+      const pctEl  = el.querySelector(".ov-dl-banner-pct");
+      const fill   = el.querySelector(".ov-dl-banner-fill");
+      const label  = el.querySelector(".ov-dl-banner-label");
+      if (pctEl) pctEl.textContent = `${pct}%`;
+      if (label) label.textContent = pct === 0 ? "Buscando..." : "Descargando";
+      if (fill) {
+        if (pct > 0) {
+          fill.classList.remove("ov-dl-indeterminate");
+          fill.style.width = `${pct}%`;
+        } else {
+          fill.classList.add("ov-dl-indeterminate");
+          fill.style.width = "";
+        }
+      }
+    }
+
+    function buildUpcomingNode(song, item) {
+      const requestedBy = (item && item.requestedBy) || song.requestedBy;
+      const platform    = (item && item.platform)    || song.platform;
+      const dl = _dlStates[song.spotifyUri];
+      const div = document.createElement("div");
+      div.className = "queue-item entering";
+      div.dataset.key = song.spotifyUri;
+      div.innerHTML = `
+        <img class="queue-item-cover" src="${esc(song.coverUrl)}" alt="">
+        <div class="queue-item-info">
+          <div class="queue-item-title-wrap np-scroll-wrap">
+            <div class="queue-item-title-line">
+              ${esc(song.title)}<span class="artist"> — ${esc(song.artist)}</span>
+            </div>
+          </div>
+          <div class="queue-item-time">
+            ${fmt(song.durationMs)}
+            ${requestedBy ? `<span class="queue-item-requested-by">${badge(platform)} ${esc(requestedBy)}</span>` : ""}
+          </div>
+          ${dl ? `<div class="queue-item-dl-bar-wrap"><div class="queue-item-dl-bar-fill" style="width:${dl.pct}%"></div><span class="queue-item-dl-pct">⬇ ${dl.pct}%</span></div>` : ""}
+        </div>`;
+      div.addEventListener("animationend", () => div.classList.remove("entering"), { once: true });
+      const titleEl = div.querySelector(".queue-item-title-line");
+      if (titleEl) applyMarquee(titleEl);
+      return div;
+    }
+
+    function updateUpcomingNode(el, song, item) {
+      const requestedBy = (item && item.requestedBy) || song.requestedBy;
+      const platform    = (item && item.platform)    || song.platform;
+      const cover  = el.querySelector(".queue-item-cover");
+      const title  = el.querySelector(".queue-item-title-line");
+      const time   = el.querySelector(".queue-item-time");
+      if (cover.src !== song.coverUrl) cover.src = song.coverUrl;
+      const newHtml = `${esc(song.title)}<span class="artist"> — ${esc(song.artist)}</span>`;
+      if (title.innerHTML !== newHtml) { title.innerHTML = newHtml; applyMarquee(title); }
+      time.innerHTML  = `${fmt(song.durationMs)}${requestedBy
+        ? `<span class="queue-item-requested-by">${badge(platform)} ${esc(requestedBy)}</span>` : ""}`;
+    }
+
+    function removeNode(el) {
+      el.classList.add("removing");
+      el.addEventListener("animationend", () => el.remove(), { once: true });
+    }
+
+    // ── Main handler: queue:updated ──────────────────────────────────────────
+    function handleQueueUpdated(state) {
+      const np       = state && state.nowPlaying;
+      const upcoming = (state && state.upcoming) || [];
+      const nowSong  = np && (np.spotifyTrack || (np.item && np.item.song));
+
+      // Update progress
+      if (np) {
+        progressMs = np.progressMs || 0;
+        isPlaying  = np.isPlaying  || false;
+        durationMs = nowSong ? nowSong.durationMs : 0;
+        isPlaying ? startTick() : stopTick();
+      }
+
+      const total = upcoming.length + (nowSong ? 1 : 0);
+
+      if (total === 0) {
+        container.classList.add("hidden");
+        return;
+      }
+      container.classList.remove("hidden");
+      countEl.textContent = total;
+
+      // ── Now-playing row ──
+      const oldNpEl = nodes.get("__np__");
+      if (!nowSong) {
+        if (oldNpEl) { removeNode(oldNpEl); nodes.delete("__np__"); }
+        stopTick();
+      } else {
+        const oldUri = oldNpEl?.dataset?.key;
+        if (!oldNpEl || oldUri !== nowSong.spotifyUri) {
+          if (oldNpEl) { removeNode(oldNpEl); nodes.delete("__np__"); }
+          const newEl = buildNowPlayingNode(nowSong, np.item);
+          newEl.dataset.key = nowSong.spotifyUri;
+          list.insertBefore(newEl, list.firstChild);
+          nodes.set("__np__", newEl);
+        }
+      }
+
+      const incomingUris = new Set(upcoming.map(i => i.song?.spotifyUri || i.spotifyUri));
+
+      // ── Remove songs gone from queue ──
+      for (const [key, el] of nodes) {
+        if (key === "__np__") continue;
+        if (!incomingUris.has(key)) { removeNode(el); nodes.delete(key); }
+      }
+
+      // ── Add / update upcoming ──
+      upcoming.forEach(item => {
+        const song = item.song || item;
+        const uri  = song.spotifyUri;
+        if (nodes.has(uri)) {
+          updateUpcomingNode(nodes.get(uri), song, item);
+        } else {
+          const el = buildUpcomingNode(song, item);
+          nodes.set(uri, el);
+          list.appendChild(el);
+          // If there was a banner for this song, remove it — the inline bar takes over
+          if (_dlBanners[uri]) { _dlBanners[uri].remove(); delete _dlBanners[uri]; }
+        }
+      });
+
+      // ── Reorder DOM ──
+      const npEl = nodes.get("__np__");
+      upcoming.forEach(item => {
+        const uri = (item.song || item).spotifyUri;
+        const el  = nodes.get(uri);
+        if (el) list.appendChild(el);
+      });
+      if (npEl && npEl.parentNode) list.insertBefore(npEl, list.firstChild);
+    }
+
+    // ── SignalR ───────────────────────────────────────────────────────────────
+    let _signalrReady = false;
+    const conn = new OverlayConnection("/hub/overlay");
+    conn
+      .on("queue:updated",      (state) => { _signalrReady = true; handleQueueUpdated(state); })
+      .on("nowplaying:updated", (state) => {
+        if (!state) return;
+        progressMs = state.progressMs || 0;
+        isPlaying  = state.isPlaying  || false;
+        const song = state.spotifyTrack || (state.item && state.item.song);
+        durationMs = song ? song.durationMs : 0;
+        isPlaying ? startTick() : stopTick();
+      })
+      .on("download:started", (d) => {
+        if (!d?.spotifyUri) return;
+        _dlStates[d.spotifyUri] = { pct: 0, title: d.title, artist: d.artist };
+        const queueEl = nodes.get(d.spotifyUri);
+        if (queueEl) {
+          // Song is already in the queue — show inline bar only, no banner
+          updateDlBar(queueEl, d.spotifyUri);
+        } else if (!_dlBanners[d.spotifyUri]) {
+          // Song not in queue yet — show a banner at the top
+          const banner = buildDlBanner(d.spotifyUri, d.title, d.artist, 0);
+          _dlBanners[d.spotifyUri] = banner;
+          dlBannersEl.appendChild(banner);
+          container.classList.remove("hidden");
+        }
+      })
+      .on("download:progress", (d) => {
+        if (!d?.spotifyUri) return;
+        // Handle overlay loading mid-download (missed download:started)
+        if (!_dlStates[d.spotifyUri]) {
+          _dlStates[d.spotifyUri] = { pct: d.pct ?? 0 };
+          if (!_dlBanners[d.spotifyUri]) {
+            const banner = buildDlBanner(d.spotifyUri, null, null, d.pct ?? 0);
+            _dlBanners[d.spotifyUri] = banner;
+            dlBannersEl.appendChild(banner);
+            container.classList.remove("hidden");
+          }
+        } else {
+          _dlStates[d.spotifyUri].pct = d.pct ?? 0;
+        }
+        updateDlBanner(d.spotifyUri);
+        const el = nodes.get(d.spotifyUri);
+        if (el) updateDlBar(el, d.spotifyUri);
+      })
+      .on("download:done", (d) => {
+        if (!d?.spotifyUri) return;
+        // Flash 100% briefly then remove
+        if (_dlStates[d.spotifyUri]) _dlStates[d.spotifyUri].pct = 100;
+        updateDlBanner(d.spotifyUri);
+        const el = nodes.get(d.spotifyUri);
+        if (el) updateDlBar(el, d.spotifyUri);
+        setTimeout(() => {
+          delete _dlStates[d.spotifyUri];
+          const banner = _dlBanners[d.spotifyUri];
+          if (banner) { banner.remove(); delete _dlBanners[d.spotifyUri]; }
+          const qEl = nodes.get(d.spotifyUri);
+          if (qEl) updateDlBar(qEl, d.spotifyUri);
+        }, 1200);
+      });
+
+    function updateDlBar(el, uri) {
+      const info = el.querySelector(".queue-item-info");
+      if (!info) return;
+      let wrap = el.querySelector(".queue-item-dl-bar-wrap");
+      const dl = _dlStates[uri];
+      if (!dl) {
+        if (wrap) wrap.remove();
+        return;
+      }
+      if (!wrap) {
+        wrap = document.createElement("div");
+        wrap.className = "queue-item-dl-bar-wrap";
+        wrap.innerHTML = `<div class="queue-item-dl-bar-fill"></div><span class="queue-item-dl-pct"></span>`;
+        info.appendChild(wrap);
+      }
+      const pct = dl.pct ?? 0;
+      const fill = wrap.querySelector(".queue-item-dl-bar-fill");
+      if (pct > 0) {
+        fill.classList.remove("ov-dl-indeterminate");
+        fill.style.width = `${pct}%`;
+      } else {
+        fill.classList.add("ov-dl-indeterminate");
+        fill.style.width = "";
+      }
+      wrap.querySelector(".queue-item-dl-pct").textContent = pct === 0 ? "⬇ Buscando..." : `⬇ ${pct}%`;
+    }
+
+    // Vote widget + toasts (must be after conn is defined but before start)
+    initVoteWidget(conn, list);
+    initOverlayToasts(conn);
+
+    const _initToken = new URLSearchParams(window.location.search).get("token") || "local";
+    fetch(`/api/queue/public/${encodeURIComponent(_initToken)}/spotify-queue`)
+      .then(r => r.ok ? r.json() : null)
+      .then(state => { if (state && !_signalrReady) handleQueueUpdated({ upcoming: state.queue || [], nowPlaying: state.currentlyPlaying ? { item: { song: state.currentlyPlaying }, isPlaying: true, progressMs: 0 } : null }); })
+      .catch(() => {});
+
+    conn.start();
+  </script>
+</body>
+</html>

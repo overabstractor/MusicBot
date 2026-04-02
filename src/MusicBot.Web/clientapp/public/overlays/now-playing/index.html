@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Now Playing (Horizontal) – MusicBot</title>
+  <script src="../shared/theme.js"></script>
+  <link rel="stylesheet" href="../shared/overlay.css">
+</head>
+<body>
+  <div id="widget" class="now-playing hidden">
+    <div id="np-bg"  class="np-bg"></div>
+    <div class="np-bg-overlay"></div>
+    <div class="np-paused-badge">⏸ Pausado</div>
+    <div class="np-cover-container">
+      <div id="np-vinyl" class="vinyl-disc np-vinyl no-cover">
+        <img id="np-cover" class="vinyl-art" src="" alt="">
+        <span class="vinyl-note">♫</span>
+      </div>
+    </div>
+    <div class="np-info">
+      <div class="np-scroll-wrap"><div id="np-artist" class="np-artist"></div></div>
+      <div class="np-scroll-wrap"><div id="np-title"  class="np-title"></div></div>
+      <div id="np-requested" class="np-requested hidden"></div>
+      <div class="np-progress">
+        <div class="np-bar-track"><div id="np-bar" class="np-bar-fill" style="width:0%"></div></div>
+        <div class="np-time-row">
+          <span id="np-cur">0:00</span>
+          <span id="np-dur">0:00</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <script src="../shared/signalr-client.js"></script>
+  <script src="../shared/toast.js"></script>
+  <script>
+    const PLATFORM_MAP = {
+      twitch: { label:"Twitch", cls:"platform-twitch" },
+      tiktok: { label:"TikTok", cls:"platform-tiktok" },
+      tikfinity: { label:"TikTok", cls:"platform-tiktok" },
+      youtube: { label:"YouTube", cls:"platform-youtube" },
+      kick: { label:"Kick", cls:"platform-kick" },
+      web: { label:"Web", cls:"platform-web" },
+      http: { label:"Web", cls:"platform-web" },
+    };
+    function platformBadge(p) {
+      const info = p && PLATFORM_MAP[p.toLowerCase()];
+      return info ? `<span class="platform-badge ${info.cls}">${info.label}</span>` : "";
+    }
+    function esc(t) { const d=document.createElement("div"); d.textContent=t; return d.innerHTML; }
+    function fmt(ms) { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`; }
+
+    const widget      = document.getElementById("widget");
+    const npBg        = document.getElementById("np-bg");
+    const npVinyl     = document.getElementById("np-vinyl");
+    const npCover     = document.getElementById("np-cover");
+    const npTitle     = document.getElementById("np-title");
+    const npArtist    = document.getElementById("np-artist");
+    const npRequested = document.getElementById("np-requested");
+    const npBar       = document.getElementById("np-bar");
+    const npCur       = document.getElementById("np-cur");
+    const npDur       = document.getElementById("np-dur");
+
+    npCover.onerror = () => { npVinyl.classList.add("no-cover"); };
+
+    let currentUri    = null;
+    let transitioning = false;
+    let progressMs    = 0;
+    let durationMs    = 0;
+    let isPlaying     = false;
+    let ticker        = null;
+
+    function startTick() {
+      if (ticker) return;
+      ticker = setInterval(() => {
+        if (!isPlaying) return;
+        progressMs = Math.min(progressMs + 200, durationMs);
+        renderProgress();
+      }, 200);
+    }
+    function stopTick() { clearInterval(ticker); ticker = null; }
+
+    function renderProgress() {
+      const pct = durationMs > 0 ? Math.min(progressMs / durationMs * 100, 100) : 0;
+      npBar.style.width = `${pct}%`;
+      npCur.textContent = fmt(progressMs);
+      npDur.textContent = fmt(durationMs);
+    }
+
+    function applyMarquee(el) {
+      el.classList.remove("scrolling");
+      el.style.removeProperty("--marquee-end");
+      el.style.removeProperty("--marquee-dur");
+      // rAF so the browser has laid out the new text before measuring
+      requestAnimationFrame(() => {
+        const wrap = el.parentElement;
+        const overflow = el.scrollWidth - wrap.clientWidth;
+        if (overflow > 4) {
+          // speed ≈ 60px/s; 2s pause each side
+          const scrollSec = Math.max(3, overflow / 60);
+          const total     = parseFloat((scrollSec * 2 + 4).toFixed(1));
+          el.style.setProperty("--marquee-end", `-${overflow}px`);
+          el.style.setProperty("--marquee-dur", `${total}s`);
+          el.classList.add("scrolling");
+        }
+      });
+    }
+
+    function applyContent(song, state) {
+      const requestedBy = (state.item && state.item.requestedBy) || song.requestedBy;
+      const platform    = (state.item && state.item.platform)    || song.platform;
+      const hasCover    = song.coverUrl && song.coverUrl.trim() !== "";
+      npVinyl.classList.toggle("no-cover", !hasCover);
+      npBg.style.backgroundImage = hasCover ? `url(${song.coverUrl})` : "none";
+      npCover.src = hasCover ? song.coverUrl : "";
+      npArtist.textContent = song.artist.toUpperCase();
+      npTitle.textContent  = song.title;
+      applyMarquee(npArtist);
+      applyMarquee(npTitle);
+      if (requestedBy) {
+        npRequested.innerHTML = `${platformBadge(platform)} ♪ ${esc(requestedBy)}`;
+        npRequested.classList.remove("hidden");
+      } else {
+        npRequested.classList.add("hidden");
+      }
+    }
+
+    function updateNowPlaying(state) {
+      const song = state && (state.spotifyTrack || (state.item && state.item.song));
+
+      // Update progress state
+      if (state) {
+        progressMs = state.progressMs || 0;
+        isPlaying  = state.isPlaying  || false;
+        durationMs = song ? song.durationMs : 0;
+        isPlaying ? startTick() : stopTick();
+        renderProgress();
+      }
+
+      // Spin the vinyl when playing
+      npVinyl.classList.toggle("playing", !!isPlaying && !!song);
+
+      // Update paused class (only affects opacity + badge, never hides)
+      if (song) {
+        widget.classList.toggle("paused", !isPlaying);
+      }
+
+      // No song at all → hide widget
+      if (!song) {
+        if (!widget.classList.contains("hidden")) {
+          widget.classList.add("fading-out");
+          setTimeout(() => {
+            widget.classList.add("hidden");
+            widget.classList.remove("fading-out");
+            currentUri = null;
+          }, 300);
+        }
+        stopTick();
+        return;
+      }
+
+      const isNewSong = currentUri !== song.spotifyUri;
+
+      if (widget.classList.contains("hidden")) {
+        applyContent(song, state);
+        widget.classList.remove("hidden");
+        currentUri = song.spotifyUri;
+        return;
+      }
+
+      if (isNewSong && !transitioning) {
+        transitioning = true;
+        widget.classList.add("fading-out");
+        setTimeout(() => {
+          applyContent(song, state);
+          widget.classList.remove("fading-out");
+          currentUri    = song.spotifyUri;
+          transitioning = false;
+        }, 280);
+      }
+    }
+
+    // Guard: once SignalR sends any update, ignore the HTTP fallback response
+    // so a late/stale fetch cannot overwrite the live state and hide the widget.
+    let _signalrReady = false;
+
+    const conn = new OverlayConnection("/hub/overlay");
+    conn
+      .on("nowplaying:updated", (state) => { _signalrReady = true; updateNowPlaying(state); })
+      .on("queue:updated", (state) => { if (state?.nowPlaying) { _signalrReady = true; updateNowPlaying(state.nowPlaying); } });
+
+    // HTTP fallback so the overlay shows immediately on load (OBS / TikTok Source Link).
+    // Only applied if SignalR hasn't already responded.
+    const _initToken = new URLSearchParams(window.location.search).get("token") || "local";
+    fetch(`/api/queue/public/${encodeURIComponent(_initToken)}/now-playing`)
+      .then(r => r.ok ? r.json() : null)
+      .then(state => { if (state && !_signalrReady) updateNowPlaying(state); })
+      .catch(() => {});
+
+    conn.start();
+  </script>
+</body>
+</html>

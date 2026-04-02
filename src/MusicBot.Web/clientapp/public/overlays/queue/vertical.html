@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cola (Vertical) – MusicBot</title>
+  <script src="../shared/theme.js"></script>
+  <link rel="stylesheet" href="../shared/overlay.css">
+  <style>
+    body { display: flex; justify-content: flex-start; align-items: flex-start; }
+
+    .qv-container {
+      width: 320px;
+      max-height: 90vh;
+      background: rgba(12,12,22,0.92);
+      border-radius: 16px;
+      overflow: hidden;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.09);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.65);
+      animation: slideInLeft 0.5s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    .qv-header {
+      display: flex; align-items: center; gap: 7px;
+      padding: 10px 14px;
+      font-size: 10px; font-weight: 700;
+      color: rgba(255,255,255,0.4);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      text-transform: uppercase; letter-spacing: 1.4px;
+    }
+    .qv-count { margin-left: auto; color: rgba(255,255,255,0.28); }
+
+    .qv-list {
+      overflow-y: auto; max-height: calc(90vh - 40px);
+      scrollbar-width: none;
+    }
+    .qv-list::-webkit-scrollbar { display: none; }
+
+    /* Compact row */
+    .qv-row {
+      display: flex; align-items: center; gap: 9px;
+      padding: 7px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .qv-row.qv-np {
+      background: linear-gradient(90deg, rgba(124,58,237,0.2) 0%, transparent 100%);
+      border-left: 2px solid rgba(167,139,250,0.7);
+      padding-left: 10px;
+    }
+    .qv-row.entering { animation: itemEnter 0.3s cubic-bezier(0.16,1,0.3,1) both; }
+    .qv-row.removing  { animation: itemExit 0.2s ease forwards; pointer-events: none; }
+
+    .qv-cover {
+      width: 40px; height: 40px;
+      border-radius: 5px; object-fit: cover; flex-shrink: 0;
+    }
+
+    .qv-info { flex: 1; min-width: 0; }
+
+    .qv-title {
+      font-size: 12px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      line-height: 1.3;
+    }
+    .qv-artist {
+      font-size: 10px; color: rgba(255,255,255,0.55);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .qv-meta {
+      font-size: 10px; color: rgba(255,255,255,0.35);
+      font-variant-numeric: tabular-nums;
+      display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+      margin-top: 1px;
+    }
+    .qv-meta.playing { color: rgba(167,139,250,0.8); }
+
+    /* Mini progress bar */
+    .qv-bar { width:100%; height:2px; background:rgba(255,255,255,0.12); border-radius:1px; overflow:hidden; margin-top:4px; }
+    .qv-bar-fill { height:100%; background:#a78bfa; border-radius:1px; transition:width 0.5s linear; }
+  </style>
+</head>
+<body>
+  <div id="container" class="qv-container hidden">
+    <div class="qv-header">
+      <span>♫</span><span>Cola</span>
+      <span id="qv-count" class="qv-count">0</span>
+    </div>
+    <div id="qv-list" class="qv-list"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <script src="../shared/signalr-client.js"></script>
+  <script src="../shared/toast.js"></script>
+  <script src="../shared/vote-widget.js"></script>
+  <script>
+    const PLATFORM_MAP = {
+      twitch:{label:"Twitch",cls:"platform-twitch"}, tiktok:{label:"TikTok",cls:"platform-tiktok"},
+      tikfinity:{label:"TikTok",cls:"platform-tiktok"}, youtube:{label:"YouTube",cls:"platform-youtube"},
+      kick:{label:"Kick",cls:"platform-kick"}, web:{label:"Web",cls:"platform-web"}, http:{label:"Web",cls:"platform-web"},
+    };
+    function badge(p) { const i=p&&PLATFORM_MAP[p.toLowerCase()]; return i?`<span class="platform-badge ${i.cls}">${i.label}</span>`:""; }
+    function esc(t)   { const d=document.createElement("div"); d.textContent=t; return d.innerHTML; }
+    function fmt(ms)  { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`; }
+
+    const container = document.getElementById("container");
+    const listEl    = document.getElementById("qv-list");
+    const countEl   = document.getElementById("qv-count");
+    const nodes     = new Map();
+
+    let progressMs=0, durationMs=0, isPlaying=false, ticker=null;
+
+    function startTick() {
+      if (ticker) return;
+      ticker = setInterval(() => {
+        if (!isPlaying) return;
+        progressMs = Math.min(progressMs + 100, durationMs);
+        const t = document.getElementById("qv-np-time");
+        const f = document.getElementById("qv-np-fill");
+        if (t) t.textContent = `${fmt(progressMs)} / ${fmt(durationMs)}`;
+        if (f && durationMs > 0) f.style.width = `${Math.min(progressMs/durationMs*100,100)}%`;
+      }, 100);
+    }
+    function stopTick() { clearInterval(ticker); ticker = null; }
+
+    function buildNPRow(song, item) {
+      const rb = (item&&item.requestedBy)||song.requestedBy;
+      const pl = (item&&item.platform)||song.platform;
+      const div = document.createElement("div");
+      div.className = "qv-row qv-np entering";
+      div.dataset.key = song.spotifyUri;
+      div.innerHTML = `
+        <img class="qv-cover" src="${esc(song.coverUrl)}" alt="">
+        <div class="qv-info">
+          <div class="qv-title">${esc(song.title)}</div>
+          <div class="qv-artist">${esc(song.artist)}</div>
+          <div class="qv-meta playing" id="qv-np-time">${fmt(progressMs)} / ${fmt(durationMs||song.durationMs)}</div>
+          ${rb?`<div class="qv-meta">${badge(pl)} ${esc(rb)}</div>`:""}
+          <div class="qv-bar"><div class="qv-bar-fill" id="qv-np-fill" style="width:0%"></div></div>
+        </div>`;
+      div.addEventListener("animationend", () => div.classList.remove("entering"), {once:true});
+      return div;
+    }
+
+    function buildUpRow(song, item) {
+      const rb = (item&&item.requestedBy)||song.requestedBy;
+      const pl = (item&&item.platform)||song.platform;
+      const div = document.createElement("div");
+      div.className = "qv-row entering";
+      div.dataset.key = song.spotifyUri;
+      div.innerHTML = `
+        <img class="qv-cover" src="${esc(song.coverUrl)}" alt="">
+        <div class="qv-info">
+          <div class="qv-title">${esc(song.title)}</div>
+          <div class="qv-artist">${esc(song.artist)}</div>
+          <div class="qv-meta">${fmt(song.durationMs)}${rb?` · ${badge(pl)}${esc(rb)}`:""}</div>
+        </div>`;
+      div.addEventListener("animationend", () => div.classList.remove("entering"), {once:true});
+      return div;
+    }
+
+    function removeNode(el) { el.classList.add("removing"); el.addEventListener("animationend",()=>el.remove(),{once:true}); }
+
+    let prevUris = new Set();
+
+    function handleQueueUpdated(state) {
+      const np       = state && state.nowPlaying;
+      const upcoming = (state && state.upcoming) || [];
+      const nowSong  = np && (np.spotifyTrack || (np.item && np.item.song));
+
+      if (np) { progressMs=np.progressMs||0; isPlaying=np.isPlaying||false; durationMs=nowSong?nowSong.durationMs:0; isPlaying?startTick():stopTick(); }
+
+      const total = upcoming.length + (nowSong ? 1 : 0);
+      if (total === 0) { container.classList.add("hidden"); return; }
+      container.classList.remove("hidden");
+      countEl.textContent = total;
+
+      // NP row
+      const oldNp = nodes.get("__np__");
+      if (!nowSong) { if(oldNp){removeNode(oldNp);nodes.delete("__np__");} stopTick(); }
+      else {
+        if (!oldNp || oldNp.dataset.key !== nowSong.spotifyUri) {
+          if (oldNp) { removeNode(oldNp); nodes.delete("__np__"); }
+          const el = buildNPRow(nowSong, np.item);
+          listEl.insertBefore(el, listEl.firstChild);
+          nodes.set("__np__", el);
+        }
+      }
+
+      // Toast for new songs
+      const incomingUris = new Set(upcoming.map(i=>(i.song||i).spotifyUri));
+      incomingUris.forEach(uri => {
+        if (!prevUris.has(uri)) {
+          const it = upcoming.find(i=>(i.song||i).spotifyUri===uri);
+          if (it) { const s=it.song||it; showToast({icon:"♫",title:s.title,subtitle:`${s.artist}`,type:"success",duration:4000}); }
+        }
+      });
+      prevUris = incomingUris;
+
+      // Remove gone
+      for (const [key,el] of nodes) {
+        if (key==="__np__") continue;
+        if (!incomingUris.has(key)) { removeNode(el); nodes.delete(key); }
+      }
+
+      // Add/update upcoming
+      upcoming.forEach(item => {
+        const song=item.song||item; const uri=song.spotifyUri;
+        if (nodes.has(uri)) { /* minimal update */ }
+        else { const el=buildUpRow(song,item); nodes.set(uri,el); listEl.appendChild(el); }
+      });
+
+      // Reorder
+      const npEl = nodes.get("__np__");
+      upcoming.forEach(item => { const el=nodes.get((item.song||item).spotifyUri); if(el) listEl.appendChild(el); });
+      if (npEl&&npEl.parentNode) listEl.insertBefore(npEl, listEl.firstChild);
+    }
+
+    const conn = new OverlayConnection("/hub/overlay");
+    conn.on("queue:updated", handleQueueUpdated)
+        .on("nowplaying:updated", (s) => {
+          if (!s) return;
+          progressMs=s.progressMs||0; isPlaying=s.isPlaying||false;
+          const sg=s.spotifyTrack||(s.item&&s.item.song); durationMs=sg?sg.durationMs:0;
+          isPlaying?startTick():stopTick();
+        });
+
+    initVoteWidget(conn, listEl);
+    initOverlayToasts(conn);
+    conn.start();
+  </script>
+</body>
+</html>

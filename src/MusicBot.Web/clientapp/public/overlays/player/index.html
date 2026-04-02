@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Player – MusicBot</title>
+  <script src="../shared/theme.js"></script>
+  <link rel="stylesheet" href="../shared/overlay.css">
+  <style>
+    /* ── Base ────────────────────────────────────────────────────────── */
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+
+    /*
+      Layout:
+        .player-shell  (flex column)
+          .player-main (flex row)
+            .left-column (flex column → ticker TOP, NP BOTTOM)
+            .queue-panel (right side, full height)
+
+      Small screens (< 600px):
+        .player-main becomes flex-column
+        .left-column → NP first (order:0), ticker second (order:1)
+        .queue-panel below
+    */
+    .player-shell {
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      border-radius: 18px;
+      overflow: hidden;
+      position: relative;
+      animation: slideInUp 0.55s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    .player-main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Left column: ticker above + NP below */
+    .left-column {
+      width: 42%; flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--ov-border);
+    }
+
+    /* ── Blurred background ──────────────────────────────────────────── */
+    .player-bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      filter: blur(48px) var(--ov-blur-bright); transform: scale(1.5);
+      z-index: 0; transition: background-image 0.5s ease;
+    }
+    .player-bg-tint {
+      position: absolute; inset: 0;
+      background: var(--ov-bg-tint);
+      z-index: 1;
+    }
+
+    /* ══════════════════════════════════════════
+       LARGE / HORIZONTAL  (≥ 600 px wide)
+       Now Playing on left, Queue on right
+    ══════════════════════════════════════════ */
+
+    .np-panel {
+      position: relative; z-index: 2;
+      flex: 1;                           /* fills remaining height in left-column */
+      display: flex; align-items: center; gap: 20px;
+      padding: 20px 24px;
+      order: 1;                          /* NP below ticker on large screens */
+    }
+
+    .pl-cover-wrap { flex-shrink: 0; position: relative; }
+    .pl-vinyl {
+      /* scale with whichever dimension is smaller — prevents the disc being
+         huge when the overlay is viewed full-screen in a browser vs. in OBS */
+      width:  clamp(110px, min(18vw, 30vh), 200px);
+      height: clamp(110px, min(18vw, 30vh), 200px);
+    }
+    .pl-vinyl.paused { opacity: 0.55; filter: grayscale(25%); }
+
+    .pl-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+
+    .pl-label {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: rgba(167,139,250,0.7);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .pl-label-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #a78bfa;
+      animation: pulse 1.5s ease infinite;
+    }
+    .pl-label-dot.paused { animation: none; background: rgba(255,255,255,0.3); }
+
+    .pl-title {
+      font-size: clamp(14px, 2.2vw, 22px); font-weight: 900; line-height: 1.2;
+      overflow: hidden; display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .pl-artist {
+      font-size: clamp(10px, 1.4vw, 13px); font-weight: 600;
+      color: var(--ov-text-dim); text-transform: uppercase;
+      letter-spacing: 0.06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .pl-requested {
+      font-size: 11px; color: rgba(167,139,250,0.85);
+      display: flex; align-items: center; gap: 5px;
+      white-space: nowrap; overflow: hidden;
+    }
+
+    .pl-progress { margin-top: 8px; }
+    .pl-bar-track {
+      width: 100%; height: 4px;
+      background: var(--ov-track); border-radius: 2px; overflow: hidden;
+    }
+    .pl-bar-fill {
+      height: 100%; background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      border-radius: 2px; transition: width 0.8s linear;
+    }
+    .pl-time-row {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--ov-text-muted);
+      font-variant-numeric: tabular-nums; margin-top: 4px;
+    }
+
+    /* ── Download bar inside a queue row ───────────────────────────── */
+    .qp-dl-wrap {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 3px;
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(139,92,246,0.2);
+      border-radius: 5px;
+      padding: 3px 6px;
+    }
+    .qp-dl-bar  { flex: 1; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+    .qp-dl-fill { height: 100%; background: linear-gradient(90deg,#3b82f6,#8b5cf6); border-radius: 2px; transition: width 0.4s ease; }
+    .qp-dl-pct  { font-size: 10px; font-weight: 800; color: #a78bfa; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    /* ── Queue panel (right) ─────────────────────────────────────────── */
+    .queue-panel {
+      position: relative; z-index: 2;
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    .qp-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 16px 10px;
+      font-size: 10px; font-weight: 700;
+      color: var(--ov-text-muted); text-transform: uppercase; letter-spacing: 1.2px;
+      border-bottom: 1px solid var(--ov-border); flex-shrink: 0;
+    }
+    .qp-count { margin-left: auto; color: var(--ov-text-muted); font-variant-numeric: tabular-nums; }
+    .qp-list  { overflow-y: auto; flex: 1; scrollbar-width: none; }
+    .qp-list::-webkit-scrollbar { display: none; }
+
+    .qp-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 14px;
+      border-bottom: 1px solid var(--ov-border);
+    }
+    .qp-row.entering { animation: itemEnter 0.3s cubic-bezier(0.16,1,0.3,1) both; }
+    .qp-row.removing  { animation: itemExit 0.22s ease forwards; pointer-events: none; }
+
+    .qp-pos {
+      width: 18px; flex-shrink: 0; text-align: right;
+      font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+      color: var(--ov-text-muted);
+    }
+    .qp-cover { width: 40px; height: 40px; border-radius: 5px; object-fit: cover; flex-shrink: 0;
+                background: url('../shared/vinyl-placeholder.png') center / cover no-repeat; }
+    .qp-info  { flex: 1; min-width: 0; }
+    .qp-title  { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qp-artist { font-size: 11px; color: var(--ov-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .qp-meta   { font-size: 10px; color: var(--ov-text-muted); display: flex; align-items: center; gap: 4px; margin-top: 1px; font-variant-numeric: tabular-nums; }
+    .qp-empty  { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--ov-text-muted); font-size: 12px; }
+
+    /* ── Ticker bar — top of left column on large, between NP/queue on small */
+    .ticker-bar {
+      position: relative !important;
+      z-index: 2;
+      order: 0;                          /* ticker above NP in left-column */
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--ov-border);
+      border-radius: 0;
+    }
+
+    /* ══════════════════════════════════════════
+       SMALL / VERTICAL  (< 600 px wide)
+       Now Playing stacked on top of Queue
+    ══════════════════════════════════════════ */
+    @media (max-width: 599px) {
+      .player-shell { border-radius: 14px; }
+      .player-main  { flex-direction: column; }
+
+      /* On small: left-column becomes full width, no right border */
+      .left-column {
+        width: 100%; flex-shrink: 0;
+        border-right: none;
+        flex-direction: column;
+      }
+
+      /* On small: NP first, ticker second (between NP and queue) */
+      .np-panel {
+        order: 0;
+        flex: unset;
+        border-bottom: 1px solid var(--ov-border);
+        padding: 16px;
+        gap: 14px;
+        align-items: flex-start;
+      }
+
+      .ticker-bar {
+        order: 1;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        border-top: none;
+      }
+
+      .pl-vinyl { width: 80px; height: 80px; aspect-ratio: unset; }
+
+      .pl-title  { font-size: 15px; -webkit-line-clamp: 1; }
+      .pl-artist { font-size: 11px; }
+
+      .queue-panel { flex: 1; min-height: 0; }
+
+      .qp-header { padding: 10px 12px 8px; }
+      .qp-row    { padding: 6px 12px; }
+      .qp-pos    { width: 14px; font-size: 9px; }
+      .qp-cover  { width: 34px; height: 34px; }
+      .qp-title  { font-size: 12px; }
+      .qp-artist { font-size: 10px; }
+    }
+
+    /* ── Idle screen ─────────────────────────────────────────────────── */
+    .idle-screen {
+      position: absolute; inset: 0; z-index: 10;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px; pointer-events: none;
+    }
+    .idle-ring {
+      position: absolute;
+      width: 120px; height: 120px; border-radius: 50%;
+      border: 2px solid rgba(167,139,250,0.35);
+      animation: idleRing 2.6s ease-out infinite;
+    }
+    .idle-ring:nth-child(2) { animation-delay: 1.3s; }
+    @keyframes idleRing {
+      0%   { transform: scale(0.7); opacity: 0; }
+      40%  { opacity: 0.9; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+    .idle-icon {
+      font-size: 38px; z-index: 1;
+      animation: idleFloat 3.2s ease-in-out infinite;
+      filter: drop-shadow(0 0 18px rgba(167,139,250,0.5));
+    }
+    @keyframes idleFloat {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-9px); }
+    }
+    .idle-title {
+      font-size: 17px; font-weight: 800; z-index: 1;
+      color: var(--ov-text-dim); letter-spacing: 0.03em;
+    }
+    .idle-cmd {
+      font-size: 13px; z-index: 1;
+      color: rgba(167,139,250,0.75);
+      font-family: ui-monospace, monospace;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Platform badge overrides for this layout ───────────────────── */
+    /* qp-meta is 10px — keep badge proportional */
+    .qp-meta .platform-badge {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    /* ── Download badge in queue rows ────────────────────────────────── */
+    .qp-dl {
+      font-size: 9px; color: #a78bfa; margin-left: 4px;
+      opacity: 0.8; animation: pulse 1.8s ease infinite;
+      vertical-align: middle;
+    }
+
+    /* ── Player downloading state ────────────────────────────────────── */
+    .pl-downloading { color: #a78bfa; font-weight: 700; letter-spacing: 0.3px; }
+
+    /* ── Download progress in player ──────────────────────────────────── */
+    .pl-bar-fill.downloading {
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    }
+    /* Indeterminate: searching/starting state when pct === 0 */
+    .pl-bar-fill.dl-indeterminate {
+      width: 30% !important;
+      animation: dlIndeterminate 1.5s ease-in-out infinite;
+    }
+    @keyframes dlIndeterminate {
+      0%   { transform: translateX(-120%); opacity: 0.5; }
+      60%  { opacity: 1; }
+      100% { transform: translateX(380%); opacity: 0.1; }
+    }
+    .pl-download-pct {
+      font-size: 1.5em;
+      font-weight: 900;
+      color: #a78bfa;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="shell" class="player-shell hidden">
+    <div id="pl-bg" class="player-bg"></div>
+    <div class="player-bg-tint"></div>
+
+    <!-- Idle screen — shown when queue is empty and nothing playing -->
+    <div id="idle-screen" class="idle-screen hidden">
+      <div class="idle-ring"></div>
+      <div class="idle-ring"></div>
+      <div class="idle-icon">♫</div>
+      <div class="idle-title">Esperando comandos</div>
+      <div class="idle-cmd">!play canción · artista</div>
+    </div>
+
+    <!-- Main row: Left column (ticker+NP) + Queue (right) -->
+    <div class="player-main">
+
+      <!-- Left column: ticker (top/large) or between NP+queue (small) -->
+      <div class="left-column">
+
+        <!-- Ticker — order:0 large (above NP), order:1 small (below NP) -->
+        <div id="ticker-bar" class="ticker-bar hidden">
+          <span class="ticker-icon">📢</span>
+          <div id="ticker-body" class="ticker-body">
+            <div id="ticker-text" class="ticker-text"></div>
+          </div>
+          <img id="ticker-img" class="ticker-img hidden" src="" alt="">
+        </div>
+
+        <!-- Now Playing — order:1 large (below ticker), order:0 small (top) -->
+        <div class="np-panel">
+          <div class="pl-cover-wrap">
+            <div id="pl-vinyl" class="vinyl-disc pl-vinyl no-cover">
+              <img id="pl-cover" class="vinyl-art" src="" alt="">
+              <span class="vinyl-note">♫</span>
+            </div>
+          </div>
+          <div class="pl-info">
+            <div class="pl-label">
+              <div id="pl-dot" class="pl-label-dot"></div>
+              <span id="pl-status">Reproduciendo</span>
+            </div>
+            <div id="pl-title"     class="pl-title"></div>
+            <div id="pl-artist"    class="pl-artist"></div>
+            <div id="pl-requested" class="pl-requested hidden"></div>
+            <div class="pl-progress">
+              <div class="pl-bar-track"><div id="pl-bar" class="pl-bar-fill" style="width:0%"></div></div>
+              <div class="pl-time-row">
+                <span id="pl-cur">0:00</span>
+                <span id="pl-dur">0:00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /.left-column -->
+
+      <!-- Queue (upcoming only — current song shown in player) -->
+      <div class="queue-panel">
+        <div class="qp-header">
+          <span>♫</span><span>Cola</span>
+          <span id="qp-count" class="qp-count">0</span>
+        </div>
+        <div id="qp-list" class="qp-list">
+          <div class="qp-empty">Sin canciones en cola</div>
+        </div>
+      </div>
+
+    </div><!-- /.player-main -->
+
+  </div><!-- /.player-shell -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <script src="../shared/signalr-client.js"></script>
+  <script src="../shared/toast.js"></script>
+  <script src="../shared/vote-widget.js"></script>
+  <script>
+    const PLATFORM_MAP = {
+      twitch:{label:"Twitch",cls:"platform-twitch"}, tiktok:{label:"TikTok",cls:"platform-tiktok"},
+      tikfinity:{label:"TikTok",cls:"platform-tiktok"}, youtube:{label:"YouTube",cls:"platform-youtube"},
+      kick:{label:"Kick",cls:"platform-kick"}, web:{label:"Web",cls:"platform-web"}, http:{label:"Web",cls:"platform-web"},
+    };
+    function badge(p) { const i=p&&PLATFORM_MAP[p.toLowerCase()]; return i?`<span class="platform-badge ${i.cls}">${i.label}</span>`:""; }
+    function esc(t)   { const d=document.createElement("div"); d.textContent=t; return d.innerHTML; }
+    function fmt(ms)  { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`; }
+
+    const shell    = document.getElementById("shell");
+    const plBg     = document.getElementById("pl-bg");
+    const plCover  = document.getElementById("pl-cover");
+    const plVinyl  = document.getElementById("pl-vinyl");
+    const plDot    = document.getElementById("pl-dot");
+    const plStatus = document.getElementById("pl-status");
+    const plTitle  = document.getElementById("pl-title");
+    const plArtist = document.getElementById("pl-artist");
+    const plReq    = document.getElementById("pl-requested");
+    const plBar    = document.getElementById("pl-bar");
+    const plCur    = document.getElementById("pl-cur");
+    const plDur    = document.getElementById("pl-dur");
+    const qpList   = document.getElementById("qp-list");
+    const qpCount  = document.getElementById("qp-count");
+
+    const qpNodes = new Map();
+    let progressMs=0, durationMs=0, isPlaying=false, ticker=null, currentUri=null;
+    let maxQueueSize=50;
+
+    function startTick() { if(ticker) return; ticker=setInterval(()=>{ if(!isPlaying) return; progressMs=Math.min(progressMs+200,durationMs); renderProgress(); },200); }
+    function stopTick()  { clearInterval(ticker); ticker=null; }
+
+    function renderProgress() {
+      // Don't overwrite the download bar if the current song is downloading
+      if (currentUri && _dlStates[currentUri]) return;
+      const pct=durationMs>0?Math.min(progressMs/durationMs*100,100):0;
+      plBar.style.width=`${pct}%`; plCur.textContent=fmt(progressMs); plDur.textContent=fmt(durationMs);
+    }
+
+    function applyNowPlaying(song, item, playing) {
+      const rb=(item&&item.requestedBy)||song.requestedBy;
+      const pl=(item&&item.platform)||song.platform;
+      const hasCover=!!(song.coverUrl&&song.coverUrl.trim());
+      plBg.style.backgroundImage=hasCover?`url(${song.coverUrl})`:"";
+      plVinyl.classList.toggle("no-cover",!hasCover);
+      plCover.src=hasCover?song.coverUrl:"";
+      plCover.onerror=hasCover?()=>{ plVinyl.classList.add("no-cover"); plCover.onerror=null; }:null;
+      plVinyl.classList.toggle("playing",playing);
+      plVinyl.classList.toggle("paused",!playing);
+      plDot.classList.toggle("paused",!playing);
+      plBar.classList.remove("downloading","dl-indeterminate");
+      plStatus.className="";
+      plStatus.textContent=playing?"Reproduciendo":"Pausado";
+      plTitle.textContent=song.title;
+      plArtist.textContent=song.artist;
+      if(rb){ plReq.innerHTML=`${badge(pl)} ♪ ${esc(rb)}`; plReq.classList.remove("hidden"); }
+      else  { plReq.classList.add("hidden"); }
+    }
+
+    const PH='../shared/vinyl-placeholder.png';
+    function coverSrc(url){ return (url&&url.trim())?url:PH; }
+    const coverErr=`onerror="this.onerror=null;this.src='${PH}'"`;
+
+    function buildQPRow(song, item, pos) {
+      const rb=(item&&item.requestedBy)||song.requestedBy;
+      const pl=(item&&item.platform)||song.platform;
+      const div=document.createElement("div");
+      div.className="qp-row entering";
+      div.dataset.key=song.spotifyUri;
+      div.innerHTML=`
+        <div class="qp-pos">${pos}</div>
+        <img class="qp-cover" src="${esc(coverSrc(song.coverUrl))}" ${coverErr} alt="">
+        <div class="qp-info">
+          <div class="qp-title">${esc(song.title)}</div>
+          <div class="qp-artist">${esc(song.artist)}</div>
+          <div class="qp-meta">${fmt(song.durationMs)}${rb?` · ${badge(pl)}${esc(rb)}`:""} ${!song.isDownloaded?'<span class="qp-dl">⬇</span>':""}</div>
+        </div>`;
+      div.addEventListener("animationend",()=>div.classList.remove("entering"),{once:true});
+      return div;
+    }
+
+    function removeQPNode(el) { el.classList.add("removing"); el.addEventListener("animationend",()=>el.remove(),{once:true}); }
+
+    function handleQueueUpdated(state) {
+      const np       = state && state.nowPlaying;
+      const upcoming = (state && state.upcoming) || [];
+      const nowSong  = np && (np.spotifyTrack || (np.item && np.item.song));
+
+      if(np){ progressMs=np.progressMs||0; isPlaying=np.isPlaying||false; durationMs=nowSong?nowSong.durationMs:0; isPlaying?startTick():stopTick(); renderProgress(); }
+
+      const idleScreen = document.getElementById("idle-screen");
+      const playerMain = shell.querySelector(".player-main");
+
+      if(!nowSong && upcoming.length===0){
+        shell.classList.remove("hidden");
+        idleScreen.classList.remove("hidden");
+        if(playerMain) playerMain.style.visibility="hidden";
+        stopTick();
+        return;
+      }
+      idleScreen.classList.add("hidden");
+      if(playerMain) playerMain.style.visibility="";
+      shell.classList.remove("hidden");
+
+      if(nowSong){
+        if(currentUri !== nowSong.spotifyUri){
+          applyNowPlaying(nowSong, np.item, isPlaying);
+          currentUri=nowSong.spotifyUri;
+          // If the new current song is itself downloading, overlay its bar
+          if(_dlStates[currentUri]) refreshNPDownloadBar();
+        } else {
+          plVinyl.classList.toggle("playing",isPlaying);
+          plVinyl.classList.toggle("paused",!isPlaying);
+          plDot.classList.toggle("paused",!isPlaying);
+          if(!_dlStates[currentUri]) plStatus.textContent=isPlaying?"Reproduciendo":"Pausado";
+        }
+      }
+
+      // Queue shows upcoming only (current song is in the player panel)
+      const available=Math.max(0,maxQueueSize-upcoming.length-(nowSong?1:0));
+      qpCount.textContent=`${upcoming.length} / ${maxQueueSize} · ${available} libre${available===1?"":"s"}`;
+
+      const incomingUris=new Set(upcoming.map(i=>(i.song||i).spotifyUri));
+
+      // Remove rows no longer in upcoming
+      for(const [key,el] of qpNodes){ if(!incomingUris.has(key)){removeQPNode(el);qpNodes.delete(key);} }
+
+      // Add new rows
+      upcoming.forEach((item,idx)=>{ const song=item.song||item; const uri=song.spotifyUri; if(!qpNodes.has(uri)){ const el=buildQPRow(song,item,idx+1); qpNodes.set(uri,el); qpList.appendChild(el); } });
+
+      // Re-order DOM to match server order
+      upcoming.forEach(item=>{ const el=qpNodes.get((item.song||item).spotifyUri); if(el) qpList.appendChild(el); });
+
+      // Re-number positions
+      [...qpList.querySelectorAll(".qp-row")].forEach((r,i)=>{ const p=r.querySelector(".qp-pos"); if(p) p.textContent=i+1; });
+
+      const empty=qpList.querySelector(".qp-empty");
+      if(empty) empty.style.display=upcoming.length===0?"flex":"none";
+    }
+
+    let _signalrReady = false;
+    const conn=new OverlayConnection("/hub/overlay");
+    conn.on("settings:updated",(s)=>{ if(s&&s.maxQueueSize) maxQueueSize=s.maxQueueSize; });
+    conn.on("queue:updated", (s)=>{ _signalrReady=true; handleQueueUpdated(s); });
+
+    // spotifyUri → { pct }
+    const _dlStates = {};
+
+    // Only updates the NP panel's progress area when the CURRENT song is downloading.
+    // Never touches plTitle / plArtist — those are owned by handleQueueUpdated only.
+    function refreshNPDownloadBar() {
+      if (!currentUri || !_dlStates[currentUri]) return;
+      const pct = _dlStates[currentUri].pct ?? 0;
+      plStatus.textContent = pct === 0 ? "⬇ Buscando..." : "⬇ Descargando...";
+      plStatus.className   = "pl-downloading";
+      plBar.classList.add("downloading");
+      plCur.innerHTML      = `<span class="pl-download-pct">${pct}%</span>`;
+      plDur.textContent    = "";
+      if (pct > 0) {
+        plBar.classList.remove("dl-indeterminate");
+        plBar.style.width = `${pct}%`;
+      } else {
+        plBar.classList.add("dl-indeterminate");
+        plBar.style.width = "";
+      }
+    }
+
+    // ── Per-queue-row download bars ──────────────────────────────────────
+    function updateQPDlBar(uri) {
+      const el = qpNodes.get(uri);
+      if (!el) return;
+      const info = el.querySelector(".qp-info");
+      if (!info) return;
+      let wrap = el.querySelector(".qp-dl-wrap");
+      const dl = _dlStates[uri];
+      if (!dl) { if (wrap) wrap.remove(); return; }
+      if (!wrap) {
+        wrap = document.createElement("div");
+        wrap.className = "qp-dl-wrap";
+        wrap.innerHTML = `<div class="qp-dl-bar"><div class="qp-dl-fill"></div></div><span class="qp-dl-pct"></span>`;
+        info.appendChild(wrap);
+      }
+      const pct = dl.pct ?? 0;
+      const fill = wrap.querySelector(".qp-dl-fill");
+      if (pct > 0) {
+        fill.classList.remove("ov-dl-indeterminate");
+        fill.style.width = `${pct}%`;
+      } else {
+        fill.classList.add("ov-dl-indeterminate");
+        fill.style.width = "";
+      }
+      wrap.querySelector(".qp-dl-pct").textContent = pct === 0 ? "⬇ Buscando..." : `⬇ ${pct}%`;
+    }
+
+    // ── Download event handlers ──────────────────────────────────────────
+    conn.on("download:started", (d) => {
+      if (!d?.spotifyUri) return;
+      _dlStates[d.spotifyUri] = { pct: 0 };
+      // Only affect NP panel if this is the currently playing song
+      if (d.spotifyUri === currentUri) refreshNPDownloadBar();
+      updateQPDlBar(d.spotifyUri);
+    });
+
+    conn.on("download:progress", (d) => {
+      if (!d?.spotifyUri) return;
+      if (_dlStates[d.spotifyUri]) {
+        _dlStates[d.spotifyUri].pct = d.pct ?? 0;
+      } else {
+        _dlStates[d.spotifyUri] = { pct: d.pct ?? 0 };
+      }
+      if (d.spotifyUri === currentUri) refreshNPDownloadBar();
+      updateQPDlBar(d.spotifyUri);
+    });
+
+    conn.on("download:done", (d) => {
+      if (!d?.spotifyUri) return;
+      if (_dlStates[d.spotifyUri]) _dlStates[d.spotifyUri].pct = 100;
+      if (d.spotifyUri === currentUri) {
+        plCur.innerHTML   = `<span class="pl-download-pct">100%</span>`;
+        plBar.style.width = "100%";
+        plBar.classList.remove("dl-indeterminate");
+      }
+      updateQPDlBar(d.spotifyUri);
+      setTimeout(() => {
+        delete _dlStates[d.spotifyUri];
+        updateQPDlBar(d.spotifyUri);
+        if (d.spotifyUri === currentUri) {
+          plBar.classList.remove("downloading", "dl-indeterminate");
+          plStatus.className = "";
+          renderProgress();
+        }
+      }, 1200);
+    });
+    conn.on("nowplaying:updated", (s)=>{
+      if(!s) return;
+      progressMs=s.progressMs||0; isPlaying=s.isPlaying||false;
+      const sg=s.spotifyTrack||(s.item&&s.item.song); durationMs=sg?sg.durationMs:0;
+      isPlaying?startTick():stopTick(); renderProgress();
+      if(sg&&currentUri===sg.spotifyUri){
+        plVinyl.classList.toggle("playing",isPlaying);
+        plVinyl.classList.toggle("paused",!isPlaying);
+        plDot.classList.toggle("paused",!isPlaying);
+        if(!_dlStates[currentUri]) plStatus.textContent=isPlaying?"Reproduciendo":"Pausado";
+      }
+    });
+
+    initVoteWidget(conn, qpList);
+
+    // ── Ticker / Rotating messages ────────────────────────────────────
+    let tickerMessages = [];
+    let tickerIndex    = 0;
+    let tickerTimer    = null;
+
+    const tickerBar  = document.getElementById("ticker-bar");
+    const tickerText = document.getElementById("ticker-text");
+    const tickerImg  = document.getElementById("ticker-img");
+    const tickerBody = document.getElementById("ticker-body");
+
+    function showNextTicker() {
+      clearTimeout(tickerTimer);
+      const enabled = tickerMessages.filter(m => m.enabled);
+      if (enabled.length === 0) { tickerBar.classList.add("hidden"); return; }
+
+      tickerBar.classList.remove("hidden");
+      const msg = enabled[tickerIndex % enabled.length];
+      tickerIndex++;
+
+      tickerBody.style.animation = "none";
+      void tickerBody.offsetWidth;
+      tickerBody.style.animation = "";
+
+      tickerText.textContent = msg.text || "";
+      if (msg.imageUrl) { tickerImg.src = msg.imageUrl; tickerImg.classList.remove("hidden"); }
+      else              { tickerImg.src = ""; tickerImg.classList.add("hidden"); }
+
+      tickerTimer = setTimeout(showNextTicker, (msg.durationSec || 8) * 1000);
+    }
+
+    conn.on("ticker:updated", (msgs) => { tickerMessages = msgs || []; tickerIndex = 0; showNextTicker(); });
+
+    fetch("/api/ticker").then(r=>r.json()).then(msgs=>{ tickerMessages=msgs||[]; showNextTicker(); }).catch(()=>{});
+
+    const _initToken = new URLSearchParams(window.location.search).get("token") || "local";
+    fetch(`/api/queue/public/${encodeURIComponent(_initToken)}/now-playing`)
+      .then(r => r.ok ? r.json() : null)
+      .then(state => { if (state && !_signalrReady) handleQueueUpdated({ nowPlaying: state, upcoming: [] }); })
+      .catch(() => {});
+
+    initOverlayToasts(conn);
+    conn.start();
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Copia este archivo como .dev.vars para desarrollo local con `wrangler dev`.
+# .dev.vars está en .gitignore — nunca lo subas al repositorio.
+
+RELAY_API_KEY=dev-key-local
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+TWITCH_CLIENT_ID=
+TWITCH_CLIENT_SECRET=
+KICK_CLIENT_ID=
+KICK_CLIENT_SECRET=

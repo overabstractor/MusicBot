@@ -1,0 +1,31 @@
+<Window x:Class="MusicBot.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="MusicBot"
+        Width="1360" Height="860"
+        MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="#0D1117">
+    <Grid>
+        <wv2:WebView2 x:Name="WebView" />
+
+        <!-- Loading overlay — hidden once WebView navigates -->
+        <Border x:Name="LoadingOverlay"
+                Background="#0D1117"
+                VerticalAlignment="Stretch"
+                HorizontalAlignment="Stretch">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="♫"
+                           FontSize="48"
+                           Foreground="#7C3AED"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,16"/>
+                <TextBlock Text="Iniciando MusicBot…"
+                           FontSize="16"
+                           Foreground="#6E7882"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

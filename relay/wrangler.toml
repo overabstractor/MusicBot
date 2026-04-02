@@ -1,0 +1,13 @@
+name = "musicbot-oauth-relay"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Secrets are set via `wrangler secret put <NAME>` — never commit them here.
+# Required secrets:
+#   RELAY_API_KEY
+#   SPOTIFY_CLIENT_ID
+#   SPOTIFY_CLIENT_SECRET
+#   TWITCH_CLIENT_ID
+#   TWITCH_CLIENT_SECRET
+#   KICK_CLIENT_ID
+#   KICK_CLIENT_SECRET

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Player + Cola (Vertical) – MusicBot</title>
+  <script src="../shared/theme.js"></script>
+  <link rel="stylesheet" href="../shared/overlay.css">
+  <style>
+    /* ── Phone layout 360×640 ────────────────────────────────────────── */
+    body {
+      width: 360px;
+      min-height: 500px;
+      display: flex; justify-content: center; align-items: flex-start;
+    }
+
+    .pv-shell {
+      width: 100%;
+      border-radius: 22px;
+      overflow: hidden;
+      position: relative;
+      background: var(--ov-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255,255,255,0.09);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+      animation: slideInUp 0.55s cubic-bezier(0.16,1,0.3,1) both;
+      display: flex; flex-direction: column;
+    }
+
+    /* Blurred album art background */
+    .pv-bg {
+      position: absolute; inset: 0;
+      background-size: cover; background-position: center;
+      filter: blur(50px) var(--ov-blur-bright); transform: scale(1.4);
+      z-index: 0;
+    }
+    .pv-bg-tint {
+      position: absolute; inset: 0;
+      background: var(--ov-bg-tint);
+      z-index: 1;
+    }
+
+    /* ── Now Playing section ─────────────────────────────────────────── */
+    .pv-np { position: relative; z-index: 2; padding: 28px 24px 20px; }
+
+    .pv-cover-wrap {
+      display: flex; justify-content: center; margin-bottom: 20px;
+    }
+    .pv-vinyl {
+      width: 240px; height: 240px;
+    }
+    .pv-vinyl.paused { opacity: 0.5; filter: grayscale(30%); }
+
+    .pv-status {
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px; font-size: 9px; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(167,139,250,0.8); margin-bottom: 8px;
+    }
+    .pv-dot { width:6px; height:6px; border-radius:50%; background:#a78bfa; animation:pulse 1.5s ease infinite; }
+    .pv-dot.paused { animation:none; background:rgba(255,255,255,0.3); }
+
+    .pv-title {
+      font-size: 20px; font-weight: 900;
+      text-align: center; line-height: 1.2;
+      overflow: hidden; display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      margin-bottom: 4px;
+    }
+    .pv-artist {
+      font-size: 12px; font-weight: 600;
+      text-align: center; color: rgba(255,255,255,0.55);
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .pv-requested {
+      display: flex; align-items: center; justify-content: center;
+      gap: 5px; font-size: 11px; color: rgba(167,139,250,0.85);
+      font-weight: 600; margin-bottom: 12px;
+    }
+
+    .pv-bar-track {
+      width: 100%; height: 4px;
+      background: var(--ov-track); border-radius: 2px; overflow: hidden;
+    }
+    .pv-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      border-radius: 2px; transition: width 0.8s linear;
+    }
+    .pv-time-row {
+      display: flex; justify-content: space-between;
+      font-size: 10px; font-variant-numeric: tabular-nums;
+      color: var(--ov-text-muted); margin-top: 5px;
+    }
+
+    /* ── Queue section ───────────────────────────────────────────────── */
+    .pv-queue {
+      position: relative; z-index: 2;
+      border-top: 1px solid var(--ov-border);
+      flex: 1;
+    }
+
+    .pv-queue-header {
+      display: flex; align-items: center; gap: 7px;
+      padding: 10px 16px;
+      font-size: 10px; font-weight: 700;
+      color: var(--ov-text-muted);
+      text-transform: uppercase; letter-spacing: 1.2px;
+    }
+    .pv-queue-count { margin-left: auto; color: var(--ov-text-muted); }
+
+    .pv-queue-list { max-height: 280px; overflow-y: auto; scrollbar-width: none; }
+    .pv-queue-list::-webkit-scrollbar { display: none; }
+
+    .pv-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--ov-border);
+    }
+    .pv-row.pv-np-row {
+      background: rgba(124,58,237,0.15);
+      border-left: 2px solid rgba(167,139,250,0.65);
+      padding-left: 12px;
+    }
+    .pv-row.entering { animation: itemEnter 0.3s cubic-bezier(0.16,1,0.3,1) both; }
+    .pv-row.removing  { animation: itemExit 0.22s ease forwards; pointer-events: none; }
+
+    .pv-item-cover {
+      width: 40px; height: 40px;
+      border-radius: 6px; object-fit: cover; flex-shrink: 0;
+      background: url('../shared/vinyl-placeholder.png') center / cover no-repeat;
+    }
+    .pv-item-info { flex: 1; min-width: 0; }
+    .pv-item-title { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pv-item-artist { font-size: 10px; color: var(--ov-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pv-item-meta {
+      font-size: 10px; color: var(--ov-text-muted);
+      display: flex; align-items: center; gap: 4px;
+      font-variant-numeric: tabular-nums; margin-top: 1px;
+    }
+    .pv-item-meta.playing { color: rgba(167,139,250,0.8); }
+
+    .pv-mini-bar { width:100%; height:2px; background:var(--ov-track); border-radius:1px; overflow:hidden; margin-top:3px; }
+    .pv-mini-fill { height:100%; background:#a78bfa; border-radius:1px; transition:width 0.5s linear; }
+
+    .pv-empty { display:flex; align-items:center; justify-content:center; padding:20px; color:var(--ov-text-muted); font-size:11px; }
+  </style>
+</head>
+<body>
+  <div id="shell" class="pv-shell hidden">
+    <div id="pv-bg" class="pv-bg"></div>
+    <div class="pv-bg-tint"></div>
+
+    <!-- Now Playing -->
+    <div class="pv-np">
+      <div class="pv-cover-wrap">
+        <div id="pv-vinyl" class="vinyl-disc pv-vinyl no-cover">
+          <img id="pv-cover" class="vinyl-art" src="" alt="">
+          <span class="vinyl-note">♫</span>
+        </div>
+      </div>
+      <div id="pv-status" class="pv-status">
+        <div id="pv-dot" class="pv-dot"></div>
+        <span id="pv-status-text">Reproduciendo</span>
+      </div>
+      <div id="pv-title"  class="pv-title"></div>
+      <div id="pv-artist" class="pv-artist"></div>
+      <div id="pv-req"    class="pv-requested hidden"></div>
+      <div class="pv-bar-track"><div id="pv-bar" class="pv-bar-fill" style="width:0%"></div></div>
+      <div class="pv-time-row">
+        <span id="pv-cur">0:00</span>
+        <span id="pv-dur">0:00</span>
+      </div>
+    </div>
+
+    <!-- Queue -->
+    <div class="pv-queue">
+      <div class="pv-queue-header">
+        <span>♫</span><span>Cola</span>
+        <span id="pv-count" class="pv-queue-count">0</span>
+      </div>
+      <div id="pv-list" class="pv-queue-list">
+        <div class="pv-empty">Sin canciones en cola</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+  <script src="../shared/signalr-client.js"></script>
+  <script src="../shared/toast.js"></script>
+  <script>
+    const PLATFORM_MAP={twitch:{label:"Twitch",cls:"platform-twitch"},tiktok:{label:"TikTok",cls:"platform-tiktok"},tikfinity:{label:"TikTok",cls:"platform-tiktok"},youtube:{label:"YouTube",cls:"platform-youtube"},kick:{label:"Kick",cls:"platform-kick"},web:{label:"Web",cls:"platform-web"},http:{label:"Web",cls:"platform-web"}};
+    function badge(p){const i=p&&PLATFORM_MAP[p.toLowerCase()];return i?`<span class="platform-badge ${i.cls}">${i.label}</span>`:""}
+    function esc(t){const d=document.createElement("div");d.textContent=t;return d.innerHTML}
+    function fmt(ms){const s=Math.floor(ms/1000);return`${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`}
+
+    const shell=document.getElementById("shell"), pvBg=document.getElementById("pv-bg");
+    const pvCover=document.getElementById("pv-cover"), pvVinyl=document.getElementById("pv-vinyl"), pvDot=document.getElementById("pv-dot");
+    const pvStatusText=document.getElementById("pv-status-text"), pvTitle=document.getElementById("pv-title");
+    const pvArtist=document.getElementById("pv-artist"), pvReq=document.getElementById("pv-req");
+    const pvBar=document.getElementById("pv-bar"), pvCur=document.getElementById("pv-cur"), pvDur=document.getElementById("pv-dur");
+    const pvList=document.getElementById("pv-list"), pvCount=document.getElementById("pv-count");
+
+    const nodes=new Map(); let progressMs=0,durationMs=0,isPlaying=false,ticker=null,currentUri=null,prevUris=new Set();
+
+    function startTick(){if(ticker)return;ticker=setInterval(()=>{if(!isPlaying)return;progressMs=Math.min(progressMs+200,durationMs);renderBar();updateMiniBar();},200);}
+    function stopTick(){clearInterval(ticker);ticker=null;}
+    function renderBar(){const pct=durationMs>0?Math.min(progressMs/durationMs*100,100):0;pvBar.style.width=`${pct}%`;pvCur.textContent=fmt(progressMs);pvDur.textContent=fmt(durationMs);}
+    function updateMiniBar(){const f=document.getElementById("pv-np-fill");const t=document.getElementById("pv-np-time");if(f&&durationMs>0)f.style.width=`${Math.min(progressMs/durationMs*100,100)}%`;if(t)t.textContent=`${fmt(progressMs)} / ${fmt(durationMs)}`;}
+
+    function applyNP(song,item,playing){
+      const rb=(item&&item.requestedBy)||song.requestedBy,pl=(item&&item.platform)||song.platform;
+      const hasCover=!!(song.coverUrl&&song.coverUrl.trim());
+      pvBg.style.backgroundImage=hasCover?`url(${song.coverUrl})`:"";
+      pvVinyl.classList.toggle("no-cover",!hasCover);
+      pvCover.src=hasCover?song.coverUrl:"";
+      pvCover.onerror=hasCover?()=>{pvVinyl.classList.add("no-cover");pvCover.onerror=null;}:null;
+      pvVinyl.classList.toggle("playing",playing); pvVinyl.classList.toggle("paused",!playing);
+      pvDot.classList.toggle("paused",!playing); pvStatusText.textContent=playing?"Reproduciendo":"Pausado";
+      pvTitle.textContent=song.title; pvArtist.textContent=song.artist;
+      if(rb){pvReq.innerHTML=`${badge(pl)} ♪ ${esc(rb)}`;pvReq.classList.remove("hidden");}else pvReq.classList.add("hidden");
+    }
+
+    const PH='../shared/vinyl-placeholder.png';
+    function coverSrc(url){ return (url&&url.trim())?url:PH; }
+    const coverErr=`onerror="this.onerror=null;this.src='${PH}'"`;
+
+    function buildNPRow(song,item){
+      const rb=(item&&item.requestedBy)||song.requestedBy,pl=(item&&item.platform)||song.platform;
+      const div=document.createElement("div"); div.className="pv-row pv-np-row entering"; div.dataset.key=song.spotifyUri;
+      div.innerHTML=`<img class="pv-item-cover" src="${esc(coverSrc(song.coverUrl))}" ${coverErr} alt=""><div class="pv-item-info"><div class="pv-item-title">${esc(song.title)}</div><div class="pv-item-artist">${esc(song.artist)}</div><div class="pv-item-meta playing" id="pv-np-time">${fmt(progressMs)} / ${fmt(durationMs||song.durationMs)}</div>${rb?`<div class="pv-item-meta">${badge(pl)} ${esc(rb)}</div>`:""}<div class="pv-mini-bar"><div class="pv-mini-fill" id="pv-np-fill" style="width:0%"></div></div></div>`;
+      div.addEventListener("animationend",()=>div.classList.remove("entering"),{once:true}); return div;
+    }
+
+    function buildUpRow(song,item){
+      const rb=(item&&item.requestedBy)||song.requestedBy,pl=(item&&item.platform)||song.platform;
+      const div=document.createElement("div"); div.className="pv-row entering"; div.dataset.key=song.spotifyUri;
+      div.innerHTML=`<img class="pv-item-cover" src="${esc(coverSrc(song.coverUrl))}" ${coverErr} alt=""><div class="pv-item-info"><div class="pv-item-title">${esc(song.title)}</div><div class="pv-item-artist">${esc(song.artist)}</div><div class="pv-item-meta">${fmt(song.durationMs)}${rb?` · ${badge(pl)}${esc(rb)}`:""}</div></div>`;
+      div.addEventListener("animationend",()=>div.classList.remove("entering"),{once:true}); return div;
+    }
+
+    function removeNode(el){el.classList.add("removing");el.addEventListener("animationend",()=>el.remove(),{once:true});}
+
+    function handleQueue(state){
+      const np=state&&state.nowPlaying, upcoming=(state&&state.upcoming)||[];
+      const nowSong=np&&(np.spotifyTrack||(np.item&&np.item.song));
+      if(np){progressMs=np.progressMs||0;isPlaying=np.isPlaying||false;durationMs=nowSong?nowSong.durationMs:0;isPlaying?startTick():stopTick();renderBar();}
+      if(!nowSong&&upcoming.length===0){shell.classList.add("hidden");return;}
+      shell.classList.remove("hidden");
+
+      if(nowSong){
+        if(currentUri!==nowSong.spotifyUri){applyNP(nowSong,np.item,isPlaying);currentUri=nowSong.spotifyUri;}
+        else{pvVinyl.classList.toggle("playing",isPlaying);pvVinyl.classList.toggle("paused",!isPlaying);pvDot.classList.toggle("paused",!isPlaying);pvStatusText.textContent=isPlaying?"Reproduciendo":"Pausado";}
+      }
+
+      const total=upcoming.length+(nowSong?1:0); pvCount.textContent=total;
+      const incomingUris=new Set(upcoming.map(i=>(i.song||i).spotifyUri));
+
+      // Toast
+      incomingUris.forEach(uri=>{if(!prevUris.has(uri)){const it=upcoming.find(i=>(i.song||i).spotifyUri===uri);if(it){const s=it.song||it;showToast({icon:"♫",title:s.title,subtitle:`Agregada · ${s.artist}`,type:"success",duration:4500});}}});
+      prevUris=incomingUris;
+
+      // NP queue row
+      const oldNp=nodes.get("__np__");
+      if(!nowSong){if(oldNp){removeNode(oldNp);nodes.delete("__np__");}}
+      else{
+        if(!oldNp||oldNp.dataset.key!==nowSong.spotifyUri){if(oldNp){removeNode(oldNp);nodes.delete("__np__");}const el=buildNPRow(nowSong,np.item);pvList.insertBefore(el,pvList.firstChild);nodes.set("__np__",el);}
+      }
+      for(const[key,el]of nodes){if(key==="__np__")continue;if(!incomingUris.has(key)){removeNode(el);nodes.delete(key);}}
+      upcoming.forEach(item=>{const song=item.song||item,uri=song.spotifyUri;if(!nodes.has(uri)){const el=buildUpRow(song,item);nodes.set(uri,el);pvList.appendChild(el);}});
+
+      const npEl=nodes.get("__np__");
+      upcoming.forEach(item=>{const el=nodes.get((item.song||item).spotifyUri);if(el)pvList.appendChild(el);});
+      if(npEl&&npEl.parentNode)pvList.insertBefore(npEl,pvList.firstChild);
+
+      const empty=pvList.querySelector(".pv-empty");
+      if(empty)empty.style.display=total===0?"flex":"none";
+    }
+
+    const conn=new OverlayConnection("/hub/overlay");
+    conn.on("queue:updated",handleQueue)
+        .on("nowplaying:updated",(s)=>{
+          if(!s)return;
+          progressMs=s.progressMs||0;isPlaying=s.isPlaying||false;
+          const sg=s.spotifyTrack||(s.item&&s.item.song);durationMs=sg?sg.durationMs:0;
+          isPlaying?startTick():stopTick();renderBar();updateMiniBar();
+          if(sg&&currentUri===sg.spotifyUri){pvVinyl.classList.toggle("playing",isPlaying);pvVinyl.classList.toggle("paused",!isPlaying);pvDot.classList.toggle("paused",!isPlaying);pvStatusText.textContent=isPlaying?"Reproduciendo":"Pausado";}
+        });
+    conn.start();
+  </script>
+</body>
+</html>

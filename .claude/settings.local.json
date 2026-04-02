@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:developer.spotify.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh api:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cmd //c \"cd /d C:\\\\Users\\\\wrobi\\\\source\\\\repos\\\\MusicBot2\\\\src\\\\MusicBot.Api\\\\clientapp && npm run build\" 2>&1 | tail -20)",
+      "Bash(xargs basename:*)",
+      "Bash(dotnet script:*)",
+      "Bash(grep -rl \"Gift\\\\|gift\" /c/Users/wrobi/.nuget/packages/tiktoklive_sharp/1.2.3/ --include=*.xml)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet remove:*)",
+      "Bash(dotnet build:*)",
+      "WebSearch",
+      "WebFetch(domain:www.eulerstream.com)",
+      "WebFetch(domain:tiktoklive.eulerstream.com)",
+      "Bash(npm run:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:developers.tiktok.com)",
+      "Bash(curl:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)"
+    ]
+  }
+}
