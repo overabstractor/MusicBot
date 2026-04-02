@@ -102,7 +102,7 @@ API calls are all in `services/api.ts`. TypeScript interfaces for all API respon
 
 ### Configuration
 
-Credentials must be set via `dotnet user-secrets --project src/MusicBot.Web`, never in `appsettings.json`. Key sections: `Spotify`, `Twitch`, `Kick`, `TikTok`, `Relay`, `Queue`, `MusicLibrary` (includes `YtDlpPath`).
+`appsettings.json` contains all `ClientId` values and `Relay:Url`/`Relay:ApiKey` — these are public/distributed values bundled with the app. **Only `ClientSecret` values** must be set via `dotnet user-secrets --project src/MusicBot.Web` (they live in the Cloudflare relay and are never needed by end users; only the developer running the relay needs them locally).
 
 ## API Docs
 
