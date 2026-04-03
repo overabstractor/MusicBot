@@ -52,6 +52,12 @@ public static class Program
         // Fix process identity for audio routers and taskbar grouping
         SetCurrentProcessExplicitAppUserModelID("MusicBot.Player");
 
+        // Raise process priority so the NAudio playback thread isn't starved
+        // by other apps (OBS, browser, etc.) under typical streaming load.
+        // AboveNormal is safe — High/Realtime can interfere with system responsiveness.
+        System.Diagnostics.Process.GetCurrentProcess().PriorityClass =
+            System.Diagnostics.ProcessPriorityClass.AboveNormal;
+
         // Hide any residual console window immediately
         ShowWindow(GetConsoleWindow(), 0);
 

@@ -134,7 +134,7 @@ public class LocalPlayerService : ILocalPlayerService
                 ? enumerator.GetDevice(_deviceId)
                 : enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
             outDevice = device;
-            return new WasapiOut(device, AudioClientShareMode.Shared, true, 200);
+            return new WasapiOut(device, AudioClientShareMode.Shared, true, 400);
         }
         catch (Exception ex)
         {
@@ -144,7 +144,7 @@ public class LocalPlayerService : ILocalPlayerService
             var enumerator = new MMDeviceEnumerator();
             device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
             outDevice = device;
-            return new WasapiOut(device, AudioClientShareMode.Shared, true, 200);
+            return new WasapiOut(device, AudioClientShareMode.Shared, true, 400);
         }
     }
 
