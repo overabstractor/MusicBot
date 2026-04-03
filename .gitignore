@@ -48,3 +48,6 @@ src/MusicBot.Web/wwwroot/
 /publish
 /artifacts
 .nuke/temp/
+
+# Environment-specific settings
+appsettings.Development.json
