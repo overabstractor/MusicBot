@@ -70,10 +70,10 @@ public static class Program
             .WriteTo.Sink(new LogSink())   // feeds the WPF log viewer in real time
             .CreateLogger();
 
-        // ── Auto-update check ─────────────────────────────────────────────────
-        // Runs before the UI starts so any update is applied seamlessly.
-        // Skips automatically when not installed (debug / dotnet run).
-        Task.Run(CheckAndApplyUpdatesAsync).GetAwaiter().GetResult();
+        // ── Version + auto-update ─────────────────────────────────────────────
+        // Set the version string immediately (used by the API /version endpoint).
+        // Then kick off the update check in the background — it never blocks startup.
+        SetVersionAndScheduleUpdateCheck();
 
         try
         {
@@ -116,34 +116,48 @@ public static class Program
         }
     }
 
-    private static async Task CheckAndApplyUpdatesAsync()
+    private static string FormatVersion(NuGet.Versioning.SemanticVersion v)
+        => $"{v.Major}.{v.Minor}.{v.Patch}";
+
+    private static void SetVersionAndScheduleUpdateCheck()
+    {
+        var mgr = new UpdateManager(
+            new GithubSource("https://github.com/overabstractor/MusicBot", null, false));
+
+        if (mgr.IsInstalled && mgr.CurrentVersion != null)
+            MusicBot.AppInfo.SetVersion(FormatVersion(mgr.CurrentVersion));
+
+        Log.Information("MusicBot {Version}", MusicBot.AppInfo.Version);
+
+        _ = Task.Run(() => CheckAndDownloadUpdateAsync(mgr));
+    }
+
+    private static async Task CheckAndDownloadUpdateAsync(UpdateManager mgr)
     {
         try
         {
-            var mgr = new UpdateManager(
-                new GithubSource("https://github.com/overabstractor/MusicBot", null, false));
-
-            if (!mgr.IsInstalled) return; // Running from source/debug — skip
+            if (!mgr.IsInstalled) return;
 
             Log.Information("Verificando actualizaciones…");
             var updateInfo = await mgr.CheckForUpdatesAsync();
             if (updateInfo == null)
             {
-                Log.Information("MusicBot está actualizado");
+                Log.Information("MusicBot está actualizado ({Version})", MusicBot.AppInfo.Version);
                 return;
             }
 
-            Log.Information("Nueva versión disponible: {Version} — descargando…",
-                updateInfo.TargetFullRelease.Version);
+            var newVersion = FormatVersion(updateInfo.TargetFullRelease.Version);
+            Log.Information("Nueva versión disponible: {Version} — descargando en segundo plano…", newVersion);
 
             await mgr.DownloadUpdatesAsync(updateInfo);
 
-            Log.Information("Actualización descargada. Reiniciando para aplicar…");
-            mgr.ApplyUpdatesAndRestart(updateInfo.TargetFullRelease);
+            Log.Information("Actualización {Version} descargada. Se aplicará al reiniciar.", newVersion);
+            mgr.WaitExitThenApplyUpdates(updateInfo.TargetFullRelease, silent: true, restart: true);
+            MusicBot.AppEvents.NotifyUpdateReady(newVersion);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "No se pudo verificar actualizaciones — continuando sin actualizar");
+            Log.Warning(ex, "No se pudo verificar actualizaciones");
         }
     }
 }

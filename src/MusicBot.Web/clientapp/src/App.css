@@ -185,6 +185,18 @@ a:hover { text-decoration: underline; }
   letter-spacing: -0.3px;
 }
 
+.header-version {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: 0.3px;
+  align-self: center;
+}
+
 /* ── Body ─────────────────────────────────── */
 .app-body {
   display: grid;

@@ -217,6 +217,7 @@ export const api = {
   getRelayStatus: () => request<{ configured: boolean; reachable: boolean; error: string | null }>("/api/relay/status"),
 
   // App
-  shutdown: () => request<void>("/api/app/shutdown", { method: "POST" }),
-  openLog:  () => request<void>("/api/app/open-log", { method: "POST" }),
+  shutdown:   () => request<void>("/api/app/shutdown", { method: "POST" }),
+  openLog:    () => request<void>("/api/app/open-log", { method: "POST" }),
+  getVersion: () => request<{ version: string }>("/api/app/version"),
 };

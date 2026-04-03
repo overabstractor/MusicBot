@@ -46,6 +46,10 @@ public partial class App : SysWin.Application
         MusicBot.AppEvents.OnTikTokSessionRestoreRequested += () => Dispatcher.Invoke(RestoreTikTokSession);
         MusicBot.AppEvents.OnPlatformAuthForgotten         += ForgetPlatformSessionAsync;
         MusicBot.AppEvents.OnShutdownRequested             += () => Dispatcher.Invoke(ExitApp);
+        MusicBot.AppEvents.OnUpdateReady                   += v  => Dispatcher.Invoke(() =>
+            _tray.ShowBalloonTip(5_000, "MusicBot — Actualización lista",
+                $"Versión {v} descargada. Se aplicará al reiniciar.",
+                ToolTipIcon.Info));
 
         _tray = BuildTray();
         ShowMainWindow();

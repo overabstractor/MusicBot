@@ -99,4 +99,11 @@ public static class AppEvents
     /// </summary>
     public static event Action? OnShutdownRequested;
     public static void RequestShutdown() => OnShutdownRequested?.Invoke();
+
+    /// <summary>
+    /// Raised by Program.cs when a new version has been downloaded and is ready to apply on restart.
+    /// The Desktop layer shows a tray balloon tip informing the user.
+    /// </summary>
+    public static event Action<string>? OnUpdateReady;
+    public static void NotifyUpdateReady(string newVersion) => OnUpdateReady?.Invoke(newVersion);
 }

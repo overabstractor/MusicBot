@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useTheme } from "../hooks/useTheme";
 import { NowPlaying } from "../components/NowPlaying";
 import { QueueList } from "../components/QueueList";
@@ -36,6 +36,11 @@ export const Dashboard: React.FC = () => {
 
   const [tab,          setTab]          = useState<Tab>("queue");
   const [queueToolsOpen, setQueueToolsOpen] = useState(false);
+  const [appVersion,   setAppVersion]   = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getVersion().then(r => setAppVersion(r.version)).catch(() => {});
+  }, []);
 
   const [voteUser,    setVoteUser]    = useState("Admin");
   const [giftUser,    setGiftUser]    = useState("");
@@ -100,6 +105,9 @@ export const Dashboard: React.FC = () => {
         <div className="header-brand">
           <span className="header-logo">♫</span>
           <span className="header-title">MusicBot</span>
+          {appVersion && (
+            <span className="header-version">v{appVersion}</span>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <StatusBar

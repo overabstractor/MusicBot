@@ -42,5 +42,10 @@ public class AppController : ControllerBase
         AppEvents.RequestOpenLog();
         return Ok(new { status = "ok" });
     }
+
+    /// <summary>Returns the current installed version of the application</summary>
+    [HttpGet("version")]
+    public IActionResult GetVersion() => Ok(new { version = AppInfo.Version });
+
 }
 
