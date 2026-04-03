@@ -44,7 +44,8 @@ public partial class App : SysWin.Application
         MusicBot.AppEvents.OnOpenLogRequested              += () => Dispatcher.Invoke(ShowLogs);
         MusicBot.AppEvents.OnTikTokLoginRequested          += () => Dispatcher.Invoke(ShowTikTokLogin);
         MusicBot.AppEvents.OnTikTokSessionRestoreRequested += () => Dispatcher.Invoke(RestoreTikTokSession);
-        MusicBot.AppEvents.OnPlatformAuthForgotten          += ForgetPlatformSessionAsync;
+        MusicBot.AppEvents.OnPlatformAuthForgotten         += ForgetPlatformSessionAsync;
+        MusicBot.AppEvents.OnShutdownRequested             += () => Dispatcher.Invoke(ExitApp);
 
         _tray = BuildTray();
         ShowMainWindow();

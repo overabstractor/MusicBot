@@ -17,7 +17,7 @@ public class AppController : ControllerBase
         _lifetime   = lifetime;
     }
 
-    /// <summary>Shutdown the application — stops playback first</summary>
+    /// <summary>Shutdown the application — stops playback first, then signals the Desktop layer to exit</summary>
     [HttpPost("shutdown")]
     public async Task<IActionResult> Shutdown()
     {
@@ -30,8 +30,8 @@ public class AppController : ControllerBase
         }
         catch { /* best effort */ }
 
-        // Request graceful shutdown
-        _lifetime.StopApplication();
+        // Signal the WPF layer to perform a full exit (not minimize to tray)
+        AppEvents.RequestShutdown();
         return Ok(new { status = "shutting_down" });
     }
 

@@ -92,4 +92,11 @@ public static class AppEvents
     public static event Func<string, Task>? OnPlatformAuthForgotten;
     public static Task NotifyPlatformAuthForgotten(string platform)
         => OnPlatformAuthForgotten?.Invoke(platform) ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Raised by the API when the user requests a full application shutdown.
+    /// The Desktop layer performs a clean exit (stops playback, closes tray, terminates process).
+    /// </summary>
+    public static event Action? OnShutdownRequested;
+    public static void RequestShutdown() => OnShutdownRequested?.Invoke();
 }
