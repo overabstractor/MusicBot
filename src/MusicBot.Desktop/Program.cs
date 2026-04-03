@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Velopack;
+using Velopack.Sources;
 
 namespace MusicBot.Desktop;
 
@@ -69,9 +70,14 @@ public static class Program
             .WriteTo.Sink(new LogSink())   // feeds the WPF log viewer in real time
             .CreateLogger();
 
+        // ── Auto-update check ─────────────────────────────────────────────────
+        // Runs before the UI starts so any update is applied seamlessly.
+        // Skips automatically when not installed (debug / dotnet run).
+        Task.Run(CheckAndApplyUpdatesAsync).GetAwaiter().GetResult();
+
         try
         {
-            Log.Information("Iniciando MusicBot v1.0");
+            Log.Information("Iniciando MusicBot");
 
             // ── Build web host ────────────────────────────────────────────────
             // CreateBuilder registers all application services.
@@ -107,6 +113,37 @@ public static class Program
             Log.CloseAndFlush();
             _instanceMutex?.ReleaseMutex();
             _instanceMutex?.Dispose();
+        }
+    }
+
+    private static async Task CheckAndApplyUpdatesAsync()
+    {
+        try
+        {
+            var mgr = new UpdateManager(
+                new GithubSource("https://github.com/overabstractor/MusicBot", null, false));
+
+            if (!mgr.IsInstalled) return; // Running from source/debug — skip
+
+            Log.Information("Verificando actualizaciones…");
+            var updateInfo = await mgr.CheckForUpdatesAsync();
+            if (updateInfo == null)
+            {
+                Log.Information("MusicBot está actualizado");
+                return;
+            }
+
+            Log.Information("Nueva versión disponible: {Version} — descargando…",
+                updateInfo.TargetFullRelease.Version);
+
+            await mgr.DownloadUpdatesAsync(updateInfo);
+
+            Log.Information("Actualización descargada. Reiniciando para aplicar…");
+            mgr.ApplyUpdatesAndRestart(updateInfo.TargetFullRelease);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "No se pudo verificar actualizaciones — continuando sin actualizar");
         }
     }
 }
