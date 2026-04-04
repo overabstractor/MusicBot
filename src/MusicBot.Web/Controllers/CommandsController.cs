@@ -44,10 +44,17 @@ public class CommandsController : ControllerBase
 
         var services = _userContext.GetOrCreate(LocalUser.Id);
 
-        // YouTube search with a 7 s timeout so a slow yt-dlp subprocess never blocks the UI
-        var ytRaw    = _downloader.SearchAsync(q, limit);
-        var ytDone   = await Task.WhenAny(ytRaw, Task.Delay(7000));
-        var ytResults = ytDone == ytRaw && ytRaw.IsCompletedSuccessfully ? ytRaw.Result : new List<Song>();
+        // YouTube video search + playlist search in parallel (both capped by timeout)
+        var ytRaw         = _downloader.SearchAsync(q, limit);
+        var ytPlaylistRaw = _downloader.SearchPlaylistsAsync(q, 5);
+
+        var ytDone         = await Task.WhenAny(ytRaw,         Task.Delay(7000));
+        var ytPlaylistDone = await Task.WhenAny(ytPlaylistRaw, Task.Delay(12000));
+
+        var ytResults       = ytDone == ytRaw && ytRaw.IsCompletedSuccessfully
+                              ? ytRaw.Result : new List<Song>();
+        var playlistResults = ytPlaylistDone == ytPlaylistRaw && ytPlaylistRaw.IsCompletedSuccessfully
+                              ? ytPlaylistRaw.Result : new List<Song>();
 
         // iTunes + Spotify in parallel (fast HTTP calls)
         var itunesTask  = Task.Run(async () => { try { return (IEnumerable<Song>)await _metadata.SearchAsync(q, limit); } catch { return []; } });
@@ -90,7 +97,10 @@ public class CommandsController : ControllerBase
             if (seen.Add(meta.SpotifyUri)) results.Add(meta);
         }
 
-        return Ok(results.Take(limit));
+        // 3. Append playlist results at the end (separate section in the UI)
+        results.AddRange(playlistResults);
+
+        return Ok(results.Take(limit + playlistResults.Count));
     }
 
     private static double MetaMatchScore(Song yt, Song meta)
@@ -108,6 +118,24 @@ public class CommandsController : ControllerBase
 
     private static string Norm(string s) =>
         System.Text.RegularExpressions.Regex.Replace(s.ToLowerInvariant(), @"[^\w\s]", "").Trim();
+
+    /// <summary>Preview tracks from a YouTube playlist URL without saving anything.</summary>
+    [HttpGet("search/playlist-tracks")]
+    [ProducesResponseType(typeof(List<Song>), 200)]
+    public async Task<IActionResult> GetPlaylistTracks([FromQuery] string url, [FromQuery] int limit = 200)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return BadRequest(new { error = "URL requerida" });
+        try
+        {
+            var tracks = await _downloader.ImportPlaylistAsync(url, limit);
+            return Ok(tracks);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
 
     /// <summary>Search and add a song to the queue</summary>
     [HttpPost("play")]

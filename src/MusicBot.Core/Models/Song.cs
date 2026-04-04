@@ -14,4 +14,9 @@ public class Song
     [System.Text.Json.Serialization.JsonIgnore]
     public string? LocalFilePath { get; set; }
     public bool IsDownloaded => LocalFilePath != null;
+
+    // ── Playlist search result metadata (only populated for IsPlaylist=true results) ──
+    public bool IsPlaylist { get; set; }
+    public string? PlaylistUrl { get; set; }
+    public int PlaylistVideoCount { get; set; }
 }

@@ -264,6 +264,63 @@ public class YtDlpDownloaderService
         return ParseEntries(entries, limit);
     }
 
+    /// <summary>Search YouTube specifically for playlists and return them as Song entries with IsPlaylist=true.</summary>
+    public async Task<List<Song>> SearchPlaylistsAsync(string query, int limit = 5)
+    {
+        // Use YouTube's playlist filter (sp=EgIQAw%3D%3D) via a direct URL search
+        var searchUrl = $"https://www.youtube.com/results?search_query={Uri.EscapeDataString(query)}&sp=EgIQAw%3D%3D";
+        using var doc = await RunYtDlpJsonAsync(
+            ["--flat-playlist", "-J", "--no-warnings", searchUrl],
+            TimeSpan.FromSeconds(12));
+
+        if (doc == null) return [];
+
+        if (!doc.RootElement.TryGetProperty("entries", out var entries)) return [];
+
+        var results = new List<Song>();
+        foreach (var entry in entries.EnumerateArray().Take(limit))
+        {
+            var id = entry.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+            if (string.IsNullOrEmpty(id)) continue;
+
+            var title   = entry.TryGetProperty("title",    out var tEl)  ? tEl.GetString()  ?? "" : "";
+            var channel = entry.TryGetProperty("channel",  out var chEl) ? chEl.GetString() ?? "" :
+                          entry.TryGetProperty("uploader", out var upEl) ? upEl.GetString() ?? "" : "";
+
+            var thumb = "";
+            if (entry.TryGetProperty("thumbnails", out var thumbsArr) && thumbsArr.ValueKind == JsonValueKind.Array)
+            {
+                var thumbsList = thumbsArr.EnumerateArray().ToList();
+                if (thumbsList.Count > 0)
+                    thumb = thumbsList.Last().TryGetProperty("url", out var tUrl) ? tUrl.GetString() ?? "" : "";
+            }
+            else if (entry.TryGetProperty("thumbnail", out var thumbEl))
+            {
+                thumb = thumbEl.GetString() ?? "";
+            }
+
+            var count = 0;
+            if (entry.TryGetProperty("playlist_count", out var cEl) && cEl.ValueKind == JsonValueKind.Number)
+                count = cEl.GetInt32();
+
+            var url = (entry.TryGetProperty("url", out var urlEl) ? urlEl.GetString() : null)
+                      ?? $"https://www.youtube.com/playlist?list={id}";
+
+            results.Add(new Song
+            {
+                SpotifyUri         = $"ytplaylist:{id}",
+                Title              = title,
+                Artist             = channel,
+                CoverUrl           = thumb,
+                DurationMs         = 0,
+                IsPlaylist         = true,
+                PlaylistUrl        = url,
+                PlaylistVideoCount = count,
+            });
+        }
+        return results;
+    }
+
     /// <summary>
     /// Finds the single best YouTube match for a free-text query.
     /// Appends "official audio" for non-remix queries.
@@ -348,27 +405,54 @@ public class YtDlpDownloaderService
     private List<Song> ParseEntries(JsonElement entries, int maxCount)
     {
         var songs = new List<Song>();
-        foreach (var entry in entries.EnumerateArray().Take(maxCount))
+        foreach (var entry in entries.EnumerateArray())
         {
+            if (songs.Count >= maxCount) break;
+
             var id = entry.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
             if (string.IsNullOrEmpty(id)) continue;
+
+            // Detect playlist entries mixed into ytsearch results
+            var entryType  = entry.TryGetProperty("_type",         out var typeEl) ? typeEl.GetString() : null;
+            var hasPlCount = entry.TryGetProperty("playlist_count", out var pcEl)  && pcEl.ValueKind == JsonValueKind.Number;
+            var isPlaylist = entryType == "playlist" || hasPlCount;
 
             var title   = entry.TryGetProperty("title",    out var tEl)  ? tEl.GetString()  ?? "" : "";
             var channel = entry.TryGetProperty("channel",  out var chEl) ? chEl.GetString() ?? "" :
                           entry.TryGetProperty("uploader", out var upEl) ? upEl.GetString() ?? "" : "";
             var thumb   = entry.TryGetProperty("thumbnail", out var thEl) ? thEl.GetString() ?? "" : "";
-            var dur     = entry.TryGetProperty("duration",  out var dEl) && dEl.ValueKind == JsonValueKind.Number
-                          ? dEl.GetDouble() : 0;
 
-            var (songTitle, artist) = SplitVideoTitle(title, channel);
-            songs.Add(new Song
+            if (isPlaylist)
             {
-                SpotifyUri = $"youtube:{id}",
-                Title      = songTitle,
-                Artist     = artist,
-                CoverUrl   = thumb,
-                DurationMs = (int)(dur * 1000),
-            });
+                var count  = hasPlCount ? pcEl.GetInt32() : 0;
+                var url    = (entry.TryGetProperty("url", out var urlEl) ? urlEl.GetString() : null)
+                             ?? $"https://www.youtube.com/playlist?list={id}";
+                songs.Add(new Song
+                {
+                    SpotifyUri         = $"ytplaylist:{id}",
+                    Title              = title,
+                    Artist             = channel,
+                    CoverUrl           = thumb,
+                    DurationMs         = 0,
+                    IsPlaylist         = true,
+                    PlaylistUrl        = url,
+                    PlaylistVideoCount = count,
+                });
+            }
+            else
+            {
+                var dur = entry.TryGetProperty("duration", out var dEl) && dEl.ValueKind == JsonValueKind.Number
+                          ? dEl.GetDouble() : 0;
+                var (songTitle, artist) = SplitVideoTitle(title, channel);
+                songs.Add(new Song
+                {
+                    SpotifyUri = $"youtube:{id}",
+                    Title      = songTitle,
+                    Artist     = artist,
+                    CoverUrl   = thumb,
+                    DurationMs = (int)(dur * 1000),
+                });
+            }
         }
         return songs;
     }
