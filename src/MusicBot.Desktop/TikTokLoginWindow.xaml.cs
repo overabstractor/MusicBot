@@ -468,10 +468,11 @@ public partial class TikTokLoginWindow : Window
             var httpStatus = doc.RootElement.TryGetProperty("httpStatus", out var httpStatusProp)  ? httpStatusProp.GetInt32() : -1;
             var code       = doc.RootElement.TryGetProperty("code",       out var codeProp)        ? codeProp.GetInt32() : -1;
             var body       = doc.RootElement.TryGetProperty("body",       out var bodyProp)        ? bodyProp.GetString() : null;
+            var jsError    = doc.RootElement.TryGetProperty("error",      out var errProp)         ? errProp.GetString()  : null;
 
             Serilog.Log.Information(
-                "TikTok WebView chat → ok={Ok} http={Http} status_code={Code} body={Body}",
-                ok, httpStatus, code, body);
+                "TikTok WebView chat → ok={Ok} http={Http} status_code={Code} body={Body} jsError={JsError}",
+                ok, httpStatus, code, body, jsError);
 
             return ok;
         }

@@ -231,7 +231,10 @@ public class PlaybackSyncService : BackgroundService
                         }
                         // Delete the previous song's file if in temp mode
                         if (!_queueSettings.SaveDownloads && current?.Song.LocalFilePath != null)
+                        {
+                            _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
                             await _library.DeleteByTrackIdAsync(current.Song.SpotifyUri);
+                        }
                         await services.Player.PlayAsync(next.Song.LocalFilePath!);
                         _ = Task.Run(() => _kickVote.StartVoteAsync(next.Song));
                         if (next.Platform != "web")
@@ -241,7 +244,10 @@ public class PlaybackSyncService : BackgroundService
                     {
                         // Queue is empty
                         if (!_queueSettings.SaveDownloads && current?.Song.LocalFilePath != null)
+                        {
+                            _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
                             await _library.DeleteByTrackIdAsync(current.Song.SpotifyUri);
+                        }
 
                         await TryStartAutoQueueAsync(services);
                     }
@@ -258,12 +264,12 @@ public class PlaybackSyncService : BackgroundService
 
     /// <summary>
     /// Picks a random song from the auto-queue pool and starts playback.
-    /// Can be called explicitly (e.g. from the dashboard) or automatically when the queue empties.
-    /// Returns false if auto-queue is disabled, the pool is empty, or nothing is currently playing is required.
+    /// Retries up to <paramref name="attemptsLeft"/> times on download failure.
+    /// Songs that are permanently unavailable (private/removed) are deleted from the pool.
     /// </summary>
-    public async Task<bool> TryStartAutoQueueAsync(UserServices services)
+    public async Task<bool> TryStartAutoQueueAsync(UserServices services, int attemptsLeft = 3)
     {
-        if (!_queueSettings.AutoQueueEnabled)
+        if (!_queueSettings.AutoQueueEnabled || attemptsLeft <= 0)
         {
             await services.Player.StopAsync();
             return false;
@@ -294,16 +300,37 @@ public class PlaybackSyncService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Auto-queue download failed for \"{Title}\"", autoSong.Title);
+
+                // Remove permanently unavailable videos so they never block the pool again
+                if (IsUnrecoverableDownloadError(ex))
+                {
+                    _logger.LogWarning(
+                        "Removing permanently unavailable auto-queue song \"{Title}\" ({Uri})",
+                        autoSong.Title, autoSong.SpotifyUri);
+                    await _autoQueue.RemoveAsync(autoSong.SpotifyUri);
+                }
+
                 services.Queue.Skip();
                 _ = _hub.Clients.Group($"user:{LocalUser.Id}")
                         .SendAsync("queue:download-failed", new { title = autoSong.Title, artist = autoSong.Artist });
-                await services.Player.StopAsync();
-                return false;
+
+                // Try the next random song instead of stopping entirely
+                return await TryStartAutoQueueAsync(services, attemptsLeft - 1);
             }
         }
 
         await services.Player.PlayAsync(autoSong.LocalFilePath);
         return true;
+    }
+
+    private static bool IsUnrecoverableDownloadError(Exception ex)
+    {
+        var msg = ex.Message;
+        return msg.Contains("Private video")
+            || msg.Contains("Video unavailable")
+            || msg.Contains("This video is not available")
+            || msg.Contains("has been removed")
+            || msg.Contains("account associated with this video has been terminated");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
