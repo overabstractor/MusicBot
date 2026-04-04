@@ -45,6 +45,16 @@ public class LocalLibraryService : ILocalLibraryService
         await db.SaveChangesAsync();
     }
 
+    public async Task UpdateFilePathAsync(string trackId, string filePath)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db  = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
+        var row = await db.CachedTracks.FirstOrDefaultAsync(t => t.TrackId == trackId);
+        if (row == null) return;
+        row.FilePath = filePath;
+        await db.SaveChangesAsync();
+    }
+
     public async Task DeleteByTrackIdAsync(string trackId)
     {
         using var scope = _scopeFactory.CreateScope();

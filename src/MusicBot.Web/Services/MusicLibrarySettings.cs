@@ -3,7 +3,9 @@ namespace MusicBot.Services;
 public class MusicLibrarySettings
 {
     /// <summary>Directory where downloaded audio files are stored. Relative to working directory or absolute.</summary>
-    public string LibraryPath { get; set; } = "music-library";
+    public string LibraryPath { get; set; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "MusicBot", "music-library");
     /// <summary>Path to the yt-dlp executable. Must be in PATH or provide full path.</summary>
     public string YtDlpPath { get; set; } = "yt-dlp";
     /// <summary>Path to the ffmpeg executable. Must be in PATH or provide full path.</summary>

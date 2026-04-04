@@ -336,7 +336,8 @@ public class PlaybackSyncService : BackgroundService
     /// <summary>Ensures song.LocalFilePath is set, waiting for an in-progress download if necessary.</summary>
     private async Task EnsureLocalFileAsync(Song song)
     {
-        if (song.LocalFilePath != null && File.Exists(song.LocalFilePath))
+        if (song.LocalFilePath != null && File.Exists(song.LocalFilePath)
+            && new FileInfo(song.LocalFilePath).Length > 100_000)
             return;
 
         _logger.LogInformation("Waiting for download of \"{Title}\"...", song.Title);

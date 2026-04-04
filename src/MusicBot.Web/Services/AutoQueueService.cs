@@ -37,7 +37,7 @@ public class AutoQueueService
         var count = await db.AutoQueueSongs.CountAsync();
         if (count == 0) return null;
         var skip = _rng.Next(count);
-        var entry = await db.AutoQueueSongs.Skip(skip).FirstOrDefaultAsync();
+        var entry = await db.AutoQueueSongs.OrderBy(s => s.Id).Skip(skip).FirstOrDefaultAsync();
         if (entry == null) return null;
         return new Song
         {

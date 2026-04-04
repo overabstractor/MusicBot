@@ -455,10 +455,15 @@ public partial class TikTokLoginWindow : Window
             var raw = await Dispatcher.InvokeAsync(async () =>
                 await WebView.CoreWebView2.ExecuteScriptAsync(script)).Result;
 
-            var inner = JsonSerializer.Deserialize<string>(raw);
-            if (inner == null) return false;
+            // ExecuteScriptAsync wraps string return values in an extra JSON layer (e.g. "\"...\"").
+            // If the script somehow returned a bare object instead, Deserialize<string> would throw —
+            // so fall back to parsing raw directly.
+            string jsonToParse;
+            try   { jsonToParse = JsonSerializer.Deserialize<string>(raw) ?? raw; }
+            catch { jsonToParse = raw; }
+            if (string.IsNullOrWhiteSpace(jsonToParse)) return false;
 
-            using var doc = JsonDocument.Parse(inner);
+            using var doc = JsonDocument.Parse(jsonToParse);
             var ok         = doc.RootElement.TryGetProperty("ok",         out var okProp)         && okProp.GetBoolean();
             var httpStatus = doc.RootElement.TryGetProperty("httpStatus", out var httpStatusProp)  ? httpStatusProp.GetInt32() : -1;
             var code       = doc.RootElement.TryGetProperty("code",       out var codeProp)        ? codeProp.GetInt32() : -1;

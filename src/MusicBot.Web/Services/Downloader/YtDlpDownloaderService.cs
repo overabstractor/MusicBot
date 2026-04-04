@@ -500,6 +500,10 @@ public class YtDlpDownloaderService
             // Persist corrected duration if it changed after reading the actual file
             if (song.DurationMs > 0 && existing.DurationMs != song.DurationMs)
                 await _library.UpdateDurationAsync(song.SpotifyUri, song.DurationMs);
+            // Persist new path if the file was re-downloaded to a different location
+            // (e.g. after a Velopack update wiped the old current\ directory)
+            if (!string.Equals(existing.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                await _library.UpdateFilePathAsync(song.SpotifyUri, filePath);
             return;
         }
 
