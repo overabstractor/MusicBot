@@ -7,6 +7,10 @@ export interface Song {
   requestedBy?: string;
   platform?: string;
   isDownloaded?: boolean;
+  // Playlist search result fields (only present when isPlaylist=true)
+  isPlaylist?: boolean;
+  playlistUrl?: string;
+  playlistVideoCount?: number;
 }
 
 export interface QueueItem {
@@ -28,6 +32,7 @@ export interface NowPlayingState {
 export interface QueueState {
   nowPlaying: NowPlayingState;
   upcoming: QueueItem[];
+  activePlaylistName?: string | null;
 }
 
 export interface CommandResult {
@@ -120,4 +125,36 @@ export interface PlatformState {
   errorMessage?: string;
   autoConnect: boolean;
   config: TikTokConfig | TwitchConfig | KickConfig | null;
+}
+
+export interface PlaylistLibrary {
+  id: number;
+  name: string;
+  isActive: boolean;
+  isSystem?: boolean;
+  isPinned?: boolean;
+  pinOrder?: number;
+  createdAt: string;
+  songCount: number;
+  coverUrls?: string[];
+}
+
+export interface PlaylistMembership {
+  id: number;
+  name: string;
+  songCount: number;
+  isInPlaylist: boolean;
+  isSystem: boolean;
+  updatedAt: string;
+}
+
+export interface PlaylistLibrarySong {
+  id: number;
+  playlistId: number;
+  spotifyUri: string;
+  title: string;
+  artist: string;
+  coverUrl: string;
+  durationMs: number;
+  position: number;
 }

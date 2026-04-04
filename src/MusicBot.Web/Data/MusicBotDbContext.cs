@@ -13,6 +13,8 @@ public class MusicBotDbContext : DbContext
     public DbSet<PersistedQueueItem> PersistedQueueItems => Set<PersistedQueueItem>();
     public DbSet<PlayedSong>         PlayedSongs         => Set<PlayedSong>();
     public DbSet<AutoQueueSong>      AutoQueueSongs      => Set<AutoQueueSong>();
+    public DbSet<PlaylistLibrary>    PlaylistLibraries   => Set<PlaylistLibrary>();
+    public DbSet<PlaylistLibrarySong> PlaylistLibrarySongs => Set<PlaylistLibrarySong>();
 
     public MusicBotDbContext(DbContextOptions<MusicBotDbContext> options) : base(options) { }
 
@@ -68,6 +70,23 @@ public class MusicBotDbContext : DbContext
         {
             e.HasKey(s => s.Id);
             e.HasIndex(s => s.SpotifyUri).IsUnique();
+        });
+
+        modelBuilder.Entity<PlaylistLibrary>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.HasIndex(p => p.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<PlaylistLibrarySong>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.HasIndex(s => s.PlaylistId);
+            e.HasIndex(s => new { s.PlaylistId, s.SpotifyUri }).IsUnique();
+            e.HasOne(s => s.Playlist)
+             .WithMany(p => p.Songs)
+             .HasForeignKey(s => s.PlaylistId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

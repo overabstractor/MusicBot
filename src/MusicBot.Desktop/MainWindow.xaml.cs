@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
@@ -17,6 +18,15 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        WindowState = WindowState.Maximized;
+
+        // Pin WebView2 user data to AppData so cookies/storage survive Velopack updates
+        WebView.CreationProperties = new Microsoft.Web.WebView2.Wpf.CoreWebView2CreationProperties
+        {
+            UserDataFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MusicBot", "WebView2")
+        };
 
         // Convert the GDI+ tray icon to a WPF BitmapSource for the title bar and taskbar
         using var gdiIcon = App.CreateIcon();
@@ -34,8 +44,17 @@ public partial class MainWindow : Window
         {
             await WebView.EnsureCoreWebView2Async();
 
-            WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-            WebView.CoreWebView2.Settings.AreDevToolsEnabled            = true;
+#if DEBUG
+            WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled    = true;
+            WebView.CoreWebView2.Settings.AreDevToolsEnabled               = true;
+            WebView.CoreWebView2.Settings.IsStatusBarEnabled               = true;
+            WebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = true;
+#else
+            WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled    = false;
+            WebView.CoreWebView2.Settings.AreDevToolsEnabled               = false;
+            WebView.CoreWebView2.Settings.IsStatusBarEnabled               = false;
+            WebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
+#endif
 
             // Clear HTTP disk cache on every startup so updated assets are always fetched fresh.
             await WebView.CoreWebView2.Profile.ClearBrowsingDataAsync(

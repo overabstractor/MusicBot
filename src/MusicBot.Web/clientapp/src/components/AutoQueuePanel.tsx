@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { ListPlus, X } from "lucide-react";
 import { api } from "../services/api";
 import { Song, NowPlayingState } from "../types/models";
 import { formatDuration } from "../utils";
@@ -207,12 +208,23 @@ export const AutoQueuePanel: React.FC<Props> = ({ nowPlaying }) => {
             <div key={song.spotifyUri} className="autoqueue-row">
               {song.coverUrl
                 ? <img src={song.coverUrl} alt="" className="autoqueue-cover" />
-                : <div className="autoqueue-cover autoqueue-cover-placeholder">♫</div>}
+                : <div className="autoqueue-cover autoqueue-cover-placeholder"><X size={14} /></div>}
               <div className="autoqueue-info">
                 <span className="autoqueue-title">{song.title}</span>
                 <span className="autoqueue-artist">{song.artist} · {formatDuration(song.durationMs)}</span>
               </div>
-              <button className="btn btn-icon-danger" onClick={() => handleRemove(song.spotifyUri)} title="Eliminar">✕</button>
+              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                <button
+                  className="btn btn-icon"
+                  title="Agregar a cola"
+                  onClick={() => api.enqueueTrack({ spotifyUri: song.spotifyUri, title: song.title, artist: song.artist, coverUrl: song.coverUrl, durationMs: song.durationMs }, "Admin").catch(() => {})}
+                >
+                  <ListPlus size={14} />
+                </button>
+                <button className="btn-icon-danger" onClick={() => handleRemove(song.spotifyUri)} title="Eliminar">
+                  <X size={14} />
+                </button>
+              </div>
             </div>
           ))}
         </div>

@@ -14,11 +14,12 @@ public class TickerMessageService
 
     private static readonly JsonSerializerOptions _json = new() { WriteIndented = true };
 
-    public TickerMessageService(ILogger<TickerMessageService> logger, IHubContext<OverlayHub> hub, IWebHostEnvironment env)
+    public TickerMessageService(ILogger<TickerMessageService> logger, IHubContext<OverlayHub> hub, IWebHostEnvironment env, IConfiguration config)
     {
         _logger   = logger;
         _hub      = hub;
-        _filePath = Path.Combine(env.ContentRootPath, "ticker-messages.json");
+        var dataDir = config["DataDirectory"] ?? env.ContentRootPath;
+        _filePath = Path.Combine(dataDir, "ticker-messages.json");
         Load();
     }
 

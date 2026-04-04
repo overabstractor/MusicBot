@@ -35,6 +35,15 @@ public static class WebHost
         // Needed because the entry point is MusicBot.Desktop (no UserSecretsId there).
         builder.Configuration.AddUserSecrets(typeof(WebHost).Assembly, optional: true);
 
+        // ── User data directory (persists across Velopack updates) ───────────
+        var dataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "MusicBot");
+        Directory.CreateDirectory(dataDir);
+        builder.Configuration["DataDirectory"] = dataDir;
+        builder.Configuration["ConnectionStrings:DefaultConnection"] =
+            $"Data Source={Path.Combine(dataDir, "musicbot.db")}";
+
         // ── Configuration ────────────────────────────────────────────────────
         builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("Spotify"));
         builder.Services.Configure<TikTokSettings>(builder.Configuration.GetSection("TikTok"));
@@ -75,6 +84,7 @@ public static class WebHost
         builder.Services.AddSingleton<QueueSettingsService>();
         builder.Services.AddSingleton<BannedSongService>();
         builder.Services.AddSingleton<AutoQueueService>();
+        builder.Services.AddSingleton<PlaylistLibraryService>();
         builder.Services.AddSingleton<ChatResponseService>();
         builder.Services.AddSingleton<PresenceCheckService>();
         builder.Services.AddSingleton<TickerMessageService>();
@@ -126,6 +136,14 @@ public static class WebHost
             var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
             db.Database.EnsureCreated();
 
+            // Safe migrations for existing databases
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE PlaylistLibraries ADD COLUMN IsSystem INTEGER NOT NULL DEFAULT 0"); }
+            catch { /* column already exists */ }
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE PlaylistLibraries ADD COLUMN IsPinned INTEGER NOT NULL DEFAULT 0"); }
+            catch { /* column already exists */ }
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE PlaylistLibraries ADD COLUMN PinOrder INTEGER NOT NULL DEFAULT 0"); }
+            catch { /* column already exists */ }
+
             if (!db.Users.Any())
             {
                 db.Users.Add(new AppUser
@@ -139,6 +157,10 @@ public static class WebHost
                 db.SaveChanges();
             }
         }
+
+        // Seed system playlists (Liked Songs)
+        var plSvc = app.Services.GetRequiredService<PlaylistLibraryService>();
+        plSvc.EnsureSystemPlaylistsAsync().GetAwaiter().GetResult();
 
         app.UseCors();
         app.UseDefaultFiles();

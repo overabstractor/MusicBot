@@ -6,6 +6,9 @@ import {
   PlatformState,
   HistoryItem,
   LibraryTrack,
+  PlaylistLibrary,
+  PlaylistLibrarySong,
+  PlaylistMembership,
 } from "../types/models";
 import type { TickerMessage } from "../hooks/useSignalR";
 
@@ -40,6 +43,9 @@ export const api = {
   // Commands
   search: (q: string, limit = 5) =>
     request<import("../types/models").Song[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+
+  getPlaylistTracks: (url: string, limit = 200) =>
+    request<import("../types/models").Song[]>(`/api/search/playlist-tracks?url=${encodeURIComponent(url)}&limit=${limit}`),
 
   play: (query: string, requestedBy: string, platform?: string) =>
     request<CommandResult>("/api/play", {
@@ -80,7 +86,13 @@ export const api = {
   startAutoQueue: () =>
     request<CommandResult>("/api/queue/start-auto", { method: "POST" }),
 
+  shuffleQueue: () =>
+    request<{ message: string }>("/api/queue/shuffle", { method: "POST" }),
+
   // Queue management
+  clearUserQueue: () =>
+    request<void>("/api/queue/user", { method: "DELETE" }),
+
   removeQueueItem: (uri: string) =>
     request<void>("/api/queue/item", {
       method: "DELETE",
@@ -115,6 +127,24 @@ export const api = {
     request<{ added: number; skipped: number; total: number }>("/api/queue/import-playlist", {
       method: "POST",
       body: JSON.stringify({ url, requestedBy }),
+    }),
+
+  // Liked Songs
+  getLikedUris: () => request<string[]>("/api/liked/uris"),
+
+  toggleLiked: (song: { spotifyUri: string; title: string; artist: string; coverUrl?: string; durationMs: number }) =>
+    request<{ isLiked: boolean }>("/api/liked/toggle", {
+      method: "POST",
+      body: JSON.stringify({ spotifyUri: song.spotifyUri, title: song.title, artist: song.artist, coverUrl: song.coverUrl, durationMs: song.durationMs }),
+    }),
+
+  getSongMemberships: (uri: string) =>
+    request<PlaylistMembership[]>(`/api/liked/memberships?uri=${encodeURIComponent(uri)}`),
+
+  toggleMembership: (playlistId: number, song: { spotifyUri: string; title: string; artist: string; coverUrl?: string; durationMs: number }) =>
+    request<{ isInPlaylist: boolean }>(`/api/liked/memberships/${playlistId}`, {
+      method: "POST",
+      body: JSON.stringify({ spotifyUri: song.spotifyUri, title: song.title, artist: song.artist, coverUrl: song.coverUrl, durationMs: song.durationMs }),
     }),
 
   // Banned songs
@@ -212,6 +242,52 @@ export const api = {
 
   forgetPlatform: (platform: string) =>
     request<void>(`/api/platforms/${platform}/forget`, { method: "POST" }),
+
+  // Playlist Library
+  getPlaylists: () =>
+    request<PlaylistLibrary[]>("/api/playlists"),
+
+  createPlaylist: (name: string) =>
+    request<PlaylistLibrary>("/api/playlists", { method: "POST", body: JSON.stringify({ name }) }),
+
+  deletePlaylist: (id: number) =>
+    request<void>(`/api/playlists/${id}`, { method: "DELETE" }),
+
+  renamePlaylist: (id: number, name: string) =>
+    request<void>(`/api/playlists/${id}/rename`, { method: "PUT", body: JSON.stringify({ name }) }),
+
+  getPlaylistSongs: (id: number) =>
+    request<PlaylistLibrarySong[]>(`/api/playlists/${id}/songs`),
+
+  addPlaylistSong: (id: number, song: { spotifyUri: string; title: string; artist: string; coverUrl?: string; durationMs: number }) =>
+    request<void>(`/api/playlists/${id}/songs`, { method: "POST", body: JSON.stringify(song) }),
+
+  removePlaylistSong: (id: number, uri: string) =>
+    request<void>(`/api/playlists/${id}/songs/${encodeURIComponent(uri)}`, { method: "DELETE" }),
+
+  importPlaylistSongs: (id: number, url: string) =>
+    request<{ added: number; skipped: number; total: number }>(`/api/playlists/${id}/import`, { method: "POST", body: JSON.stringify({ url }) }),
+
+  activatePlaylist: (id: number, shuffle = false) =>
+    request<{ message: string }>(`/api/playlists/${id}/play`, {
+      method: "POST",
+      body: JSON.stringify({ shuffle }),
+    }),
+
+  playSongFromPlaylist: (playlistId: number, uri: string, shuffle = false) =>
+    request<{ message: string }>(`/api/playlists/${playlistId}/songs/${encodeURIComponent(uri)}/play`, {
+      method: "POST",
+      body: JSON.stringify({ shuffle }),
+    }),
+
+  deactivatePlaylist: () =>
+    request<void>("/api/playlists/active", { method: "DELETE" }),
+
+  togglePlaylistPin: (id: number) =>
+    request<{ isPinned: boolean }>(`/api/playlists/${id}/pin`, { method: "POST" }),
+
+  reorderPins: (ids: number[]) =>
+    request<void>("/api/playlists/pins/reorder", { method: "PUT", body: JSON.stringify({ ids }) }),
 
   // Relay
   getRelayStatus: () => request<{ configured: boolean; reachable: boolean; error: string | null }>("/api/relay/status"),

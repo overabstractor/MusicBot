@@ -14,9 +14,10 @@ public class BannedSongService
     private readonly object _lock = new();
     private readonly List<BannedSongEntry> _songs = new();
 
-    public BannedSongService(IWebHostEnvironment env)
+    public BannedSongService(IWebHostEnvironment env, IConfiguration config)
     {
-        _filePath = Path.Combine(env.ContentRootPath, "banned-songs.json");
+        var dataDir = config["DataDirectory"] ?? env.ContentRootPath;
+        _filePath = Path.Combine(dataDir, "banned-songs.json");
         Load();
     }
 

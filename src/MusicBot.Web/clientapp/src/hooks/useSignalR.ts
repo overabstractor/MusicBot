@@ -69,7 +69,9 @@ export function useSignalR(overlayToken: string | null) {
   const [integrationEvents,  setIntegrationEvents]  = useState<IntegrationEvent[]>([]);
   const [queueSettings,      setQueueSettings]      = useState<QueueSettings>({ maxQueueSize: 50, maxSongsPerUser: 10, votingEnabled: false, presenceCheckEnabled: false, presenceCheckWarningSeconds: 30, presenceCheckConfirmSeconds: 30, saveDownloads: false, autoQueueEnabled: false, openLogOnStart: false });
   const [tickerMessages,     setTickerMessages]     = useState<TickerMessage[]>([]);
-  const [queueUpdateCount,   setQueueUpdateCount]   = useState(0);
+  const [activePlaylistName,  setActivePlaylistName]  = useState<string | null>(null);
+  const [queueUpdateCount,    setQueueUpdateCount]    = useState(0);
+  const [playlistUpdateCount, setPlaylistUpdateCount] = useState(0);
   const [downloadStates,     setDownloadStates]     = useState<Record<string, DownloadState>>({});
   const [downloadErrors,     setDownloadErrors]     = useState<Array<{ id: number; title: string; artist: string }>>([]);
 
@@ -89,6 +91,7 @@ export function useSignalR(overlayToken: string | null) {
     conn.on("queue:updated",         (s: QueueState)        => {
       if (s?.nowPlaying) setNowPlaying(s.nowPlaying);
       if (s?.upcoming)   setAppQueue(s.upcoming);
+      setActivePlaylistName(s?.activePlaylistName ?? null);
       setQueueUpdateCount(c => c + 1);
     });
     conn.on("spotify:queue-updated", (s: SpotifyQueueState) => setSpotifyQueue(s));
@@ -99,7 +102,8 @@ export function useSignalR(overlayToken: string | null) {
       if (p.source === "kick")    setKickStatus(p.status);
     });
 
-    conn.on("settings:updated", (s: QueueSettings) => setQueueSettings(s));
+    conn.on("settings:updated",  (s: QueueSettings) => setQueueSettings(s));
+    conn.on("playlist:status",   ()                  => setPlaylistUpdateCount(c => c + 1));
 
     conn.on("ticker:updated", (msgs: TickerMessage[]) => setTickerMessages(msgs || []));
 
@@ -224,5 +228,5 @@ export function useSignalR(overlayToken: string | null) {
     };
   }, [connect, overlayToken]);
 
-  return { nowPlaying, spotifyQueue, appQueue, connected, tiktokStatus, twitchStatus, kickStatus, integrationEvents, queueSettings, tickerMessages, queueUpdateCount, downloadStates, downloadErrors, dismissDownloadError: (id: number) => setDownloadErrors(prev => prev.filter(e => e.id !== id)) };
+  return { nowPlaying, spotifyQueue, appQueue, activePlaylistName, connected, tiktokStatus, twitchStatus, kickStatus, integrationEvents, queueSettings, tickerMessages, queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, dismissDownloadError: (id: number) => setDownloadErrors(prev => prev.filter(e => e.id !== id)) };
 }

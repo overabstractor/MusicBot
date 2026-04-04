@@ -181,15 +181,26 @@ public class PlaybackSyncService : BackgroundService
         {
             services.Queue.UpdateProgress(state.PositionMs, state.IsPlaying);
 
-            // 30 s warning: avisar al usuario de la próxima canción
+            // 30 s remaining: warn the next requester and pre-warm the next song's download
             if (state.IsPlaying && state.DurationMs > 0)
             {
                 var remaining = state.DurationMs - state.PositionMs;
                 if (remaining <= 30_000)
                 {
-                    var next = services.Queue.GetUpcoming().FirstOrDefault();
+                    var upcoming = services.Queue.GetUpcoming();
+                    var next = upcoming.FirstOrDefault();
                     if (next != null)
+                    {
                         _presence.IssueWarningForNext(next.RequestedBy);
+                        _ = Task.Run(() => PrewarmDownloadAsync(next.Song));
+                    }
+                    else
+                    {
+                        // No user requests; pre-warm the next background playlist song
+                        var bgNext = PeekNextBackgroundSong(services);
+                        if (bgNext != null)
+                            _ = Task.Run(() => PrewarmDownloadAsync(bgNext));
+                    }
                 }
             }
         };
@@ -229,8 +240,11 @@ public class PlaybackSyncService : BackgroundService
                             await StartCurrentTrackAsync(services);
                             return;
                         }
-                        // Delete the previous song's file if in temp mode
-                        if (!_queueSettings.SaveDownloads && current?.Song.LocalFilePath != null)
+                        // Delete the previous song's file if in temp mode.
+                        // Background-playlist items are never deleted — they'll be needed on the next cycle.
+                        if (!_queueSettings.SaveDownloads
+                            && current?.Song.LocalFilePath != null
+                            && current.IsPlaylistItem == false)
                         {
                             _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
                             await _library.DeleteByTrackIdAsync(current.Song.SpotifyUri);
@@ -242,8 +256,11 @@ public class PlaybackSyncService : BackgroundService
                     }
                     else
                     {
-                        // Queue is empty
-                        if (!_queueSettings.SaveDownloads && current?.Song.LocalFilePath != null)
+                        // Queue is empty; background playlist handles itself via Advance().
+                        // Only delete file for non-playlist items in temp mode.
+                        if (!_queueSettings.SaveDownloads
+                            && current?.Song.LocalFilePath != null
+                            && current.IsPlaylistItem == false)
                         {
                             _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
                             await _library.DeleteByTrackIdAsync(current.Song.SpotifyUri);
@@ -334,6 +351,37 @@ public class PlaybackSyncService : BackgroundService
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Starts a background download so the file is ready before the current track ends.
+    /// GetOrStartDownloadAsync deduplicates concurrent calls, so this is safe to call repeatedly.
+    /// </summary>
+    private async Task PrewarmDownloadAsync(Song song)
+    {
+        if (song.LocalFilePath != null && File.Exists(song.LocalFilePath)
+            && new FileInfo(song.LocalFilePath).Length > 100_000)
+            return;
+        try
+        {
+            await _downloader.GetOrStartDownloadAsync(song);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Pre-warm download failed for \"{Title}\" — will retry at track end", song.Title);
+        }
+    }
+
+    /// <summary>
+    /// Returns the next song from the background playlist without advancing the index.
+    /// Returns null if there are user requests pending (they take priority) or no background playlist.
+    /// </summary>
+    private static Song? PeekNextBackgroundSong(UserServices services)
+    {
+        if (services.Queue.GetUpcoming().Count > 0) return null;
+        var (songs, index) = services.Queue.GetBackgroundPlaylist();
+        if (songs.Count == 0) return null;
+        return songs[index % songs.Count];
+    }
 
     private async Task RecordHistoryAsync(QueueItem item)
     {
