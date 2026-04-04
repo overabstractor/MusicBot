@@ -20,4 +20,6 @@ public class QueueState
     public List<Song> BackgroundPlaylist { get; set; } = new();
     /// <summary>Current position within BackgroundPlaylist (next song to play from it).</summary>
     public int PlaylistIndex { get; set; }
+    /// <summary>Display name of the active background playlist, if any.</summary>
+    public string? ActivePlaylistName { get; set; }
 }

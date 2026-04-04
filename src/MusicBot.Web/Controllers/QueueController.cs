@@ -68,6 +68,15 @@ public class QueueController : ControllerBase
         return Ok(BuildQueueState(_userContext.GetOrCreate(LocalUser.Id)));
     }
 
+    /// <summary>Clear all user-requested songs from the queue (leaves the background playlist intact)</summary>
+    [HttpDelete("user")]
+    [ProducesResponseType(204)]
+    public IActionResult ClearUserQueue()
+    {
+        _userContext.GetOrCreate(LocalUser.Id).Queue.ClearUserQueue();
+        return NoContent();
+    }
+
     /// <summary>Remove a specific song from the queue by its URI (admin)</summary>
     [HttpDelete("item")]
     [ProducesResponseType(204)]
@@ -345,6 +354,14 @@ public class QueueController : ControllerBase
                 Platform    = i.Platform,
             }).ToList()
         };
+    }
+
+    [HttpPost("shuffle")]
+    public IActionResult Shuffle()
+    {
+        var services = _userContext.GetOrCreate(LocalUser.Id);
+        services.Queue.Shuffle();
+        return Ok(new { message = "Cola mezclada" });
     }
 }
 

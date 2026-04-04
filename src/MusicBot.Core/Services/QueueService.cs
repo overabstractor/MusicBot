@@ -17,6 +17,7 @@ public class QueueService : IQueueService
     // Background playlist (cyclic, plays when _upcoming is empty)
     private List<Song> _backgroundPlaylist = new();
     private int _playlistIndex = 0;
+    private string? _backgroundPlaylistName;
 
     public event Action<QueueState>? OnQueueUpdated;
     public event Action<NowPlayingState>? OnNowPlayingUpdated;
@@ -237,7 +238,7 @@ public class QueueService : IQueueService
         }
     }
 
-    public QueueItem PlayNow(Song song, string requestedBy, string platform)
+    public QueueItem PlayNow(Song song, string requestedBy, string platform, bool isPlaylistItem = false)
     {
         lock (_lock)
         {
@@ -245,7 +246,7 @@ public class QueueService : IQueueService
             if (_currentItem != null)
                 _upcoming.Insert(0, _currentItem);
 
-            var item = new QueueItem { Song = song, RequestedBy = requestedBy, Platform = platform };
+            var item = new QueueItem { Song = song, RequestedBy = requestedBy, Platform = platform, IsPlaylistItem = isPlaylistItem };
             _currentItem = item;
             _progressMs  = 0;
             _isPlaying   = true;
@@ -322,14 +323,38 @@ public class QueueService : IQueueService
         }
     }
 
-    public void SetBackgroundPlaylist(IEnumerable<Song> songs)
+    public void Shuffle()
+    {
+        lock (_lock)
+        {
+            var rng = new Random();
+            for (int i = _upcoming.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (_upcoming[i], _upcoming[j]) = (_upcoming[j], _upcoming[i]);
+            }
+        }
+        OnQueueUpdated?.Invoke(GetState());
+    }
+
+    public void SetBackgroundPlaylist(IEnumerable<Song> songs, string? playlistName = null)
     {
         lock (_lock)
         {
             _backgroundPlaylist = new List<Song>(songs);
+            _backgroundPlaylistName = playlistName;
             _playlistIndex = 0;
         }
         OnQueueUpdated?.Invoke(GetState());
+    }
+
+    public void ClearUserQueue()
+    {
+        lock (_lock)
+        {
+            _upcoming.RemoveAll(i => !i.IsPlaylistItem);
+        }
+        EmitUpdate();
     }
 
     public void ClearBackgroundPlaylist()
@@ -337,6 +362,7 @@ public class QueueService : IQueueService
         lock (_lock)
         {
             _backgroundPlaylist.Clear();
+            _backgroundPlaylistName = null;
             _playlistIndex = 0;
         }
         OnQueueUpdated?.Invoke(GetState());
@@ -386,12 +412,50 @@ public class QueueService : IQueueService
     {
         lock (_lock)
         {
+            // Start with the real upcoming queue (user + any playlist items already in queue)
+            var upcoming = new List<QueueItem>(_upcoming);
+
+            // Synthesise visibility of remaining background-playlist songs so the UI
+            // can show the full upcoming flow even before songs are downloaded.
+            // Cap the total visible list at 50 items.
+            if (_backgroundPlaylist.Count > 0 && upcoming.Count < 50)
+            {
+                var existingUris = new HashSet<string>(upcoming.Select(i => i.Song.SpotifyUri));
+                if (_currentItem != null) existingUris.Add(_currentItem.Song.SpotifyUri);
+
+                int count = _backgroundPlaylist.Count;
+                for (int i = 0; i < count && upcoming.Count < 50; i++)
+                {
+                    int idx = (_playlistIndex + i) % count;
+                    var src = _backgroundPlaylist[idx];
+                    if (existingUris.Contains(src.SpotifyUri)) continue;
+
+                    upcoming.Add(new QueueItem
+                    {
+                        Song = new Song
+                        {
+                            SpotifyUri    = src.SpotifyUri,
+                            Title         = src.Title,
+                            Artist        = src.Artist,
+                            CoverUrl      = src.CoverUrl,
+                            DurationMs    = src.DurationMs,
+                            LocalFilePath = src.LocalFilePath,
+                        },
+                        RequestedBy    = "Playlist",
+                        Platform       = "web",
+                        IsPlaylistItem = true,
+                    });
+                    existingUris.Add(src.SpotifyUri);
+                }
+            }
+
             return new QueueState
             {
-                NowPlaying       = GetNowPlaying(),
-                Upcoming         = new List<QueueItem>(_upcoming),
-                BackgroundPlaylist = new List<Song>(_backgroundPlaylist),
-                PlaylistIndex    = _playlistIndex,
+                NowPlaying           = GetNowPlaying(),
+                Upcoming             = upcoming,
+                BackgroundPlaylist   = new List<Song>(_backgroundPlaylist),
+                PlaylistIndex        = _playlistIndex,
+                ActivePlaylistName   = _backgroundPlaylistName,
             };
         }
     }
