@@ -60,6 +60,11 @@ export const MainBrowser: React.FC<Props> = ({
   const [importUrl,  setImportUrl]  = useState("");
   const [importing,  setImporting]  = useState(false);
 
+  // ── Song drag-and-drop reorder ────────────────────────────────────────────
+  const [dragSongUri,  setDragSongUri]  = useState<string | null>(null);
+  const [dropSongIdx,  setDropSongIdx]  = useState<number | null>(null);
+  const dragSongIdxRef = useRef<number>(-1);
+
   // ── Context menus ──────────────────────────────────────────────────────────
   const [menuUri,     setMenuUri]     = useState<string | null>(null);
   // likeMenuUri: opens ContextMenu in "playlist" view (for ♥ click on liked songs)
@@ -289,6 +294,25 @@ export const MainBrowser: React.FC<Props> = ({
     } catch { flash("Error al quitar canción", true); }
   };
 
+  const handleReorderSong = async (uri: string, toIndex: number) => {
+    if (!selectedPlaylistId) return;
+    setSongs(prev => {
+      const next = [...prev];
+      const fromIndex = next.findIndex(s => s.spotifyUri === uri);
+      if (fromIndex < 0) return prev;
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+    try {
+      await api.reorderPlaylistSong(selectedPlaylistId, uri, toIndex);
+    } catch {
+      flash("Error al reordenar", true);
+      const updated = await api.getPlaylistSongs(selectedPlaylistId).catch(() => null);
+      if (updated) setSongs(updated);
+    }
+  };
+
   // ── Import ─────────────────────────────────────────────────────────────────
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -439,7 +463,6 @@ export const MainBrowser: React.FC<Props> = ({
                             song={song}
                             isQueue={false}
                             onClose={() => setMenuUri(null)}
-                            onAddToAutoQueue={() => {}}
                           />
                         )}
                       </div>
@@ -682,7 +705,6 @@ export const MainBrowser: React.FC<Props> = ({
                           song={s}
                           isQueue={false}
                           onClose={() => setMenuUri(null)}
-                          onAddToAutoQueue={() => {}}
                         />
                       )}
                     </div>
@@ -804,11 +826,22 @@ export const MainBrowser: React.FC<Props> = ({
                 {songs.length === 0 ? (
                   <div className="lib-empty">Lista vacía. Importa o busca canciones arriba.</div>
                 ) : songs.map((s, i) => {
-                  const isPlaying = nowPlayingUri === s.spotifyUri;
-                  const isLiked   = likedUris?.has(s.spotifyUri) ?? false;
+                  const isPlaying    = nowPlayingUri === s.spotifyUri;
+                  const isLiked      = likedUris?.has(s.spotifyUri) ?? false;
+                  const isDragging   = dragSongUri === s.spotifyUri;
+                  const isDropTarget = dropSongIdx === i && dragSongUri !== s.spotifyUri;
                   const plSong: SongRef = { spotifyUri: s.spotifyUri, title: s.title, artist: s.artist, coverUrl: s.coverUrl, durationMs: s.durationMs };
                   return (
-                    <div key={s.id} className={`browser-result-row browser-pl-song-row${isPlaying ? " playing" : ""}`} style={{ position: "relative" }}>
+                    <div
+                      key={s.id}
+                      className={`browser-result-row browser-pl-song-row${isPlaying ? " playing" : ""}${isDragging ? " queue-row-dragging" : ""}${isDropTarget ? " queue-row-drop-target" : ""}`}
+                      style={{ position: "relative" }}
+                      draggable={!playlist?.isSystem}
+                      onDragStart={() => { setDragSongUri(s.spotifyUri); dragSongIdxRef.current = i; }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropSongIdx(i); }}
+                      onDrop={e => { e.preventDefault(); if (dragSongUri && dragSongIdxRef.current !== i) handleReorderSong(dragSongUri, i); setDragSongUri(null); setDropSongIdx(null); }}
+                      onDragEnd={() => { setDragSongUri(null); setDropSongIdx(null); }}
+                    >
                       {/* Position / play button (CSS hover swap) */}
                       <button
                         className="browser-song-num-btn"
@@ -861,7 +894,6 @@ export const MainBrowser: React.FC<Props> = ({
                           song={plSong}
                           isQueue={false}
                           onClose={() => setMenuUri(null)}
-                          onAddToAutoQueue={() => {}}
                           onRemove={!playlist?.isSystem ? () => handleRemoveSong(s.spotifyUri) : undefined}
                         />
                       )}
@@ -871,7 +903,6 @@ export const MainBrowser: React.FC<Props> = ({
                           song={plSong}
                           isQueue={false}
                           onClose={() => setLikeMenuUri(null)}
-                          onAddToAutoQueue={() => {}}
                           defaultView="playlist"
                         />
                       )}

@@ -17,6 +17,22 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
   const [relayStatus, setRelayStatus] = useState<{ configured: boolean; reachable: boolean; error: string | null } | null>(null);
   const [relayChecking, setRelayChecking] = useState(false);
 
+  const [ytDlpUpdating, setYtDlpUpdating] = useState(false);
+  const [ytDlpMsg,      setYtDlpMsg]      = useState<{ text: string; err: boolean } | null>(null);
+
+  const handleUpdateYtDlp = useCallback(async () => {
+    setYtDlpUpdating(true);
+    setYtDlpMsg(null);
+    try {
+      const r = await api.updateYtDlp();
+      setYtDlpMsg({ text: r.message, err: false });
+    } catch (e: unknown) {
+      setYtDlpMsg({ text: e instanceof Error ? e.message : "Error al actualizar", err: true });
+    } finally {
+      setYtDlpUpdating(false);
+    }
+  }, []);
+
   const checkRelay = useCallback(async () => {
     setRelayChecking(true);
     try {
@@ -182,23 +198,6 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
       </div>
 
       <div className="settings-section">
-        <div className="settings-section-title">Cola automática</div>
-
-        <label className="settings-row settings-row-toggle">
-          <span className="settings-label">Reproducción automática al vaciar cola</span>
-          <div
-            className={`settings-toggle${form.autoQueueEnabled ? " on" : ""}`}
-            onClick={() => set("autoQueueEnabled", !form.autoQueueEnabled)}
-          >
-            <div className="settings-toggle-thumb" />
-          </div>
-        </label>
-        <p className="settings-hint">
-          Cuando la cola quede vacía, se agrega automáticamente una canción aleatoria del pool.
-        </p>
-      </div>
-
-      <div className="settings-section">
         <div className="settings-section-title">Spotify</div>
         <div className="settings-row">
           <span className="settings-label">Estado de conexión</span>
@@ -254,6 +253,22 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
 
       <div className="settings-section">
         <div className="settings-section-title">Aplicación</div>
+
+        <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button className="btn btn-sm" onClick={handleUpdateYtDlp} disabled={ytDlpUpdating}>
+              {ytDlpUpdating ? "Actualizando…" : "Actualizar yt-dlp"}
+            </button>
+          </div>
+          {ytDlpMsg && (
+            <span style={{ fontSize: 12, color: ytDlpMsg.err ? "var(--color-error, #ef4444)" : "var(--color-success, #22c55e)" }}>
+              {ytDlpMsg.text}
+            </span>
+          )}
+        </div>
+        <p className="settings-hint">
+          Descarga la última versión de yt-dlp desde GitHub. Necesario cuando YouTube cambia su sistema anti-bot (error "Sign in to confirm you're not a bot"). La app también actualiza automáticamente al inicio si el binario tiene más de 7 días.
+        </p>
 
         <label className="settings-row settings-row-toggle">
           <span className="settings-label">Abrir ventana de logs al iniciar</span>

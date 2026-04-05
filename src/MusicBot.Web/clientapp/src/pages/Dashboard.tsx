@@ -14,6 +14,26 @@ import { api } from "../services/api";
 
 const OVERLAY_TOKEN = "local";
 
+function formatDownloadReason(raw: string): string {
+  // Strip "yt-dlp failed for "X": " prefix
+  const prefixed = raw.match(/^yt-dlp failed for ".+?": (.+)$/s);
+  const msg = prefixed ? prefixed[1] : raw;
+
+  // Map known yt-dlp error patterns to friendly messages
+  if (/private video/i.test(msg))           return "El video es privado";
+  if (/video unavailable/i.test(msg))       return "El video no está disponible";
+  if (/has been removed/i.test(msg))        return "El video fue eliminado";
+  if (/not available in your country/i.test(msg)) return "No disponible en tu región";
+  if (/age.?restricted/i.test(msg))         return "El video tiene restricción de edad";
+  if (/no youtube match/i.test(msg))        return "No se encontró en YouTube";
+  if (/output file not found/i.test(msg))   return "Error al procesar el archivo de audio";
+  if (/unable to download/i.test(msg))      return "No se pudo descargar el video";
+  if (/copyright/i.test(msg))               return "Bloqueado por derechos de autor";
+
+  // Return first line of the message (yt-dlp errors can be multi-line)
+  return msg.split("\n")[0].trim();
+}
+
 export const Dashboard: React.FC = () => {
   const {
     nowPlaying, appQueue, activePlaylistName, connected,
@@ -45,9 +65,6 @@ export const Dashboard: React.FC = () => {
   const [simMsg,    setSimMsg]    = useState<string | null>(null);
   const simTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [autoQueueMsg, setAutoQueueMsg] = useState<string | null>(null);
-  const autoQueueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   useEffect(() => {
     api.getVersion().then(r => setAppVersion(r.version)).catch(() => {});
   }, []);
@@ -57,17 +74,6 @@ export const Dashboard: React.FC = () => {
     if (simTimerRef.current) clearTimeout(simTimerRef.current);
     simTimerRef.current = setTimeout(() => setSimMsg(null), 3000);
   };
-
-  const handleAddToAutoQueue = useCallback(async (song: { spotifyUri: string; title: string; artist: string; coverUrl?: string; durationMs: number }) => {
-    try {
-      await api.addAutoQueueSong(song);
-      setAutoQueueMsg(`✓ "${song.title}" agregada a AutoCola`);
-    } catch (e: unknown) {
-      setAutoQueueMsg(e instanceof Error ? e.message : "Error");
-    }
-    if (autoQueueTimer.current) clearTimeout(autoQueueTimer.current);
-    autoQueueTimer.current = setTimeout(() => setAutoQueueMsg(null), 3000);
-  }, []);
 
   const handleSkip   = useCallback(() => api.skip("Admin"),  []);
   const handlePause  = useCallback(() => api.pause(),        []);
@@ -140,17 +146,20 @@ export const Dashboard: React.FC = () => {
           {downloadErrors.map(e => (
             <div key={e.id} className="download-error-toast">
               <span className="download-error-icon">⚠</span>
-              <span className="download-error-text">
-                No se pudo descargar <strong>{e.title}</strong>
-                {e.artist ? ` · ${e.artist}` : ""}
-              </span>
+              <div className="download-error-body">
+                <span className="download-error-text">
+                  No se pudo descargar <strong>{e.title}</strong>
+                  {e.artist ? ` · ${e.artist}` : ""}
+                </span>
+                {e.reason && (
+                  <span className="download-error-reason">{formatDownloadReason(e.reason)}</span>
+                )}
+              </div>
               <button className="download-error-close" onClick={() => dismissDownloadError(e.id)}>✕</button>
             </div>
           ))}
         </div>
       )}
-
-      {autoQueueMsg && <div className="autoqueue-toast">{autoQueueMsg}</div>}
 
       {/* ── Body: 3 columns ─────────────────────────────────── */}
       <div className="spotify-body">
@@ -181,8 +190,8 @@ export const Dashboard: React.FC = () => {
           items={appQueue}
           nowPlaying={nowPlaying}
           onRemove={handleRemove}
+          onReorder={handleReorder}
           onBan={handleBan}
-          onAddToAutoQueue={handleAddToAutoQueue}
           downloadStates={downloadStates}
           queueUpdateCount={queueUpdateCount}
           activePlaylistName={activePlaylistName}
@@ -197,7 +206,6 @@ export const Dashboard: React.FC = () => {
         onSkip={handleSkip}
         onPause={handlePause}
         onResume={handleResume}
-        onAddToAutoQueue={handleAddToAutoQueue}
         downloadStates={downloadStates}
         rightPanelMode={rightPanelMode}
         onToggleQueue={handleToggleQueue}
@@ -215,7 +223,6 @@ export const Dashboard: React.FC = () => {
         twitchEvents={integrationEvents.filter(e => e.source === "twitch")}
         kickEvents={integrationEvents.filter(e => e.source === "kick")}
         tickerMessages={tickerMessages}
-        nowPlaying={nowPlaying}
         overlayToken={OVERLAY_TOKEN}
       />
 

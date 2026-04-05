@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   Shuffle, SkipBack, Play, Pause, SkipForward,
-  List, Headphones, Volume2, Volume1, VolumeX, Dices,
+  List, Headphones, Volume2, Volume1, VolumeX,
 } from "lucide-react";
-import { NowPlayingState, Song } from "../types/models";
+import { NowPlayingState } from "../types/models";
 import { formatDuration, getPlatform } from "../utils";
 import { DownloadState } from "../hooks/useSignalR";
 import { api } from "../services/api";
@@ -13,7 +13,6 @@ interface Props {
   onSkip: () => void;
   onPause: () => void;
   onResume: () => void;
-  onAddToAutoQueue?: (song: Song) => void;
   downloadStates?: Record<string, DownloadState>;
   rightPanelMode: "queue" | "nowplaying" | "devices";
   onToggleQueue: () => void;
@@ -23,7 +22,7 @@ interface Props {
 }
 
 export const PlayerBar: React.FC<Props> = ({
-  state, onSkip, onPause, onResume, onAddToAutoQueue, downloadStates,
+  state, onSkip, onPause, onResume, downloadStates,
   rightPanelMode, onToggleQueue, onToggleDevices, shuffleActive, onToggleShuffle,
 }) => {
   const song     = state?.spotifyTrack ?? state?.item?.song ?? null;
@@ -145,11 +144,6 @@ export const PlayerBar: React.FC<Props> = ({
                   )}
                 </span>
               </div>
-              {onAddToAutoQueue && (
-                <button className="pb-side-btn" title="Agregar a AutoCola" onClick={() => onAddToAutoQueue(song)}>
-                  <Dices size={15} />
-                </button>
-              )}
             </>
           ) : downloadState ? (
             <>

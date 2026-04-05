@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Music, Volume2, RotateCcw, Headphones, MoreHorizontal, Heart } from "lucide-react";
 import { QueueItem, NowPlayingState, HistoryItem } from "../types/models";
 import { DownloadState } from "../hooks/useSignalR";
@@ -11,8 +11,8 @@ interface Props {
   items: QueueItem[];
   nowPlaying: NowPlayingState | null;
   onRemove: (uri: string) => void;
+  onReorder?: (uri: string, toIndex: number) => void;
   onBan: (uri: string, title: string, artist: string) => void;
-  onAddToAutoQueue: (song: SongRef) => void;
   downloadStates: Record<string, DownloadState>;
   queueUpdateCount: number;
   activePlaylistName?: string | null;
@@ -121,7 +121,7 @@ const DevicesView: React.FC = () => {
 
 // ── History panel ─────────────────────────────────────────────────────────────
 
-const HistoryView: React.FC<{ refreshKey: number; onAddToAutoQueue: Props["onAddToAutoQueue"]; likedUris?: Set<string>; onToggleLike?: (song: SongRef) => void }> = ({ refreshKey, onAddToAutoQueue, likedUris, onToggleLike }) => {
+const HistoryView: React.FC<{ refreshKey: number; likedUris?: Set<string>; onToggleLike?: (song: SongRef) => void }> = ({ refreshKey, likedUris, onToggleLike }) => {
   const [history,  setHistory]  = useState<HistoryItem[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [menuUri,  setMenuUri]  = useState<string | null>(null);
@@ -174,7 +174,6 @@ const HistoryView: React.FC<{ refreshKey: number; onAddToAutoQueue: Props["onAdd
                 song={song}
                 isQueue={false}
                 onClose={() => setMenuUri(null)}
-                onAddToAutoQueue={onAddToAutoQueue}
               />
             )}
           </div>
@@ -187,11 +186,14 @@ const HistoryView: React.FC<{ refreshKey: number; onAddToAutoQueue: Props["onAdd
 // ── Main QueuePanel ───────────────────────────────────────────────────────────
 
 export const QueuePanel: React.FC<Props> = ({
-  mode, items, nowPlaying, onRemove, onBan, onAddToAutoQueue, downloadStates, queueUpdateCount,
+  mode, items, nowPlaying, onRemove, onReorder, onBan, downloadStates, queueUpdateCount,
   activePlaylistName, likedUris, onToggleLike,
 }) => {
   const [historyTab, setHistoryTab] = useState(false);
   const [menuUri,    setMenuUri]    = useState<string | null>(null);
+  const [dragUri,    setDragUri]    = useState<string | null>(null);
+  const [dropIndex,  setDropIndex]  = useState<number | null>(null);
+  const dragIndexRef = useRef<number>(-1);
 
   const nowSong   = nowPlaying?.spotifyTrack ?? nowPlaying?.item?.song ?? null;
   const userItems = items.filter(i => !i.isPlaylistItem);
@@ -221,7 +223,7 @@ export const QueuePanel: React.FC<Props> = ({
       </div>
 
       {historyTab ? (
-        <HistoryView refreshKey={queueUpdateCount} onAddToAutoQueue={onAddToAutoQueue} likedUris={likedUris} onToggleLike={onToggleLike} />
+        <HistoryView refreshKey={queueUpdateCount} likedUris={likedUris} onToggleLike={onToggleLike} />
       ) : (
         <div className="queue-items-list">
 
@@ -239,6 +241,17 @@ export const QueuePanel: React.FC<Props> = ({
                 </div>
                 {downloadStates[nowSong.spotifyUri] && (
                   <span className="qi-dl-badge">{downloadStates[nowSong.spotifyUri].pct}%</span>
+                )}
+                {onToggleLike && !likedUris?.has(nowSong.spotifyUri) && (
+                  <div className="qi-actions">
+                    <button
+                      className="qi-like-btn"
+                      onClick={e => { e.stopPropagation(); onToggleLike({ spotifyUri: nowSong.spotifyUri, title: nowSong.title, artist: nowSong.artist, coverUrl: nowSong.coverUrl, durationMs: nowSong.durationMs }); }}
+                      title="Guardar en Liked Songs"
+                    >
+                      <Heart size={13} fill="none" />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -283,8 +296,22 @@ export const QueuePanel: React.FC<Props> = ({
                   coverUrl:   item.song.coverUrl,
                   durationMs: item.song.durationMs,
                 };
+                const isDragging   = dragUri === item.song.spotifyUri;
+                const isDropTarget = dropIndex === i && dragUri !== item.song.spotifyUri;
                 return (
-                  <div key={item.song.spotifyUri} className="queue-item-row" style={{ position: "relative" }}>
+                  <div
+                    key={item.song.spotifyUri}
+                    className={`queue-item-row${isDragging ? " queue-row-dragging" : ""}${isDropTarget ? " queue-row-drop-target" : ""}`}
+                    style={{ position: "relative" }}
+                    draggable={!!onReorder}
+                    onDragStart={() => { setDragUri(item.song.spotifyUri); dragIndexRef.current = i; }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropIndex(i); }}
+                    onDrop={e => { e.preventDefault(); if (dragUri && dragIndexRef.current !== i) onReorder?.(dragUri, i); setDragUri(null); setDropIndex(null); }}
+                    onDragEnd={() => { setDragUri(null); setDropIndex(null); }}
+                  >
+                    {onReorder && (
+                      <span className="queue-drag-handle" title="Arrastrar para reordenar">⠿</span>
+                    )}
                     <span className="qi-pos">{i + 1}</span>
                     {item.song.coverUrl
                       ? <img src={item.song.coverUrl} alt="" className="qi-cover" />
@@ -325,7 +352,6 @@ export const QueuePanel: React.FC<Props> = ({
                         onClose={() => setMenuUri(null)}
                         onRemove={onRemove}
                         onBan={onBan}
-                        onAddToAutoQueue={onAddToAutoQueue}
                       />
                     )}
                   </div>
@@ -378,7 +404,6 @@ export const QueuePanel: React.FC<Props> = ({
                         song={song}
                         isQueue={false}
                         onClose={() => setMenuUri(null)}
-                        onAddToAutoQueue={onAddToAutoQueue}
                       />
                     )}
                   </div>

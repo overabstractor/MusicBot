@@ -1,14 +1,12 @@
 import React, { useState } from "react";
-import { Settings, Zap, Monitor, Dices, MessageSquare, X } from "lucide-react";
+import { Settings, Zap, Monitor, MessageSquare, X } from "lucide-react";
 import { SettingsPanel } from "./SettingsPanel";
 import { PlatformConnections } from "./PlatformConnections";
 import { OverlayLinks } from "./OverlayLinks";
-import { AutoQueuePanel } from "./AutoQueuePanel";
 import { TickerMessages } from "./TickerMessages";
 import { QueueSettings, IntegrationEvent, TickerMessage } from "../hooks/useSignalR";
-import { NowPlayingState } from "../types/models";
 
-type SettingsTab = "settings" | "platforms" | "overlays" | "autoqueue" | "ticker";
+type SettingsTab = "settings" | "platforms" | "overlays" | "ticker";
 
 interface Props {
   open: boolean;
@@ -18,7 +16,6 @@ interface Props {
   twitchEvents: IntegrationEvent[];
   kickEvents: IntegrationEvent[];
   tickerMessages: TickerMessage[];
-  nowPlaying: NowPlayingState | null;
   overlayToken: string;
 }
 
@@ -26,13 +23,12 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   { id: "settings",  label: "Ajustes",     icon: <Settings size={14} />    },
   { id: "platforms", label: "Plataformas", icon: <Zap size={14} />         },
   { id: "overlays",  label: "Overlays",    icon: <Monitor size={14} />     },
-  { id: "autoqueue", label: "Auto Cola",   icon: <Dices size={14} />       },
   { id: "ticker",    label: "Mensajes",    icon: <MessageSquare size={14} /> },
 ];
 
 export const SettingsModal: React.FC<Props> = ({
   open, onClose, settings, tiktokEvents, twitchEvents, kickEvents,
-  tickerMessages, nowPlaying, overlayToken,
+  tickerMessages, overlayToken,
 }) => {
   const [tab, setTab] = useState<SettingsTab>("settings");
 
@@ -66,7 +62,6 @@ export const SettingsModal: React.FC<Props> = ({
             />
           )}
           {tab === "overlays"  && <OverlayLinks overlayToken={overlayToken} />}
-          {tab === "autoqueue" && <AutoQueuePanel nowPlaying={nowPlaying} />}
           {tab === "ticker"    && <TickerMessages messages={tickerMessages} />}
         </div>
       </div>

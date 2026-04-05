@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Play, Plus, Dices, X, Ban, ListMusic, ChevronLeft, Search, Heart } from "lucide-react";
+import { Play, Plus, X, Ban, ListMusic, ChevronLeft, Search, Heart } from "lucide-react";
 import { api } from "../services/api";
 import { PlaylistMembership } from "../types/models";
 
@@ -18,7 +18,6 @@ interface Props {
   onClose: () => void;
   onRemove?: (uri: string) => void;
   onBan?: (uri: string, title: string, artist: string) => void;
-  onAddToAutoQueue: (song: SongRef) => void;
   /** If set, opens directly in the playlist/memberships view */
   defaultView?: "main" | "playlist";
 }
@@ -26,7 +25,7 @@ interface Props {
 type View = "main" | "playlist";
 
 export const ContextMenu: React.FC<Props> = ({
-  song, isQueue, onClose, onRemove, onBan, onAddToAutoQueue, defaultView,
+  song, isQueue, onClose, onRemove, onBan, defaultView,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -128,17 +127,14 @@ export const ContextMenu: React.FC<Props> = ({
               <Plus size={13} /> Agregar a cola
             </button>
           )}
-          <button className="ctx-item" onClick={() => { onAddToAutoQueue(song); onClose(); }}>
-            <Dices size={13} /> Agregar a AutoCola
-          </button>
           <button className="ctx-item" onClick={openPlaylistView}>
             <ListMusic size={13} /> Guardar en playlist
           </button>
-          {isQueue && onRemove && (
+          {onRemove && (
             <>
               <div className="ctx-separator" />
               <button className="ctx-item" onClick={() => { onRemove(song.spotifyUri); onClose(); }}>
-                <X size={13} /> Eliminar de cola
+                <X size={13} /> {isQueue ? "Eliminar de cola" : "Quitar de lista"}
               </button>
             </>
           )}

@@ -10,11 +10,10 @@ interface Props {
   onSkip: () => void;
   onPause: () => void;
   onResume: () => void;
-  onAddToAutoQueue?: (song: import("../types/models").Song) => void;
   downloadStates?: Record<string, import("../hooks/useSignalR").DownloadState>;
 }
 
-export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, onAddToAutoQueue, downloadStates }) => {
+export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, downloadStates }) => {
   const song        = state?.spotifyTrack ?? state?.item?.song ?? null;
   const requestedBy = state?.item?.requestedBy ?? song?.requestedBy ?? null;
   const platform    = getPlatform(state?.item?.platform ?? song?.platform ?? undefined);
@@ -221,9 +220,6 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
             <button className="btn btn-control" onClick={onResume} title="Reanudar">▶</button>
           )}
           <button className="btn btn-control" onClick={onSkip} title="Saltar">⏭</button>
-          {onAddToAutoQueue && song && (
-            <button className="btn btn-control btn-control-autoqueue" onClick={() => onAddToAutoQueue(song)} title="Agregar a autocola">🎲</button>
-          )}
         </div>
       </div>
     </div>
