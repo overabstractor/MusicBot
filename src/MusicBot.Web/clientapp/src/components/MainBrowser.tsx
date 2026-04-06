@@ -2,12 +2,28 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Search, X, Play, Plus, Music, ArrowLeft, Trash2, MoreHorizontal,
   Shuffle, Home, ListMusic, Download, Heart,
+  Settings, Zap, Monitor, MessageSquare,
 } from "lucide-react";
 import { api } from "../services/api";
-import { Song, PlaylistLibrary, PlaylistLibrarySong, HistoryItem } from "../types/models";
+import { Song, PlaylistLibrary, PlaylistLibrarySong, HistoryItem, QueueItem } from "../types/models";
 import { formatDuration } from "../utils";
 import { PlaylistCover } from "./PlaylistCover";
 import { ContextMenu, SongRef } from "./ContextMenu";
+import { SettingsPanel } from "./SettingsPanel";
+import { PlatformConnections } from "./PlatformConnections";
+import { OverlayLinks } from "./OverlayLinks";
+import { TickerMessages } from "./TickerMessages";
+import { QueueSettings, IntegrationEvent, TickerMessage } from "../hooks/useSignalR";
+
+type BrowserTab = "home" | "settings" | "platforms" | "overlays" | "ticker";
+
+const BROWSER_TABS: { id: BrowserTab; label: string; icon: React.ReactNode }[] = [
+  { id: "home",      label: "Inicio",      icon: <Home size={13} />           },
+  { id: "platforms", label: "Plataformas", icon: <Zap size={13} />            },
+  { id: "overlays",  label: "Overlays",    icon: <Monitor size={13} />        },
+  { id: "ticker",    label: "Mensajes",    icon: <MessageSquare size={13} />  },
+  { id: "settings",  label: "Ajustes",     icon: <Settings size={13} />       },
+];
 
 interface Props {
   selectedPlaylistId: number | null;
@@ -19,12 +35,26 @@ interface Props {
   playlistsRefreshKey?: number;
   likedUris?: Set<string>;
   onToggleLike?: (song: SongRef) => void;
+  // Settings tabs props
+  settings: QueueSettings;
+  tiktokEvents: IntegrationEvent[];
+  twitchEvents: IntegrationEvent[];
+  kickEvents: IntegrationEvent[];
+  tickerMessages: TickerMessage[];
+  overlayToken: string;
+  // Queue state for history card menu
+  queueItems: QueueItem[];
+  onSkip: () => void;
+  onRemoveFromQueue: (uri: string) => void;
 }
 
 export const MainBrowser: React.FC<Props> = ({
   selectedPlaylistId, onSelectPlaylist, onClearSelection, onPlaylistsChanged, nowPlayingUri, queueUpdateCount,
   playlistsRefreshKey, likedUris, onToggleLike,
+  settings, tiktokEvents, twitchEvents, kickEvents, tickerMessages, overlayToken,
+  queueItems, onSkip, onRemoveFromQueue,
 }) => {
+  const [browserTab, setBrowserTab] = useState<BrowserTab>("home");
   // ── Global search ──────────────────────────────────────────────────────────
   const [query,       setQuery]       = useState("");
   const [searching,   setSearching]   = useState(false);
@@ -69,6 +99,8 @@ export const MainBrowser: React.FC<Props> = ({
   const [menuUri,     setMenuUri]     = useState<string | null>(null);
   // likeMenuUri: opens ContextMenu in "playlist" view (for ♥ click on liked songs)
   const [likeMenuUri, setLikeMenuUri] = useState<string | null>(null);
+  // histMenuId: history card context menu
+  const [histMenuId,  setHistMenuId]  = useState<string | null>(null);
 
   // ── Search dropdown ────────────────────────────────────────────────────────
   const [dropdownOpen,  setDropdownOpen]  = useState(false);
@@ -362,8 +394,30 @@ export const MainBrowser: React.FC<Props> = ({
   return (
     <div className="main-browser">
 
-      {/* ── Search bar ──────────────────────────────────────── */}
-      <div className="browser-search-bar">
+      {/* ── Tab bar ─────────────────────────────────────────── */}
+      <div className="browser-tab-bar">
+        {BROWSER_TABS.map(t => (
+          <button
+            key={t.id}
+            className={`browser-tab${browserTab === t.id ? " active" : ""}`}
+            onClick={() => {
+              setBrowserTab(t.id);
+              if (t.id === "home") { /* stay in current home sub-view */ }
+            }}
+          >
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Settings / Platforms / Overlays / Ticker panels ── */}
+      {browserTab === "settings"  && <div className="browser-panel-content"><SettingsPanel settings={settings} /></div>}
+      {browserTab === "platforms" && <div className="browser-panel-content"><PlatformConnections tiktokEvents={tiktokEvents} twitchEvents={twitchEvents} kickEvents={kickEvents} /></div>}
+      {browserTab === "overlays"  && <div className="browser-panel-content"><OverlayLinks overlayToken={overlayToken} /></div>}
+      {browserTab === "ticker"    && <div className="browser-panel-content"><TickerMessages messages={tickerMessages} /></div>}
+
+      {/* ── Search bar (home tab only) ───────────────────────── */}
+      {browserTab === "home" && <div className="browser-search-bar">
         {!isOnHome && (
           <button className="browser-home-btn" onClick={goHome} title="Inicio">
             <Home size={16} />
@@ -507,34 +561,52 @@ export const MainBrowser: React.FC<Props> = ({
             );
           })()}
         </div>
-      </div>
+      </div>}
 
       {/* ── Action flash ────────────────────────────────────── */}
-      {actionMsg && (
+      {browserTab === "home" && actionMsg && (
         <div className={`browser-flash${actionMsg.err ? " err" : ""}`}>{actionMsg.text}</div>
       )}
 
       {/* ══ HOME VIEW ══ */}
-      {view === "home" && (
+      {browserTab === "home" && view === "home" && (
         <div className="browser-content">
           {!loadingHome && recentHistory.length > 0 && (
             <section className="browser-section">
               <h2 className="browser-section-title">Reproducidas recientemente</h2>
               <div className="browser-cards-row">
-                {recentHistory.slice(0, 12).map(item => (
-                  <button
-                    key={item.id}
-                    className="browser-card"
-                    onClick={() => handleEnqueueHistory(item)}
-                    title={`Encolar: ${item.title}`}
-                  >
-                    {item.coverUrl
-                      ? <img src={item.coverUrl} alt="" className="browser-card-cover" />
-                      : <div className="browser-card-cover browser-card-cover-ph"><Music size={24} /></div>}
-                    <span className="browser-card-title">{item.title}</span>
-                    <span className="browser-card-sub">{item.artist}</span>
-                  </button>
-                ))}
+                {recentHistory.slice(0, 12).map(item => {
+                  const isNowPlaying = nowPlayingUri === item.trackId;
+                  const isInQueue    = queueItems.some(q => q.song.spotifyUri === item.trackId);
+                  return (
+                    <div key={item.id} style={{ position: "relative", flexShrink: 0 }}>
+                      <button
+                        className={`browser-card${isNowPlaying ? " now-playing" : ""}`}
+                        onClick={() => setHistMenuId(v => v === item.id ? null : item.id)}
+                        title={item.title}
+                      >
+                        {item.coverUrl
+                          ? <img src={item.coverUrl} alt="" className="browser-card-cover" />
+                          : <div className="browser-card-cover browser-card-cover-ph"><Music size={24} /></div>}
+                        <span className="browser-card-title">{item.title}</span>
+                        <span className="browser-card-sub">{item.artist}</span>
+                        {isNowPlaying && <span className="browser-card-badge playing">▶ Sonando</span>}
+                        {!isNowPlaying && isInQueue && <span className="browser-card-badge queue">En cola</span>}
+                      </button>
+                      {histMenuId === item.id && (
+                        <ContextMenu
+                          song={{ spotifyUri: item.trackId, title: item.title, artist: item.artist, coverUrl: item.coverUrl ?? undefined, durationMs: item.durationMs }}
+                          isQueue={isInQueue}
+                          isNowPlaying={isNowPlaying}
+                          onSkip={() => { onSkip(); setHistMenuId(null); }}
+                          onRemove={isInQueue ? uri => { onRemoveFromQueue(uri); setHistMenuId(null); } : undefined}
+                          onClose={() => setHistMenuId(null)}
+                          style={{ top: "calc(100% + 4px)", left: 0, right: "auto" }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -596,7 +668,7 @@ export const MainBrowser: React.FC<Props> = ({
       )}
 
       {/* ══ UNSAVED PLAYLIST PREVIEW ══ */}
-      {view === "search-playlist" && previewMeta && (
+      {browserTab === "home" && view === "search-playlist" && previewMeta && (
         <div className="browser-content">
           <button className="browser-back-btn" onClick={() => { setPreviewMeta(null); setPreviewTracks(null); setDropdownOpen(true); }}>
             <ArrowLeft size={15} /> Resultados de búsqueda
@@ -717,7 +789,7 @@ export const MainBrowser: React.FC<Props> = ({
       )}
 
       {/* ══ SAVED PLAYLIST DETAIL VIEW ══ */}
-      {view === "playlist" && (
+      {browserTab === "home" && view === "playlist" && (
         <div className="browser-content">
           <button className="browser-back-btn" onClick={onClearSelection}>
             <ArrowLeft size={15} /> Volver

@@ -172,6 +172,20 @@ public class PlaylistController : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("{id:int}/songs/reorder")]
+    public async Task<IActionResult> ReorderSong(int id, [FromBody] PlaylistSongReorderRequest req)
+    {
+        var ok = await _playlists.ReorderSongAsync(id, req.SpotifyUri, req.ToIndex);
+        if (!ok) return NotFound();
+
+        var playlist = await _playlists.GetByIdAsync(id);
+        if (playlist?.IsActive == true)
+            await ReloadBackgroundPlaylistAsync(id);
+
+        await BroadcastStatusAsync();
+        return NoContent();
+    }
+
     [HttpDelete("{id:int}/songs/{uri}")]
     public async Task<IActionResult> RemoveSong(int id, string uri)
     {
@@ -361,3 +375,4 @@ public record PlaylistImportRequest(string Url);
 public record PlaylistPlayRequest(bool Shuffle = false);
 public record PlaySongRequest(bool Shuffle = false);
 public record PinReorderRequest(List<int> Ids);
+public record PlaylistSongReorderRequest(string SpotifyUri, int ToIndex);

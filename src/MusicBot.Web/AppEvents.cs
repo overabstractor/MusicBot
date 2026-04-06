@@ -9,6 +9,9 @@ public static class AppEvents
     public static event Action? OnOpenLogRequested;
     public static void RequestOpenLog() => OnOpenLogRequested?.Invoke();
 
+    public static event Action? OnOpenLogDirRequested;
+    public static void RequestOpenLogDir() => OnOpenLogDirRequested?.Invoke();
+
     /// <summary>
     /// Raised when the user wants to log in to TikTok.
     /// The Desktop layer opens a WebView2 window, captures session cookies,

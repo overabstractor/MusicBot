@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Play, Plus, X, Ban, ListMusic, ChevronLeft, Search, Heart } from "lucide-react";
+import { Play, Plus, X, Ban, ListMusic, ChevronLeft, Search, Heart, SkipForward } from "lucide-react";
 import { api } from "../services/api";
 import { PlaylistMembership } from "../types/models";
 
@@ -20,12 +20,17 @@ interface Props {
   onBan?: (uri: string, title: string, artist: string) => void;
   /** If set, opens directly in the playlist/memberships view */
   defaultView?: "main" | "playlist";
+  /** True when this is the currently playing track — shows Skip instead of Play/Enqueue */
+  isNowPlaying?: boolean;
+  onSkip?: () => void;
+  /** Override positioning of the menu container */
+  style?: React.CSSProperties;
 }
 
 type View = "main" | "playlist";
 
 export const ContextMenu: React.FC<Props> = ({
-  song, isQueue, onClose, onRemove, onBan, defaultView,
+  song, isQueue, onClose, onRemove, onBan, defaultView, isNowPlaying, onSkip, style,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -113,24 +118,32 @@ export const ContextMenu: React.FC<Props> = ({
     search ? arr.filter(m => m.name.toLowerCase().includes(search.toLowerCase())) : arr;
 
   return (
-    <div className="ctx-menu" ref={ref}>
+    <div className="ctx-menu" ref={ref} style={style}>
       {/* ── Main view ── */}
       {view === "main" && (
         <>
-          {!isQueue && (
-            <button className="ctx-item" onClick={handlePlayNow}>
-              <Play size={13} fill="currentColor" /> Reproducir ahora
+          {isNowPlaying ? (
+            <button className="ctx-item" onClick={() => { onSkip?.(); onClose(); }}>
+              <SkipForward size={13} /> Skipear
             </button>
-          )}
-          {!isQueue && (
-            <button className="ctx-item" onClick={handleEnqueue}>
-              <Plus size={13} /> Agregar a cola
-            </button>
+          ) : (
+            <>
+              {!isQueue && (
+                <button className="ctx-item" onClick={handlePlayNow}>
+                  <Play size={13} fill="currentColor" /> Reproducir ahora
+                </button>
+              )}
+              {!isQueue && (
+                <button className="ctx-item" onClick={handleEnqueue}>
+                  <Plus size={13} /> Agregar a cola
+                </button>
+              )}
+            </>
           )}
           <button className="ctx-item" onClick={openPlaylistView}>
             <ListMusic size={13} /> Guardar en playlist
           </button>
-          {onRemove && (
+          {onRemove && !isNowPlaying && (
             <>
               <div className="ctx-separator" />
               <button className="ctx-item" onClick={() => { onRemove(song.spotifyUri); onClose(); }}>
@@ -138,7 +151,7 @@ export const ContextMenu: React.FC<Props> = ({
               </button>
             </>
           )}
-          {isQueue && onBan && (
+          {isQueue && !isNowPlaying && onBan && (
             <button className="ctx-item ctx-item-danger" onClick={() => { onBan(song.spotifyUri, song.title, song.artist); onClose(); }}>
               <Ban size={13} /> Banear canción
             </button>

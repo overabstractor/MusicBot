@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   Shuffle, SkipBack, Play, Pause, SkipForward,
-  List, Headphones, Volume2, Volume1, VolumeX,
+  List, Headphones, Volume2, Volume1, VolumeX, Heart,
 } from "lucide-react";
 import { NowPlayingState } from "../types/models";
 import { formatDuration, getPlatform } from "../utils";
 import { DownloadState } from "../hooks/useSignalR";
+import { SongRef } from "./ContextMenu";
 import { api } from "../services/api";
 
 interface Props {
@@ -19,11 +20,14 @@ interface Props {
   onToggleDevices: () => void;
   shuffleActive: boolean;
   onToggleShuffle: () => void;
+  likedUris?: Set<string>;
+  onToggleLike?: (song: SongRef) => void;
 }
 
 export const PlayerBar: React.FC<Props> = ({
   state, onSkip, onPause, onResume, downloadStates,
   rightPanelMode, onToggleQueue, onToggleDevices, shuffleActive, onToggleShuffle,
+  likedUris, onToggleLike,
 }) => {
   const song     = state?.spotifyTrack ?? state?.item?.song ?? null;
   const reqBy    = state?.item?.requestedBy ?? null;
@@ -144,6 +148,15 @@ export const PlayerBar: React.FC<Props> = ({
                   )}
                 </span>
               </div>
+              {onToggleLike && (
+                <button
+                  className={`pb-like-btn${likedUris?.has(song.spotifyUri) ? " liked" : ""}`}
+                  onClick={() => onToggleLike({ spotifyUri: song.spotifyUri, title: song.title, artist: song.artist, coverUrl: song.coverUrl, durationMs: song.durationMs ?? 0 })}
+                  title={likedUris?.has(song.spotifyUri) ? "Quitar de favoritos" : "Añadir a favoritos"}
+                >
+                  <Heart size={15} fill={likedUris?.has(song.spotifyUri) ? "currentColor" : "none"} />
+                </button>
+              )}
             </>
           ) : downloadState ? (
             <>

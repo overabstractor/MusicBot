@@ -1,11 +1,15 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Forms;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MusicBot.Data;
+using MusicBot.Services;
 using SysWin = System.Windows;
 
 // Alias WinForms types to avoid ambiguity with WPF equivalents
@@ -42,6 +46,7 @@ public partial class App : SysWin.Application
 
         // Subscribe to Web → Desktop events
         MusicBot.AppEvents.OnOpenLogRequested              += () => Dispatcher.Invoke(ShowLogs);
+        MusicBot.AppEvents.OnOpenLogDirRequested           += () => Dispatcher.Invoke(OpenLogDir);
         MusicBot.AppEvents.OnTikTokLoginRequested          += () => Dispatcher.Invoke(ShowTikTokLogin);
         MusicBot.AppEvents.OnTikTokSessionRestoreRequested += () => Dispatcher.Invoke(RestoreTikTokSession);
         MusicBot.AppEvents.OnPlatformAuthForgotten         += ForgetPlatformSessionAsync;
@@ -102,6 +107,14 @@ public partial class App : SysWin.Application
         if (!_logViewer.IsVisible) _logViewer.Show();
         _logViewer.Activate();
         _logViewer.WindowState = SysWin.WindowState.Normal;
+    }
+
+    private static void OpenLogDir()
+    {
+        var dir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+        if (!System.IO.Directory.Exists(dir))
+            System.IO.Directory.CreateDirectory(dir);
+        System.Diagnostics.Process.Start("explorer.exe", dir);
     }
 
     private void RestoreTikTokSession()
@@ -215,11 +228,58 @@ public partial class App : SysWin.Application
 
         _tiktokLogin?.ForceClose();
 
+        // Cleanup old logs and orphaned music files before stopping the host
+        CleanupOldLogs();
+        await CleanupOrphanedMusicFilesAsync();
+
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try   { await Host.StopAsync(cts.Token); }
         catch { /* ignore shutdown errors */ }
 
         Shutdown();
+    }
+
+    /// <summary>Deletes log files older than 7 days from the logs/ directory.</summary>
+    private static void CleanupOldLogs()
+    {
+        try
+        {
+            var logsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+            if (!Directory.Exists(logsDir)) return;
+            var cutoff = DateTime.UtcNow.AddDays(-7);
+            foreach (var file in Directory.GetFiles(logsDir, "*.log"))
+            {
+                if (File.GetLastWriteTimeUtc(file) < cutoff)
+                    try { File.Delete(file); } catch { }
+            }
+        }
+        catch { /* best effort */ }
+    }
+
+    /// <summary>
+    /// Deletes files in the music-library directory that are NOT referenced by
+    /// any CachedTrack in the database (orphaned downloads left by crashes or bugs).
+    /// </summary>
+    private async Task CleanupOrphanedMusicFilesAsync()
+    {
+        try
+        {
+            var settings = Host.Services.GetService<MusicLibrarySettings>();
+            var libPath  = settings?.LibraryPath;
+            if (string.IsNullOrEmpty(libPath) || !Directory.Exists(libPath)) return;
+
+            using var scope = Host.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
+            var knownPaths = (await db.CachedTracks.Select(t => t.FilePath).ToListAsync())
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var file in Directory.GetFiles(libPath))
+            {
+                if (!knownPaths.Contains(file))
+                    try { File.Delete(file); } catch { }
+            }
+        }
+        catch { /* best effort */ }
     }
 
     // ── Tray icon ─────────────────────────────────────────────────────────────

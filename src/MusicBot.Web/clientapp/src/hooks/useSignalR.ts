@@ -73,7 +73,7 @@ export function useSignalR(overlayToken: string | null) {
   const [queueUpdateCount,    setQueueUpdateCount]    = useState(0);
   const [playlistUpdateCount, setPlaylistUpdateCount] = useState(0);
   const [downloadStates,     setDownloadStates]     = useState<Record<string, DownloadState>>({});
-  const [downloadErrors,     setDownloadErrors]     = useState<Array<{ id: number; title: string; artist: string }>>([]);
+  const [downloadErrors,     setDownloadErrors]     = useState<Array<{ id: number; title: string; artist: string; reason?: string }>>([]);
 
   const connect = useCallback(async () => {
     // Abort if unmounted or a connection already exists
@@ -165,12 +165,12 @@ export function useSignalR(overlayToken: string | null) {
       }, 1200);
     });
 
-    conn.on("queue:download-failed", (d: { title: string; artist: string }) => {
+    conn.on("queue:download-failed", (d: { title: string; artist: string; reason?: string }) => {
       const id = ++_evId;
-      setDownloadErrors(prev => [...prev, { id, title: d.title, artist: d.artist }]);
+      setDownloadErrors(prev => [...prev, { id, title: d.title, artist: d.artist, reason: d.reason }]);
       setTimeout(() => {
         setDownloadErrors(prev => prev.filter(e => e.id !== id));
-      }, 7000);
+      }, 12000);
     });
 
     conn.on("integration:event", (p: Omit<IntegrationEvent, "id" | "timestamp">) => {

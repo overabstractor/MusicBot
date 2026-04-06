@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Heart, Pin, GripVertical } from "lucide-react";
+import { Plus, Heart, Pin, GripVertical, Download } from "lucide-react";
 import { api } from "../services/api";
 import { PlaylistLibrary } from "../types/models";
 import { PlaylistCover } from "./PlaylistCover";
@@ -11,11 +11,16 @@ interface Props {
 }
 
 export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshKey }) => {
-  const [playlists,  setPlaylists]  = useState<PlaylistLibrary[]>([]);
-  const [newName,    setNewName]    = useState("");
-  const [creating,   setCreating]   = useState(false);
-  const [showForm,   setShowForm]   = useState(false);
-  const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const [playlists,    setPlaylists]    = useState<PlaylistLibrary[]>([]);
+  const [newName,      setNewName]      = useState("");
+  const [creating,     setCreating]     = useState(false);
+  const [showForm,     setShowForm]     = useState(false);
+  const [showImport,   setShowImport]   = useState(false);
+  const [importUrl,    setImportUrl]    = useState("");
+  const [importName,   setImportName]   = useState("");
+  const [importing,    setImporting]    = useState(false);
+  const [importMsg,    setImportMsg]    = useState<{ text: string; err: boolean } | null>(null);
+  const [dragOverId,   setDragOverId]   = useState<number | null>(null);
   const dragId = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -35,6 +40,28 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
       onSelect(p.id);
     } catch { }
     finally { setCreating(false); }
+  };
+
+  const handleImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const url = importUrl.trim();
+    if (!url) return;
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const name = importName.trim() || "Lista importada";
+      const p    = await api.createPlaylist(name);
+      const r    = await api.importPlaylistSongs(p.id, url);
+      setImportMsg({ text: `✓ ${r.added} canciones importadas`, err: false });
+      setImportUrl(""); setImportName("");
+      await load();
+      onSelect(p.id);
+      setTimeout(() => { setShowImport(false); setImportMsg(null); }, 1800);
+    } catch (err: unknown) {
+      setImportMsg({ text: err instanceof Error ? err.message : "Error al importar", err: true });
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleTogglePin = async (e: React.MouseEvent, p: PlaylistLibrary) => {
@@ -150,13 +177,22 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
     <div className="lib-sidebar">
       <div className="lib-sidebar-header">
         <span className="lib-sidebar-title">Tu Librería</span>
-        <button
-          className={`lib-sidebar-create-btn${showForm ? " active" : ""}`}
-          title="Crear lista"
-          onClick={() => setShowForm(v => !v)}
-        >
-          <Plus size={16} />
-        </button>
+        <div style={{ display: "flex", gap: 4 }}>
+          <button
+            className={`lib-sidebar-create-btn${showImport ? " active" : ""}`}
+            title="Importar lista de YouTube"
+            onClick={() => { setShowImport(v => !v); setShowForm(false); setImportMsg(null); }}
+          >
+            <Download size={15} />
+          </button>
+          <button
+            className={`lib-sidebar-create-btn${showForm ? " active" : ""}`}
+            title="Crear lista"
+            onClick={() => { setShowForm(v => !v); setShowImport(false); }}
+          >
+            <Plus size={16} />
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -171,6 +207,32 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
           />
           <button type="submit" className="btn btn-primary btn-sm" disabled={creating || !newName.trim()}>
             Crear
+          </button>
+        </form>
+      )}
+
+      {showImport && (
+        <form className="lib-sidebar-create-form lib-sidebar-import-form" onSubmit={handleImport}>
+          <input
+            className="input input-sm"
+            placeholder="URL de YouTube o YouTube Music…"
+            value={importUrl}
+            onChange={e => setImportUrl(e.target.value)}
+            autoFocus
+            disabled={importing}
+          />
+          <input
+            className="input input-sm"
+            placeholder="Nombre (opcional)"
+            value={importName}
+            onChange={e => setImportName(e.target.value)}
+            disabled={importing}
+          />
+          {importMsg && (
+            <span className={`lib-import-msg${importMsg.err ? " err" : ""}`}>{importMsg.text}</span>
+          )}
+          <button type="submit" className="btn btn-primary btn-sm" disabled={importing || !importUrl.trim()}>
+            {importing ? "Importando…" : "Importar"}
           </button>
         </form>
       )}

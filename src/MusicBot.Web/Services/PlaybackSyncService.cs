@@ -158,7 +158,7 @@ public class PlaybackSyncService : BackgroundService
             }
             services.Queue.Skip();
             _ = _hub.Clients.Group($"user:{LocalUser.Id}")
-                    .SendAsync("queue:download-failed", new { title = current.Song.Title, artist = current.Song.Artist });
+                    .SendAsync("queue:download-failed", new { title = current.Song.Title, artist = current.Song.Artist, reason = ex.Message });
             await StartCurrentTrackAsync(services);
             return;
         }
@@ -236,7 +236,7 @@ public class PlaybackSyncService : BackgroundService
                             }
                             services.Queue.Skip();
                             _ = _hub.Clients.Group($"user:{LocalUser.Id}")
-                                    .SendAsync("queue:download-failed", new { title = next.Song.Title, artist = next.Song.Artist });
+                                    .SendAsync("queue:download-failed", new { title = next.Song.Title, artist = next.Song.Artist, reason = dlEx.Message });
                             await StartCurrentTrackAsync(services);
                             return;
                         }
@@ -329,7 +329,7 @@ public class PlaybackSyncService : BackgroundService
 
                 services.Queue.Skip();
                 _ = _hub.Clients.Group($"user:{LocalUser.Id}")
-                        .SendAsync("queue:download-failed", new { title = autoSong.Title, artist = autoSong.Artist });
+                        .SendAsync("queue:download-failed", new { title = autoSong.Title, artist = autoSong.Artist, reason = ex.Message });
 
                 // Try the next random song instead of stopping entirely
                 return await TryStartAutoQueueAsync(services, attemptsLeft - 1);

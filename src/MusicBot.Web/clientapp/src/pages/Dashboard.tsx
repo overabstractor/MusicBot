@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Settings, Sun, Moon, Power, FileText, Wrench, Music2 } from "lucide-react";
+import { Settings, Sun, Moon, Power, FileText, Wrench, Music2, FolderOpen } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
 import { LibrarySidebar } from "../components/LibrarySidebar";
 import { MainBrowser } from "../components/MainBrowser";
@@ -133,6 +133,7 @@ export const Dashboard: React.FC = () => {
           </button>
           <button className="header-icon-btn" onClick={() => setSettingsOpen(true)} title="Ajustes y plataformas"><Settings size={15} /></button>
           <button className="header-icon-btn" onClick={() => api.openLog()} title="Logs"><FileText size={15} /></button>
+          <button className="header-icon-btn" onClick={() => api.openLogDir()} title="Carpeta de logs"><FolderOpen size={15} /></button>
           <button className="header-icon-btn header-icon-btn-danger"
             onClick={() => { if (confirm("¿Cerrar MusicBot?")) api.shutdown(); }}
             title="Cerrar"
@@ -182,6 +183,15 @@ export const Dashboard: React.FC = () => {
           playlistsRefreshKey={libRefreshKey}
           likedUris={likedUris}
           onToggleLike={toggleLike}
+          settings={queueSettings}
+          tiktokEvents={integrationEvents.filter(e => e.source === "tiktok")}
+          twitchEvents={integrationEvents.filter(e => e.source === "twitch")}
+          kickEvents={integrationEvents.filter(e => e.source === "kick")}
+          tickerMessages={tickerMessages}
+          overlayToken={OVERLAY_TOKEN}
+          queueItems={appQueue}
+          onSkip={handleSkip}
+          onRemoveFromQueue={handleRemove}
         />
 
         {/* Right: Queue / Now Playing / Devices */}
@@ -212,6 +222,8 @@ export const Dashboard: React.FC = () => {
         onToggleDevices={handleToggleDevices}
         shuffleActive={shuffleActive}
         onToggleShuffle={handleToggleShuffle}
+        likedUris={likedUris}
+        onToggleLike={toggleLike}
       />
 
       {/* ── Modals ──────────────────────────────────────────── */}

@@ -137,6 +137,30 @@ public class PlaylistLibraryService
         return true;
     }
 
+    public async Task<bool> ReorderSongAsync(int playlistId, string spotifyUri, int toIndex)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
+
+        var songs = await db.PlaylistLibrarySongs
+            .Where(s => s.PlaylistId == playlistId)
+            .OrderBy(s => s.Position)
+            .ToListAsync();
+
+        var row = songs.FirstOrDefault(s => s.SpotifyUri == spotifyUri);
+        if (row == null) return false;
+
+        toIndex = Math.Clamp(toIndex, 0, songs.Count - 1);
+        songs.Remove(row);
+        songs.Insert(toIndex, row);
+
+        for (int i = 0; i < songs.Count; i++)
+            songs[i].Position = i;
+
+        await db.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<bool> RemoveSongAsync(int playlistId, string spotifyUri)
     {
         using var scope = _scopeFactory.CreateScope();

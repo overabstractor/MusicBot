@@ -57,6 +57,23 @@ public partial class LogViewerWindow : Window
             var para = new Paragraph { Margin = new Thickness(0) };
             para.Inlines.Add(new Run($"[{entry.Timestamp:HH:mm:ss}] [{tag}] ") { Foreground = DimBrush });
             para.Inlines.Add(new Run(entry.Message)                             { Foreground = color });
+
+            if (entry.Exception != null)
+            {
+                var ex = entry.Exception;
+                // Walk inner exceptions, collecting their messages
+                var parts = new List<string>();
+                while (ex != null)
+                {
+                    var firstLine = ex.Message.Split('\n')[0].Trim();
+                    if (!string.IsNullOrEmpty(firstLine))
+                        parts.Add(firstLine);
+                    ex = ex.InnerException;
+                }
+                var exMsg = string.Join(" → ", parts);
+                para.Inlines.Add(new Run($"\n    ↳ {exMsg}") { Foreground = new SolidColorBrush(WpfColor.FromArgb(180, 239, 68, 68)) });
+            }
+
             LogBox.Document.Blocks.Add(para);
 
             // Cap at 3 000 paragraphs

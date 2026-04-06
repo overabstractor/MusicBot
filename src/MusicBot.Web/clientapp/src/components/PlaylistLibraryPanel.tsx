@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../services/api";
 import { PlaylistLibrary, PlaylistLibrarySong, Song } from "../types/models";
 import { formatDuration } from "../utils";
@@ -36,6 +36,11 @@ export const PlaylistLibraryPanel: React.FC<Props> = ({ onPlaylistActivated }) =
 
   // Playback
   const [activating,      setActivating]      = useState(false);
+
+  // Drag-and-drop reorder
+  const [dragSongUri,  setDragSongUri]  = useState<string | null>(null);
+  const [dropSongIdx,  setDropSongIdx]  = useState<number | null>(null);
+  const dragSongIdxRef = useRef<number>(-1);
 
   const showMsg = (text: string, err = false) => {
     setMsg(text);
@@ -151,6 +156,27 @@ export const PlaylistLibraryPanel: React.FC<Props> = ({ onPlaylistActivated }) =
       await loadPlaylists();
     } catch (ex: unknown) {
       showMsg(ex instanceof Error ? ex.message : "Error al agregar", true);
+    }
+  };
+
+  // ── Reorder song ───────────────────────────────────────────────────────────
+
+  const handleReorderSong = async (uri: string, toIndex: number) => {
+    if (selectedId == null) return;
+    // Optimistic update
+    setSongs(prev => {
+      const next = [...prev];
+      const fromIndex = next.findIndex(s => s.spotifyUri === uri);
+      if (fromIndex < 0) return prev;
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+    try {
+      await api.reorderPlaylistSong(selectedId, uri, toIndex);
+    } catch {
+      showMsg("Error al reordenar", true);
+      await loadSongs(selectedId);
     }
   };
 
@@ -403,27 +429,40 @@ export const PlaylistLibraryPanel: React.FC<Props> = ({ onPlaylistActivated }) =
               <div className="lib-empty">Lista vacía. Importa o busca canciones arriba.</div>
             ) : (
               <div className="autoqueue-list">
-                {songs.map((song, i) => (
-                  <div key={song.id} className="autoqueue-row">
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 22, textAlign: "right" }}>
-                      {i + 1}
-                    </span>
-                    {song.coverUrl
-                      ? <img src={song.coverUrl} alt="" className="autoqueue-cover" />
-                      : <div className="autoqueue-cover autoqueue-cover-placeholder">♫</div>}
-                    <div className="autoqueue-info">
-                      <span className="autoqueue-title">{song.title}</span>
-                      <span className="autoqueue-artist">{song.artist} · {formatDuration(song.durationMs)}</span>
-                    </div>
-                    <button
-                      className="btn-icon-danger"
-                      title="Quitar de lista"
-                      onClick={() => handleRemoveSong(song.spotifyUri)}
+                {songs.map((song, i) => {
+                  const isDragging   = dragSongUri === song.spotifyUri;
+                  const isDropTarget = dropSongIdx === i && dragSongUri !== song.spotifyUri;
+                  return (
+                    <div
+                      key={song.id}
+                      className={`autoqueue-row${isDragging ? " queue-row-dragging" : ""}${isDropTarget ? " queue-row-drop-target" : ""}`}
+                      draggable
+                      onDragStart={() => { setDragSongUri(song.spotifyUri); dragSongIdxRef.current = i; }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropSongIdx(i); }}
+                      onDrop={e => { e.preventDefault(); if (dragSongUri && dragSongIdxRef.current !== i) handleReorderSong(dragSongUri, i); setDragSongUri(null); setDropSongIdx(null); }}
+                      onDragEnd={() => { setDragSongUri(null); setDropSongIdx(null); }}
                     >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+                      <span className="queue-drag-handle" title="Arrastrar para reordenar">⠿</span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 22, textAlign: "right" }}>
+                        {i + 1}
+                      </span>
+                      {song.coverUrl
+                        ? <img src={song.coverUrl} alt="" className="autoqueue-cover" />
+                        : <div className="autoqueue-cover autoqueue-cover-placeholder">♫</div>}
+                      <div className="autoqueue-info">
+                        <span className="autoqueue-title">{song.title}</span>
+                        <span className="autoqueue-artist">{song.artist} · {formatDuration(song.durationMs)}</span>
+                      </div>
+                      <button
+                        className="btn-icon-danger"
+                        title="Quitar de lista"
+                        onClick={() => handleRemoveSong(song.spotifyUri)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>

@@ -289,11 +289,19 @@ export const api = {
   reorderPins: (ids: number[]) =>
     request<void>("/api/playlists/pins/reorder", { method: "PUT", body: JSON.stringify({ ids }) }),
 
+  reorderPlaylistSong: (playlistId: number, spotifyUri: string, toIndex: number) =>
+    request<void>(`/api/playlists/${playlistId}/songs/reorder`, {
+      method: "PUT",
+      body: JSON.stringify({ spotifyUri, toIndex }),
+    }),
+
   // Relay
   getRelayStatus: () => request<{ configured: boolean; reachable: boolean; error: string | null }>("/api/relay/status"),
 
   // App
-  shutdown:   () => request<void>("/api/app/shutdown", { method: "POST" }),
-  openLog:    () => request<void>("/api/app/open-log", { method: "POST" }),
-  getVersion: () => request<{ version: string }>("/api/app/version"),
+  shutdown:      () => request<void>("/api/app/shutdown", { method: "POST" }),
+  openLog:       () => request<void>("/api/app/open-log",     { method: "POST" }),
+  openLogDir:    () => request<void>("/api/app/open-log-dir", { method: "POST" }),
+  getVersion:    () => request<{ version: string }>("/api/app/version"),
+  updateYtDlp:   () => request<{ version: string; message: string }>("/api/app/yt-dlp/update", { method: "POST" }),
 };

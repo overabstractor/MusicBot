@@ -62,7 +62,8 @@ public class YtDlpDownloaderService
     }
 
     /// <summary>
-    /// Ensures yt-dlp is available next to the executable, downloading it if needed.
+    /// Ensures yt-dlp is available next to the executable.
+    /// Downloads it if missing, or updates it if the binary is older than 7 days.
     /// Called by YtDlpSetupService at startup.
     /// </summary>
     public async Task EnsureYtDlpAsync()
@@ -71,7 +72,18 @@ public class YtDlpDownloaderService
 
         if (File.Exists(path))
         {
-            _logger.LogInformation("yt-dlp disponible en '{Path}'", path);
+            var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(path);
+            if (age.TotalDays < 7)
+            {
+                _logger.LogInformation("yt-dlp disponible en '{Path}' (actualizado hace {Days:F0} días)",
+                    path, age.TotalDays);
+                return;
+            }
+
+            _logger.LogInformation(
+                "yt-dlp tiene {Days:F0} días de antigüedad — actualizando automáticamente…",
+                age.TotalDays);
+            await UpdateYtDlpAsync();
             return;
         }
 
@@ -87,13 +99,63 @@ public class YtDlpDownloaderService
         try
         {
             await YoutubeDLSharp.Utils.DownloadYtDlp(AppContext.BaseDirectory);
-            _ytdl.YoutubeDLPath = path; // path already points to BaseDirectory/yt-dlp.exe
+            _ytdl.YoutubeDLPath = path;
             _logger.LogInformation("yt-dlp descargado correctamente en '{Path}'", path);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "No se pudo descargar yt-dlp automáticamente. " +
                 "Instálalo manualmente con: winget install yt-dlp.yt-dlp");
+        }
+    }
+
+    /// <summary>
+    /// Downloads the latest yt-dlp release from GitHub, replacing the current binary.
+    /// Safe to call while downloads are in progress — existing tasks continue with the old binary.
+    /// </summary>
+    public async Task<string> UpdateYtDlpAsync()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "yt-dlp.exe");
+
+        _logger.LogInformation("Actualizando yt-dlp…");
+        try
+        {
+            await YoutubeDLSharp.Utils.DownloadYtDlp(AppContext.BaseDirectory);
+            _ytdl.YoutubeDLPath = path;
+
+            // Read the version from the new binary
+            var version = await GetYtDlpVersionAsync();
+            _logger.LogInformation("yt-dlp actualizado correctamente → {Version}", version);
+            return version;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar yt-dlp");
+            throw;
+        }
+    }
+
+    private async Task<string> GetYtDlpVersionAsync()
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName               = _ytdl.YoutubeDLPath,
+                Arguments              = "--version",
+                RedirectStandardOutput = true,
+                UseShellExecute        = false,
+                CreateNoWindow         = true,
+            };
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null) return "desconocida";
+            var output = await proc.StandardOutput.ReadToEndAsync();
+            await proc.WaitForExitAsync();
+            return output.Trim();
+        }
+        catch
+        {
+            return "desconocida";
         }
     }
 
@@ -178,8 +240,37 @@ public class YtDlpDownloaderService
     /// Uses <c>--print</c> (tab-separated, one line per entry) — the most reliable method
     /// across yt-dlp versions.  Thumbnail is constructed from the video ID.
     /// </summary>
+    /// <summary>
+    /// Normalizes YouTube and YouTube Music URLs to the standard youtube.com form
+    /// so yt-dlp always uses the well-tested YouTube extractor.
+    /// e.g. music.youtube.com/playlist?list=X  →  youtube.com/playlist?list=X
+    ///      music.youtube.com/watch?v=X&amp;list=Y →  youtube.com/playlist?list=Y
+    /// </summary>
+    private static string NormalizeYouTubeUrl(string url)
+    {
+        if (!url.Contains("music.youtube.com", StringComparison.OrdinalIgnoreCase))
+            return url;
+
+        try
+        {
+            var uri   = new Uri(url);
+            var query = uri.Query.TrimStart('?');
+            var listId = query.Split('&')
+                              .Select(p => p.Split('='))
+                              .FirstOrDefault(p => p.Length == 2 && p[0].Equals("list", StringComparison.OrdinalIgnoreCase))?[1];
+
+            if (!string.IsNullOrEmpty(listId))
+                return $"https://www.youtube.com/playlist?list={Uri.UnescapeDataString(listId)}";
+        }
+        catch { }
+
+        // Fallback: just swap the host
+        return url.Replace("music.youtube.com", "www.youtube.com", StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task<List<Song>> ImportPlaylistAsync(string playlistUrl, int maxTracks = 200)
     {
+        playlistUrl = NormalizeYouTubeUrl(playlistUrl);
         _logger.LogInformation("Importing playlist: {Url} (max {Max})", playlistUrl, maxTracks);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));

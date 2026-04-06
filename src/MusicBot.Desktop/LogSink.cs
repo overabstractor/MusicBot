@@ -16,11 +16,13 @@ public sealed class LogSink : ILogEventSink
         OnEntry?.Invoke(new LogEntry(
             logEvent.Level,
             logEvent.RenderMessage(),
-            logEvent.Timestamp.LocalDateTime));
+            logEvent.Timestamp.LocalDateTime,
+            logEvent.Exception));
     }
 }
 
 public sealed record LogEntry(
     LogEventLevel Level,
     string        Message,
-    DateTime      Timestamp);
+    DateTime      Timestamp,
+    Exception?    Exception = null);
