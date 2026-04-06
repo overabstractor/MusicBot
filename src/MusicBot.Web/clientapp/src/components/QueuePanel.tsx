@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Music, Volume2, RotateCcw, Headphones, MoreHorizontal, Heart } from "lucide-react";
+import { Music, Volume2, RotateCcw, Headphones, MoreHorizontal, Heart, GripVertical } from "lucide-react";
+import { useConfirm } from "../hooks/useConfirm";
 import { QueueItem, NowPlayingState, HistoryItem } from "../types/models";
 import { DownloadState } from "../hooks/useSignalR";
 import { formatDuration, getPlatform } from "../utils";
@@ -194,18 +195,24 @@ export const QueuePanel: React.FC<Props> = ({
   const [dragUri,    setDragUri]    = useState<string | null>(null);
   const [dropIndex,  setDropIndex]  = useState<number | null>(null);
   const dragIndexRef = useRef<number>(-1);
+  const [confirmModal, confirm] = useConfirm();
 
   const nowSong   = nowPlaying?.spotifyTrack ?? nowPlaying?.item?.song ?? null;
   const userItems = items.filter(i => !i.isPlaylistItem);
   const bgItems   = items.filter(i =>  i.isPlaylistItem);
 
-  const handleClearUserQueue = () => { api.clearUserQueue().catch(console.error); };
+  const handleClearUserQueue = async () => {
+    const ok = await confirm({ message: "¿Limpiar la cola de solicitudes?", confirmText: "Limpiar", danger: true });
+    if (!ok) return;
+    api.clearUserQueue().catch(console.error);
+  };
 
   if (mode === "nowplaying") return <NowPlayingView nowPlaying={nowPlaying} />;
   if (mode === "devices")    return <DevicesView />;
 
   return (
     <div className="queue-panel">
+      {confirmModal}
       {/* Tabs */}
       <div className="queue-panel-tabs">
         <button
@@ -310,7 +317,9 @@ export const QueuePanel: React.FC<Props> = ({
                     onDragEnd={() => { setDragUri(null); setDropIndex(null); }}
                   >
                     {onReorder && (
-                      <span className="queue-drag-handle" title="Arrastrar para reordenar">⠿</span>
+                      <span className="queue-drag-handle" title="Arrastrar para reordenar">
+                        <GripVertical size={14} />
+                      </span>
                     )}
                     <span className="qi-pos">{i + 1}</span>
                     {item.song.coverUrl

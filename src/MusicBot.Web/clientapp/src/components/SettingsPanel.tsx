@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api } from "../services/api";
 import { QueueSettings } from "../hooks/useSignalR";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   settings: QueueSettings;
 }
 
 export const SettingsPanel: React.FC<Props> = ({ settings }) => {
+  const [confirmModal, confirm] = useConfirm();
   const [form,    setForm]    = useState(settings);
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -67,7 +69,8 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
   };
 
   const handleSpotifyDisconnect = async () => {
-    if (!confirm("¿Desconectar Spotify? Deberás volver a autorizar para usar funciones de Spotify.")) return;
+    const ok = await confirm({ message: "¿Desconectar Spotify? Deberás volver a autorizar para usar funciones de Spotify.", confirmText: "Desconectar", danger: true });
+    if (!ok) return;
     setSpotifyBusy(true);
     try {
       await api.disconnectSpotify();
@@ -94,6 +97,7 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
     setForm(f => ({ ...f, [key]: value }));
 
   return (
+    <>{confirmModal}
     <div className="settings-panel">
       <div className="settings-section">
         <div className="settings-section-title">Cola de reproducción</div>
@@ -290,5 +294,6 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
         </button>
       </div>
     </div>
+    </>
   );
 };

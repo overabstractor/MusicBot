@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { PlatformState, TikTokConfig, TwitchConfig, KickConfig } from "../types/models";
 import { IntegrationEvent } from "../hooks/useSignalR";
 import { api } from "../services/api";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   tiktokEvents: IntegrationEvent[];
@@ -89,6 +90,7 @@ const ConnectError: React.FC<{ message: string; onDismiss: () => void }> = ({ me
 const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[] }> = ({
   state, onSaved, events,
 }) => {
+  const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -122,7 +124,8 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   };
 
   const handleForget = async () => {
-    if (!confirm("¿Olvidar cuenta de TikTok? Tendrás que iniciar sesión de nuevo.")) return;
+    const ok = await confirm({ message: "¿Olvidar cuenta de TikTok? Tendrás que iniciar sesión de nuevo.", confirmText: "Olvidar", danger: true });
+    if (!ok) return;
     await api.forgetPlatform("tiktok").catch(() => {});
     setTiktokAuth({ authenticated: false, username: null });
     setAutoConnect(false);
@@ -153,6 +156,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 
   return (
     <div className="platform-card">
+      {confirmModal}
       <div className="platform-card-header">
         <span className="platform-logo platform-tiktok-logo">TikTok</span>
         <StatusBadge status={status} />
@@ -213,6 +217,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[] }> = ({
   state, onSaved, events,
 }) => {
+  const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -258,7 +263,8 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   };
 
   const handleTwitchForget = async () => {
-    if (!confirm("¿Olvidar cuenta de Twitch? Tendrás que autenticarte de nuevo.")) return;
+    const ok = await confirm({ message: "¿Olvidar cuenta de Twitch? Tendrás que autenticarte de nuevo.", confirmText: "Olvidar", danger: true });
+    if (!ok) return;
     await api.forgetPlatform("twitch").catch(() => {});
     setTwitchAuth({ authenticated: false, username: null });
     setAutoConnect(false);
@@ -273,6 +279,7 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 
   return (
     <div className="platform-card">
+      {confirmModal}
       <div className="platform-card-header">
         <span className="platform-logo platform-twitch-logo">Twitch</span>
         <StatusBadge status={status} />
@@ -329,6 +336,7 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[] }> = ({
   state, onSaved, events,
 }) => {
+  const [confirmModal, confirm] = useConfirm();
   const cfg = state?.config as KickConfig | null;
   const [channel, setChannel] = useState(cfg?.channel ?? "");
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
@@ -389,7 +397,8 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
   };
 
   const handleKickForget = async () => {
-    if (!confirm("¿Olvidar cuenta de Kick? Tendrás que autenticarte de nuevo.")) return;
+    const ok = await confirm({ message: "¿Olvidar cuenta de Kick? Tendrás que autenticarte de nuevo.", confirmText: "Olvidar", danger: true });
+    if (!ok) return;
     await api.forgetPlatform("kick").catch(() => {});
     setKickAuth({ authenticated: false, channel: null });
     setAutoConnect(false);
@@ -404,6 +413,7 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
 
   return (
     <div className="platform-card">
+      {confirmModal}
       <div className="platform-card-header">
         <span className="platform-logo platform-kick-logo">Kick</span>
         <StatusBadge status={status} />

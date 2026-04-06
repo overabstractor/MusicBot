@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api } from "../services/api";
 import { TickerMessage } from "../hooks/useSignalR";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   messages: TickerMessage[];
@@ -9,6 +10,7 @@ interface Props {
 const EMPTY_FORM = { text: "", imageUrl: "", durationSec: 8, enabled: true };
 
 export const TickerMessages: React.FC<Props> = ({ messages }) => {
+  const [confirmModal, confirm] = useConfirm();
   const [form,   setForm]   = useState(EMPTY_FORM);
   const [editId, setEditId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -43,7 +45,8 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar este mensaje?")) return;
+    const ok = await confirm({ message: "¿Eliminar este mensaje?", confirmText: "Eliminar", danger: true });
+    if (!ok) return;
     try { await api.deleteTicker(id); } catch {}
   };
 
@@ -57,6 +60,7 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
 
   return (
     <div className="ticker-panel">
+      {confirmModal}
 
       {/* ── Stats bar ── */}
       <div className="ticker-stats-bar">

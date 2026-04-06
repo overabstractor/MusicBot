@@ -41,6 +41,7 @@ export const ContextMenu: React.FC<Props> = ({
   const [showCreate,   setShowCreate]   = useState(false);
   const [feedback,     setFeedback]     = useState<string | null>(null);
   const [busy,         setBusy]         = useState(false);
+  const [flipUp,       setFlipUp]       = useState(false);
 
   // Close on outside click
   useEffect(() => {
@@ -50,6 +51,13 @@ export const ContextMenu: React.FC<Props> = ({
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [onClose]);
+
+  // Smart positioning: flip upward if menu would overflow the viewport bottom
+  useEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - 8) setFlipUp(true);
+  });
 
   // Fetch memberships when entering playlist view
   const openPlaylistView = async () => {
@@ -118,7 +126,7 @@ export const ContextMenu: React.FC<Props> = ({
     search ? arr.filter(m => m.name.toLowerCase().includes(search.toLowerCase())) : arr;
 
   return (
-    <div className="ctx-menu" ref={ref} style={style}>
+    <div className={`ctx-menu${flipUp ? " ctx-menu-flip-up" : ""}`} ref={ref} style={style}>
       {/* ── Main view ── */}
       {view === "main" && (
         <>

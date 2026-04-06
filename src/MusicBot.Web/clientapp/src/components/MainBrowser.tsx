@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Search, X, Play, Plus, Music, ArrowLeft, Trash2, MoreHorizontal,
-  Shuffle, Home, ListMusic, Download, Heart,
+  Shuffle, Home, ListMusic, Download, Heart, Library,
   Settings, Zap, Monitor, MessageSquare,
 } from "lucide-react";
 import { api } from "../services/api";
-import { Song, PlaylistLibrary, PlaylistLibrarySong, HistoryItem, QueueItem } from "../types/models";
+import { Song, PlaylistLibrary, PlaylistLibrarySong } from "../types/models";
+import { useConfirm } from "../hooks/useConfirm";
 import { formatDuration } from "../utils";
 import { PlaylistCover } from "./PlaylistCover";
 import { ContextMenu, SongRef } from "./ContextMenu";
@@ -18,7 +19,7 @@ import { QueueSettings, IntegrationEvent, TickerMessage } from "../hooks/useSign
 type BrowserTab = "home" | "settings" | "platforms" | "overlays" | "ticker";
 
 const BROWSER_TABS: { id: BrowserTab; label: string; icon: React.ReactNode }[] = [
-  { id: "home",      label: "Inicio",      icon: <Home size={13} />           },
+  { id: "home",      label: "Mi librería", icon: <Library size={13} />        },
   { id: "platforms", label: "Plataformas", icon: <Zap size={13} />            },
   { id: "overlays",  label: "Overlays",    icon: <Monitor size={13} />        },
   { id: "ticker",    label: "Mensajes",    icon: <MessageSquare size={13} />  },
@@ -42,18 +43,14 @@ interface Props {
   kickEvents: IntegrationEvent[];
   tickerMessages: TickerMessage[];
   overlayToken: string;
-  // Queue state for history card menu
-  queueItems: QueueItem[];
-  onSkip: () => void;
-  onRemoveFromQueue: (uri: string) => void;
 }
 
 export const MainBrowser: React.FC<Props> = ({
   selectedPlaylistId, onSelectPlaylist, onClearSelection, onPlaylistsChanged, nowPlayingUri, queueUpdateCount,
   playlistsRefreshKey, likedUris, onToggleLike,
   settings, tiktokEvents, twitchEvents, kickEvents, tickerMessages, overlayToken,
-  queueItems, onSkip, onRemoveFromQueue,
 }) => {
+  const [confirmModal, confirm] = useConfirm();
   const [browserTab, setBrowserTab] = useState<BrowserTab>("home");
   // ── Global search ──────────────────────────────────────────────────────────
   const [query,       setQuery]       = useState("");
@@ -62,9 +59,18 @@ export const MainBrowser: React.FC<Props> = ({
   const [searchMsg,   setSearchMsg]   = useState("");
 
   // ── Home data ──────────────────────────────────────────────────────────────
-  const [recentHistory, setRecentHistory] = useState<HistoryItem[]>([]);
   const [playlists,     setPlaylists]     = useState<PlaylistLibrary[]>([]);
   const [loadingHome,   setLoadingHome]   = useState(false);
+
+  // ── Library create / import ────────────────────────────────────────────────
+  const [showLibCreate,  setShowLibCreate]  = useState(false);
+  const [libCreateName,  setLibCreateName]  = useState("");
+  const [libCreating,    setLibCreating]    = useState(false);
+  const [showLibImport,  setShowLibImport]  = useState(false);
+  const [libImportUrl,   setLibImportUrl]   = useState("");
+  const [libImportName,  setLibImportName]  = useState("");
+  const [libImporting,   setLibImporting]   = useState(false);
+  const [libImportMsg,   setLibImportMsg]   = useState<{ text: string; err: boolean } | null>(null);
 
   // ── Saved playlist detail ──────────────────────────────────────────────────
   const [playlist,        setPlaylist]        = useState<PlaylistLibrary | null>(null);
@@ -99,8 +105,6 @@ export const MainBrowser: React.FC<Props> = ({
   const [menuUri,     setMenuUri]     = useState<string | null>(null);
   // likeMenuUri: opens ContextMenu in "playlist" view (for ♥ click on liked songs)
   const [likeMenuUri, setLikeMenuUri] = useState<string | null>(null);
-  // histMenuId: history card context menu
-  const [histMenuId,  setHistMenuId]  = useState<string | null>(null);
 
   // ── Search dropdown ────────────────────────────────────────────────────────
   const [dropdownOpen,  setDropdownOpen]  = useState(false);
@@ -121,9 +125,7 @@ export const MainBrowser: React.FC<Props> = ({
   const loadHome = useCallback(async () => {
     setLoadingHome(true);
     try {
-      const [hist, pls] = await Promise.all([api.getHistory(20), api.getPlaylists()]);
-      setRecentHistory(hist);
-      setPlaylists(pls);
+      setPlaylists(await api.getPlaylists());
     } catch { }
     finally { setLoadingHome(false); }
   }, []);
@@ -265,14 +267,42 @@ export const MainBrowser: React.FC<Props> = ({
     } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error", true); }
   };
 
-  const handleEnqueueHistory = async (item: HistoryItem) => {
+  // ── Library create / import handlers ─────────────────────────────────────
+  const handleLibCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!libCreateName.trim()) return;
+    setLibCreating(true);
     try {
-      await api.enqueueTrack(
-        { spotifyUri: item.trackId, title: item.title, artist: item.artist, coverUrl: item.coverUrl ?? undefined, durationMs: item.durationMs },
-        "Admin"
-      );
-      flash(`✓ "${item.title}" añadida a la cola`);
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error", true); }
+      const p = await api.createPlaylist(libCreateName.trim());
+      setLibCreateName(""); setShowLibCreate(false);
+      onPlaylistsChanged();
+      await loadHome();
+      onSelectPlaylist(p.id);
+    } catch { flash("Error al crear lista", true); }
+    finally { setLibCreating(false); }
+  };
+
+  const handleLibImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const url = libImportUrl.trim();
+    if (!url) return;
+    setLibImporting(true);
+    setLibImportMsg(null);
+    try {
+      const name = libImportName.trim() || "Lista importada";
+      const p    = await api.createPlaylist(name);
+      const r    = await api.importPlaylistSongs(p.id, url);
+      setLibImportMsg({ text: `✓ ${r.added} canciones importadas`, err: false });
+      setLibImportUrl(""); setLibImportName("");
+      onPlaylistsChanged();
+      await loadHome();
+      onSelectPlaylist(p.id);
+      setTimeout(() => { setShowLibImport(false); setLibImportMsg(null); }, 1800);
+    } catch (err: unknown) {
+      setLibImportMsg({ text: err instanceof Error ? err.message : "Error al importar", err: true });
+    } finally {
+      setLibImporting(false);
+    }
   };
 
   // ── Saved playlist detail actions ─────────────────────────────────────────
@@ -308,7 +338,8 @@ export const MainBrowser: React.FC<Props> = ({
 
   const handleDeletePlaylist = async () => {
     if (!selectedPlaylistId || !playlist) return;
-    if (!confirm(`¿Eliminar "${playlist.name}"?`)) return;
+    const ok = await confirm({ message: `¿Eliminar "${playlist.name}"?`, confirmText: "Eliminar", danger: true });
+    if (!ok) return;
     try {
       await api.deletePlaylist(selectedPlaylistId);
       onPlaylistsChanged();
@@ -393,6 +424,7 @@ export const MainBrowser: React.FC<Props> = ({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="main-browser">
+      {confirmModal}
 
       {/* ── Tab bar ─────────────────────────────────────────── */}
       <div className="browser-tab-bar">
@@ -568,52 +600,71 @@ export const MainBrowser: React.FC<Props> = ({
         <div className={`browser-flash${actionMsg.err ? " err" : ""}`}>{actionMsg.text}</div>
       )}
 
-      {/* ══ HOME VIEW ══ */}
+      {/* ══ HOME / LIBRARY VIEW ══ */}
       {browserTab === "home" && view === "home" && (
         <div className="browser-content">
-          {!loadingHome && recentHistory.length > 0 && (
-            <section className="browser-section">
-              <h2 className="browser-section-title">Reproducidas recientemente</h2>
-              <div className="browser-cards-row">
-                {recentHistory.slice(0, 12).map(item => {
-                  const isNowPlaying = nowPlayingUri === item.trackId;
-                  const isInQueue    = queueItems.some(q => q.song.spotifyUri === item.trackId);
-                  return (
-                    <div key={item.id} style={{ position: "relative", flexShrink: 0 }}>
-                      <button
-                        className={`browser-card${isNowPlaying ? " now-playing" : ""}`}
-                        onClick={() => setHistMenuId(v => v === item.id ? null : item.id)}
-                        title={item.title}
-                      >
-                        {item.coverUrl
-                          ? <img src={item.coverUrl} alt="" className="browser-card-cover" />
-                          : <div className="browser-card-cover browser-card-cover-ph"><Music size={24} /></div>}
-                        <span className="browser-card-title">{item.title}</span>
-                        <span className="browser-card-sub">{item.artist}</span>
-                        {isNowPlaying && <span className="browser-card-badge playing">▶ Sonando</span>}
-                        {!isNowPlaying && isInQueue && <span className="browser-card-badge queue">En cola</span>}
-                      </button>
-                      {histMenuId === item.id && (
-                        <ContextMenu
-                          song={{ spotifyUri: item.trackId, title: item.title, artist: item.artist, coverUrl: item.coverUrl ?? undefined, durationMs: item.durationMs }}
-                          isQueue={isInQueue}
-                          isNowPlaying={isNowPlaying}
-                          onSkip={() => { onSkip(); setHistMenuId(null); }}
-                          onRemove={isInQueue ? uri => { onRemoveFromQueue(uri); setHistMenuId(null); } : undefined}
-                          onClose={() => setHistMenuId(null)}
-                          style={{ top: "calc(100% + 4px)", left: 0, right: "auto" }}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+          {/* Library toolbar */}
+          <div className="browser-lib-toolbar">
+            <button
+              className={`lib-sidebar-create-btn${showLibImport ? " active" : ""}`}
+              title="Importar lista de YouTube"
+              onClick={() => { setShowLibImport(v => !v); setShowLibCreate(false); setLibImportMsg(null); }}
+            >
+              <Download size={15} />
+            </button>
+            <button
+              className={`lib-sidebar-create-btn${showLibCreate ? " active" : ""}`}
+              title="Crear lista"
+              onClick={() => { setShowLibCreate(v => !v); setShowLibImport(false); }}
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+
+          {showLibCreate && (
+            <form className="lib-sidebar-create-form" onSubmit={handleLibCreate}>
+              <input
+                className="input input-sm"
+                placeholder="Nombre de la lista…"
+                value={libCreateName}
+                onChange={e => setLibCreateName(e.target.value)}
+                autoFocus
+                disabled={libCreating}
+              />
+              <button type="submit" className="btn btn-primary btn-sm" disabled={libCreating || !libCreateName.trim()}>
+                Crear
+              </button>
+            </form>
+          )}
+
+          {showLibImport && (
+            <form className="lib-sidebar-create-form lib-sidebar-import-form" onSubmit={handleLibImport}>
+              <input
+                className="input input-sm"
+                placeholder="URL de YouTube o YouTube Music…"
+                value={libImportUrl}
+                onChange={e => setLibImportUrl(e.target.value)}
+                autoFocus
+                disabled={libImporting}
+              />
+              <input
+                className="input input-sm"
+                placeholder="Nombre (opcional)"
+                value={libImportName}
+                onChange={e => setLibImportName(e.target.value)}
+                disabled={libImporting}
+              />
+              {libImportMsg && (
+                <span className={`lib-import-msg${libImportMsg.err ? " err" : ""}`}>{libImportMsg.text}</span>
+              )}
+              <button type="submit" className="btn btn-primary btn-sm" disabled={libImporting || !libImportUrl.trim()}>
+                {libImporting ? "Importando…" : "Importar"}
+              </button>
+            </form>
           )}
 
           {!loadingHome && playlists.length > 0 && (
             <section className="browser-section">
-              <h2 className="browser-section-title">Tus listas</h2>
               <div className="browser-playlist-grid">
                 {playlists.map(p => (
                   <div
@@ -657,11 +708,11 @@ export const MainBrowser: React.FC<Props> = ({
             </section>
           )}
 
-          {!loadingHome && recentHistory.length === 0 && playlists.length === 0 && (
+          {!loadingHome && playlists.length === 0 && (
             <div className="browser-empty">
               <div className="browser-empty-icon"><Music size={48} /></div>
-              <div className="browser-empty-title">Comienza a usar MusicBot</div>
-              <div className="browser-empty-sub">Busca canciones arriba para añadirlas a la cola, o crea una lista en el panel izquierdo.</div>
+              <div className="browser-empty-title">Tu librería está vacía</div>
+              <div className="browser-empty-sub">Crea una lista con + o importa una desde YouTube.</div>
             </div>
           )}
         </div>

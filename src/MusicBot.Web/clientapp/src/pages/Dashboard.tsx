@@ -1,15 +1,14 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Settings, Sun, Moon, Power, FileText, Wrench, Music2, FolderOpen } from "lucide-react";
+import { Sun, Moon, Power, FileText, Wrench, Music2, FolderOpen } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
-import { LibrarySidebar } from "../components/LibrarySidebar";
 import { MainBrowser } from "../components/MainBrowser";
 import { QueuePanel } from "../components/QueuePanel";
 import { PlayerBar } from "../components/PlayerBar";
 import { StatusBar } from "../components/StatusBar";
-import { SettingsModal } from "../components/SettingsModal";
 import { QueueToolsModal } from "../components/QueueToolsModal";
 import { useSignalR } from "../hooks/useSignalR";
 import { useLikedSongs } from "../hooks/useLikedSongs";
+import { useConfirm } from "../hooks/useConfirm";
 import { api } from "../services/api";
 
 const OVERLAY_TOKEN = "local";
@@ -44,6 +43,7 @@ export const Dashboard: React.FC = () => {
 
   const { theme, toggle: toggleTheme } = useTheme();
   const { likedUris, toggleLike } = useLikedSongs(playlistUpdateCount);
+  const [confirmModal, confirm] = useConfirm();
 
   // Keep libRefreshKey in sync with server-pushed playlist changes
   useEffect(() => {
@@ -53,7 +53,6 @@ export const Dashboard: React.FC = () => {
   const [appVersion,       setAppVersion]       = useState<string | null>(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState<number | null>(null);
   const [libRefreshKey,    setLibRefreshKey]    = useState(0);
-  const [settingsOpen,     setSettingsOpen]     = useState(false);
   const [queueToolsOpen,   setQueueToolsOpen]   = useState(false);
   const [rightPanelMode,   setRightPanelMode]   = useState<"queue" | "nowplaying" | "devices">("queue");
   const [shuffleActive,    setShuffleActive]    = useState(false);
@@ -89,11 +88,12 @@ export const Dashboard: React.FC = () => {
     setTimeout(() => setShuffleActive(false), 800);
   }, []);
 
-  const handleBan     = useCallback((uri: string, title: string, artist: string) => {
-    if (!confirm(`¿Banear "${title}"?`)) return;
+  const handleBan     = useCallback(async (uri: string, title: string, artist: string) => {
+    const ok = await confirm({ message: `¿Banear "${title}"?`, confirmText: "Banear", danger: true });
+    if (!ok) return;
     api.banSong(uri, title, artist).catch(console.error);
     api.removeQueueItem(uri).catch(console.error);
-  }, []);
+  }, [confirm]);
 
   const handleVote = useCallback(async (skip: boolean) => {
     const r = await api.vote(voteUser || "Admin", skip, "web").catch(() => null);
@@ -131,11 +131,13 @@ export const Dashboard: React.FC = () => {
           <button className="theme-toggle-btn" onClick={toggleTheme} title="Cambiar tema">
             {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
           </button>
-          <button className="header-icon-btn" onClick={() => setSettingsOpen(true)} title="Ajustes y plataformas"><Settings size={15} /></button>
           <button className="header-icon-btn" onClick={() => api.openLog()} title="Logs"><FileText size={15} /></button>
           <button className="header-icon-btn" onClick={() => api.openLogDir()} title="Carpeta de logs"><FolderOpen size={15} /></button>
           <button className="header-icon-btn header-icon-btn-danger"
-            onClick={() => { if (confirm("¿Cerrar MusicBot?")) api.shutdown(); }}
+            onClick={async () => {
+              const ok = await confirm({ message: "¿Cerrar MusicBot?", confirmText: "Cerrar", danger: true });
+              if (ok) api.shutdown();
+            }}
             title="Cerrar"
           ><Power size={15} /></button>
         </div>
@@ -144,7 +146,18 @@ export const Dashboard: React.FC = () => {
       {/* ── Download error toasts ───────────────────────────── */}
       {downloadErrors.length > 0 && (
         <div className="download-error-stack">
-          {downloadErrors.map(e => (
+          {downloadErrors.length > 1 && (
+            <div className="download-error-toolbar">
+              <span className="download-error-count">{downloadErrors.length} errores</span>
+              <button
+                className="download-error-dismiss-all"
+                onClick={() => downloadErrors.forEach(e => dismissDownloadError(e.id))}
+              >
+                Limpiar todo
+              </button>
+            </div>
+          )}
+          {downloadErrors.slice(0, 3).map(e => (
             <div key={e.id} className="download-error-toast">
               <span className="download-error-icon">⚠</span>
               <div className="download-error-body">
@@ -159,18 +172,16 @@ export const Dashboard: React.FC = () => {
               <button className="download-error-close" onClick={() => dismissDownloadError(e.id)}>✕</button>
             </div>
           ))}
+          {downloadErrors.length > 3 && (
+            <div className="download-error-overflow">
+              +{downloadErrors.length - 3} más
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── Body: 3 columns ─────────────────────────────────── */}
+      {/* ── Body: 2 columns ─────────────────────────────────── */}
       <div className="spotify-body">
-
-        {/* Left: Library sidebar */}
-        <LibrarySidebar
-          selectedId={selectedPlaylist}
-          onSelect={id => { setSelectedPlaylist(id); }}
-          refreshKey={libRefreshKey}
-        />
 
         {/* Center: Main browser */}
         <MainBrowser
@@ -189,9 +200,6 @@ export const Dashboard: React.FC = () => {
           kickEvents={integrationEvents.filter(e => e.source === "kick")}
           tickerMessages={tickerMessages}
           overlayToken={OVERLAY_TOKEN}
-          queueItems={appQueue}
-          onSkip={handleSkip}
-          onRemoveFromQueue={handleRemove}
         />
 
         {/* Right: Queue / Now Playing / Devices */}
@@ -227,16 +235,7 @@ export const Dashboard: React.FC = () => {
       />
 
       {/* ── Modals ──────────────────────────────────────────── */}
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        settings={queueSettings}
-        tiktokEvents={integrationEvents.filter(e => e.source === "tiktok")}
-        twitchEvents={integrationEvents.filter(e => e.source === "twitch")}
-        kickEvents={integrationEvents.filter(e => e.source === "kick")}
-        tickerMessages={tickerMessages}
-        overlayToken={OVERLAY_TOKEN}
-      />
+      {confirmModal}
 
       <QueueToolsModal
         open={queueToolsOpen}
