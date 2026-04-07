@@ -47,17 +47,18 @@ public class LocalPlayerService : ILocalPlayerService
             CurrentFilePath = filePath;
             _reader         = new MediaFoundationReader(filePath);
             _output         = CreateOutput(out _activeDevice);
-            _output.Init(_reader);
+            _output.Init(_reader);  // WASAPI session is created here (IAudioClient.Initialize)
+
+            // Pin GroupingParam + DisplayName immediately after session creation,
+            // before Play() so audio routers (Logitech G HUB, Mixline, etc.) see
+            // the correct identity on first notification and never create a duplicate entry.
+            if (_activeDevice != null)
+                AudioSessionHelper.ApplySessionMetadata(_activeDevice);
+
             if (_output is WasapiOut w) w.Volume = Volume;
             _output.PlaybackStopped += HandlePlaybackStopped;
             _output.Play();
             StartTimer();
-
-            // Apply fixed GroupingParam so audio routers (Mixline, etc.) always
-            // identify MusicBot as the same app across restarts and debug sessions.
-            var device = _activeDevice;
-            if (device != null)
-                _ = Task.Run(() => AudioSessionHelper.ApplyGroupingParam(device));
         }
         catch (Exception ex)
         {

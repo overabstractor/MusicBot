@@ -5,17 +5,34 @@ using NAudio.CoreAudioApi;
 namespace MusicBot.Services.Player;
 
 /// <summary>
-/// Sets a fixed GroupingParam GUID on all WASAPI audio sessions from this process
-/// so that audio routers (Mixline, VoiceMeeter, etc.) always identify MusicBot
-/// as the same application across restarts and debug sessions.
+/// Configures WASAPI audio sessions so audio routers (Logitech G HUB, Mixline,
+/// VoiceMeeter, etc.) always see MusicBot as a single, stable application entry
+/// across restarts, song changes, and Velopack version updates.
+///
+/// Root cause of the "multiple instances" problem:
+///   WasapiOut without an explicit audioSessionGuid creates a new WASAPI session
+///   for every song. Each new session registers as a separate entry in audio mixers.
+///
+/// Fix: pass <see cref="MusicBotSessionGuid"/> to the WasapiOut constructor so
+///   WASAPI always reuses the same session. The GroupingParam is set as a secondary
+///   safeguard. The DisplayName is pinned to "MusicBot" so it never shows the
+///   exe path (which changes on every Velopack update).
 /// </summary>
 internal static class AudioSessionHelper
 {
     /// <summary>
-    /// Fixed GroupingParam GUID. Audio routers group sessions that share the same
-    /// GroupingParam and remember routing rules for that group across restarts.
+    /// Fixed GUID passed as the <c>audioSessionGuid</c> parameter of WasapiOut.
+    /// WASAPI reuses the same audio session for every instance that shares this GUID,
+    /// so audio routers see exactly one "MusicBot" entry regardless of how many songs
+    /// have been played or how many times the app has been restarted.
     /// </summary>
-    public static readonly Guid MusicBotGroupingGuid = new("5A3F1C2D-8E4B-4F9A-B621-3D7E5A2C1F08");
+    public static readonly Guid MusicBotSessionGuid = new("5A3F1C2D-8E4B-4F9A-B621-3D7E5A2C1F08");
+
+    /// <summary>
+    /// GroupingParam GUID (same value — sessions sharing both the session GUID and the
+    /// GroupingParam are guaranteed to appear as one logical unit in all compliant mixers).
+    /// </summary>
+    public static readonly Guid MusicBotGroupingGuid = MusicBotSessionGuid;
 
     // IAudioSessionControl IID — same as NAudio's internal interface
     [ComImport]
@@ -35,11 +52,12 @@ internal static class AudioSessionHelper
     }
 
     /// <summary>
-    /// Iterates all WASAPI sessions on the device belonging to this process
-    /// and sets their GroupingParam to <see cref="MusicBotGroupingGuid"/>.
-    /// Call after WasapiOut.Play() to ensure the session is registered.
+    /// Iterates all WASAPI sessions on <paramref name="device"/> belonging to this
+    /// process and pins their GroupingParam and DisplayName.  This is a secondary
+    /// safeguard — the primary fix is passing <see cref="MusicBotSessionGuid"/> to
+    /// the WasapiOut constructor so WASAPI never creates a new session to begin with.
     /// </summary>
-    public static void ApplyGroupingParam(MMDevice device)
+    public static void ApplySessionMetadata(MMDevice device)
     {
         try
         {
@@ -52,14 +70,13 @@ internal static class AudioSessionHelper
             {
                 var session = sessions[i];
                 if (session.GetProcessID != pid) continue;
-
-                SetGroupingParamOnSession(session, ref gp, ref ctx);
+                ApplyOnSession(session, ref gp, ref ctx);
             }
         }
         catch { /* best-effort, never throw */ }
     }
 
-    private static void SetGroupingParamOnSession(AudioSessionControl session, ref Guid gp, ref Guid ctx)
+    private static void ApplyOnSession(AudioSessionControl session, ref Guid gp, ref Guid ctx)
     {
         // Locate the private field that holds NAudio's internal IAudioSessionControl COM object.
         // The field name varies by NAudio version (commonly "ctl" or "audioSessionControl").
@@ -75,18 +92,18 @@ internal static class AudioSessionHelper
 
         if (rawCom == null) return;
 
-        // QueryInterface for our IAudioSessionControl (same IID) to access SetGroupingParam
         IntPtr pUnk = IntPtr.Zero;
         try
         {
             pUnk = Marshal.GetIUnknownForObject(rawCom);
             var iid = typeof(IAudioSessionControl).GUID;
-            if (Marshal.QueryInterface(pUnk, ref iid, out IntPtr pIface) != 0) return;
+            if (Marshal.QueryInterface(pUnk, in iid, out IntPtr pIface) != 0) return;
 
             try
             {
                 var iface = (IAudioSessionControl)Marshal.GetObjectForIUnknown(pIface);
                 iface.SetGroupingParam(ref gp, ref ctx);
+                iface.SetDisplayName("MusicBot", ref ctx);  // prevent exe-path default (changes per Velopack update)
                 Marshal.ReleaseComObject(iface);
             }
             finally { Marshal.Release(pIface); }
