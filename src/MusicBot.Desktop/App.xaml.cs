@@ -33,6 +33,7 @@ public partial class App : SysWin.Application
     private MainWindow?        _mainWindow;
     private LogViewerWindow?   _logViewer;
     private TikTokLoginWindow? _tiktokLogin;
+    private MediaKeyHook?      _mediaKeys;
     private bool               _trayHintShown;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -56,7 +57,10 @@ public partial class App : SysWin.Application
                 $"Versión {v} descargada. Se aplicará al reiniciar.",
                 ToolTipIcon.Info));
 
-        _tray = BuildTray();
+        _tray      = BuildTray();
+        _mediaKeys = new MediaKeyHook(
+            Host.Services.GetRequiredService<MusicBot.Services.UserContextManager>(),
+            Host.Services.GetRequiredService<MusicBot.Services.CommandRouterService>());
         ShowMainWindow();
 
         // Trigger TikTok session restore AFTER subscribing to events (avoids race condition
@@ -71,6 +75,7 @@ public partial class App : SysWin.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _mediaKeys?.Dispose();
         _tray.Dispose();
         base.OnExit(e);
     }
