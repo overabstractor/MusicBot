@@ -2,8 +2,8 @@ import React, { useEffect, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
 
 interface Props {
-  title?: string;
-  message: string;
+  title: string;
+  message?: string;
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
@@ -27,13 +27,17 @@ export const ConfirmModal: React.FC<Props> = ({
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="confirm-modal" onClick={e => e.stopPropagation()}>
         <div className="confirm-modal-body">
-          {danger && <AlertTriangle size={20} className="confirm-modal-danger-icon" />}
-          {title && <div className="confirm-modal-title">{title}</div>}
-          <p className="confirm-modal-message">{message}</p>
+          <div className={`confirm-modal-icon-wrap${danger ? " danger" : ""}`}>
+            <AlertTriangle size={26} />
+          </div>
+          <div className="confirm-modal-text">
+            <p className="confirm-modal-title">{title}</p>
+            {message && <p className="confirm-modal-message">{message}</p>}
+          </div>
         </div>
         <div className="confirm-modal-actions">
-          <button ref={cancelRef} className="btn btn-outline" onClick={onCancel}>{cancelText}</button>
-          <button className={`btn ${danger ? "btn-danger" : "btn-primary"}`} onClick={onConfirm}>
+          <button ref={cancelRef} className="btn btn-outline confirm-modal-btn" onClick={onCancel}>{cancelText}</button>
+          <button className={`btn ${danger ? "btn-danger" : "btn-primary"} confirm-modal-btn`} onClick={onConfirm}>
             {confirmText}
           </button>
         </div>

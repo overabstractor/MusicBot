@@ -338,7 +338,7 @@ export const MainBrowser: React.FC<Props> = ({
 
   const handleDeletePlaylist = async () => {
     if (!selectedPlaylistId || !playlist) return;
-    const ok = await confirm({ message: `¿Eliminar "${playlist.name}"?`, confirmText: "Eliminar", danger: true });
+    const ok = await confirm({ title: `¿Eliminar "${playlist.name}"?`, message: "Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true });
     if (!ok) return;
     try {
       await api.deletePlaylist(selectedPlaylistId);

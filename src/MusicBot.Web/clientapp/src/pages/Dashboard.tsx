@@ -89,7 +89,7 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const handleBan     = useCallback(async (uri: string, title: string, artist: string) => {
-    const ok = await confirm({ message: `¿Banear "${title}"?`, confirmText: "Banear", danger: true });
+    const ok = await confirm({ title: `Banear "${title}"`, message: "La canción no podrá volver a ser solicitada.", confirmText: "Banear", danger: true });
     if (!ok) return;
     api.banSong(uri, title, artist).catch(console.error);
     api.removeQueueItem(uri).catch(console.error);
@@ -135,7 +135,7 @@ export const Dashboard: React.FC = () => {
           <button className="header-icon-btn" onClick={() => api.openLogDir()} title="Carpeta de logs"><FolderOpen size={15} /></button>
           <button className="header-icon-btn header-icon-btn-danger"
             onClick={async () => {
-              const ok = await confirm({ message: "¿Cerrar MusicBot?", confirmText: "Cerrar", danger: true });
+              const ok = await confirm({ title: "¿Cerrar MusicBot?", message: "La reproducción se detendrá y la aplicación se cerrará.", confirmText: "Cerrar", danger: true });
               if (ok) api.shutdown();
             }}
             title="Cerrar"

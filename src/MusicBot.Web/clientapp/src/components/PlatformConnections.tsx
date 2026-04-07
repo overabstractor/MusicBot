@@ -124,7 +124,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   };
 
   const handleForget = async () => {
-    const ok = await confirm({ message: "¿Olvidar cuenta de TikTok? Tendrás que iniciar sesión de nuevo.", confirmText: "Olvidar", danger: true });
+    const ok = await confirm({ title: "¿Olvidar cuenta de TikTok?", message: "Tendrás que iniciar sesión de nuevo para volver a conectar.", confirmText: "Olvidar", danger: true });
     if (!ok) return;
     await api.forgetPlatform("tiktok").catch(() => {});
     setTiktokAuth({ authenticated: false, username: null });
@@ -263,7 +263,7 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   };
 
   const handleTwitchForget = async () => {
-    const ok = await confirm({ message: "¿Olvidar cuenta de Twitch? Tendrás que autenticarte de nuevo.", confirmText: "Olvidar", danger: true });
+    const ok = await confirm({ title: "¿Olvidar cuenta de Twitch?", message: "Tendrás que autenticarte de nuevo para volver a conectar.", confirmText: "Olvidar", danger: true });
     if (!ok) return;
     await api.forgetPlatform("twitch").catch(() => {});
     setTwitchAuth({ authenticated: false, username: null });
@@ -397,7 +397,7 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
   };
 
   const handleKickForget = async () => {
-    const ok = await confirm({ message: "¿Olvidar cuenta de Kick? Tendrás que autenticarte de nuevo.", confirmText: "Olvidar", danger: true });
+    const ok = await confirm({ title: "¿Olvidar cuenta de Kick?", message: "Tendrás que autenticarte de nuevo para volver a conectar.", confirmText: "Olvidar", danger: true });
     if (!ok) return;
     await api.forgetPlatform("kick").catch(() => {});
     setKickAuth({ authenticated: false, channel: null });

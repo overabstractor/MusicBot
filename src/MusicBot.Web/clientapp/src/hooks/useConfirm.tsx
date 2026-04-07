@@ -2,8 +2,8 @@ import React, { useState, useCallback } from "react";
 import { ConfirmModal } from "../components/ConfirmModal";
 
 export interface ConfirmOptions {
-  title?: string;
-  message: string;
+  title: string;
+  message?: string;
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
@@ -34,7 +34,7 @@ export function useConfirm() {
       message={state.message}
       confirmText={state.confirmText}
       cancelText={state.cancelText}
-      danger={state.danger}
+      danger={state.danger ?? false}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
     />

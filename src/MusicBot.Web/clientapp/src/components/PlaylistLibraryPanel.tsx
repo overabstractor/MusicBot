@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../services/api";
 import { PlaylistLibrary, PlaylistLibrarySong, Song } from "../types/models";
 import { formatDuration } from "../utils";
+import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
   onPlaylistActivated?: () => void;
 }
 
 export const PlaylistLibraryPanel: React.FC<Props> = ({ onPlaylistActivated }) => {
+  const [confirmModal, confirm] = useConfirm();
   const [playlists,       setPlaylists]       = useState<PlaylistLibrary[]>([]);
   const [selectedId,      setSelectedId]      = useState<number | null>(null);
   const [songs,           setSongs]           = useState<PlaylistLibrarySong[]>([]);
@@ -105,7 +107,8 @@ export const PlaylistLibraryPanel: React.FC<Props> = ({ onPlaylistActivated }) =
   // ── Delete playlist ────────────────────────────────────────────────────────
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`¿Eliminar la lista "${name}"? Esta acción no se puede deshacer.`)) return;
+    const ok = await confirm({ title: `¿Eliminar "${name}"?`, message: "Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true });
+    if (!ok) return;
     try {
       await api.deletePlaylist(id);
       if (selectedId === id) { setSelectedId(null); setSongs([]); }
@@ -242,6 +245,7 @@ export const PlaylistLibraryPanel: React.FC<Props> = ({ onPlaylistActivated }) =
 
   return (
     <div className="playlist-panel">
+      {confirmModal}
 
       {/* ── Left: playlist list ───────────────────────────────────────── */}
       <div className="playlist-sidebar">

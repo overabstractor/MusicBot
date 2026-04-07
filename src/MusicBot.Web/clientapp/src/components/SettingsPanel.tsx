@@ -69,7 +69,7 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
   };
 
   const handleSpotifyDisconnect = async () => {
-    const ok = await confirm({ message: "¿Desconectar Spotify? Deberás volver a autorizar para usar funciones de Spotify.", confirmText: "Desconectar", danger: true });
+    const ok = await confirm({ title: "¿Desconectar Spotify?", message: "Deberás volver a autorizar la aplicación para usar funciones de Spotify.", confirmText: "Desconectar", danger: true });
     if (!ok) return;
     setSpotifyBusy(true);
     try {

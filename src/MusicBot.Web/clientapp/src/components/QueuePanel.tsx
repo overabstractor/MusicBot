@@ -202,7 +202,7 @@ export const QueuePanel: React.FC<Props> = ({
   const bgItems   = items.filter(i =>  i.isPlaylistItem);
 
   const handleClearUserQueue = async () => {
-    const ok = await confirm({ message: "¿Limpiar la cola de solicitudes?", confirmText: "Limpiar", danger: true });
+    const ok = await confirm({ title: "¿Limpiar la cola?", message: "Se eliminarán todas las canciones en espera. Esta acción no se puede deshacer.", confirmText: "Limpiar", danger: true });
     if (!ok) return;
     api.clearUserQueue().catch(console.error);
   };

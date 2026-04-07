@@ -45,7 +45,7 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
   };
 
   const handleDelete = async (id: string) => {
-    const ok = await confirm({ message: "¿Eliminar este mensaje?", confirmText: "Eliminar", danger: true });
+    const ok = await confirm({ title: "¿Eliminar mensaje?", message: "Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true });
     if (!ok) return;
     try { await api.deleteTicker(id); } catch {}
   };
