@@ -85,6 +85,12 @@ public static class Program
         {
             Log.Information("Iniciando MusicBot");
 
+            // ── WebView2 check ────────────────────────────────────────────────
+            // Must run before WPF starts. If WebView2 is missing it installs it
+            // silently and relaunches the process, so we exit here.
+            if (!WebView2Setup.EnsureInstalled())
+                return;
+
             // ── Build web host ────────────────────────────────────────────────
             // CreateBuilder registers all application services.
             // We inject TrayLifetime before building so the host never allocates

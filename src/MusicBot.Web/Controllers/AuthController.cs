@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using MusicBot.Data;
+using MusicBot.Hubs;
 using MusicBot.Services;
 using MusicBot.Services.Platforms;
 using MusicBot.Services.Spotify;
@@ -17,14 +19,16 @@ public class AuthController : ControllerBase
     private readonly TwitchAuthService _twitchAuth;
     private readonly KickAuthService _kickAuth;
     private readonly TikTokAuthService _tiktokAuth;
+    private readonly IHubContext<OverlayHub> _hub;
 
-    public AuthController(MusicBotDbContext db, UserContextManager userContext, TwitchAuthService twitchAuth, KickAuthService kickAuth, TikTokAuthService tiktokAuth)
+    public AuthController(MusicBotDbContext db, UserContextManager userContext, TwitchAuthService twitchAuth, KickAuthService kickAuth, TikTokAuthService tiktokAuth, IHubContext<OverlayHub> hub)
     {
         _db          = db;
         _userContext = userContext;
         _twitchAuth  = twitchAuth;
         _kickAuth    = kickAuth;
         _tiktokAuth  = tiktokAuth;
+        _hub         = hub;
     }
 
     /// <summary>Get local user info and Spotify connection status</summary>
@@ -106,6 +110,27 @@ public class AuthController : ControllerBase
         await services.Spotify.DisconnectAsync();
         return NoContent();
     }
+    // ── System browser helper ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Opens a URL in the user's default system browser.
+    /// Used for OAuth flows (Twitch, Kick) so the user can leverage their existing sessions.
+    /// </summary>
+    [HttpPost("open-in-browser")]
+    [ProducesResponseType(200)]
+    public IActionResult OpenInBrowser([FromQuery] string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return BadRequest("URL inválida");
+
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+        {
+            UseShellExecute = true
+        });
+        return Ok();
+    }
+
     // ── Twitch OAuth ─────────────────────────────────────────────────────────
 
     /// <summary>Get Twitch OAuth URL</summary>
@@ -132,6 +157,8 @@ public class AuthController : ControllerBase
         try
         {
             await _twitchAuth.HandleCallbackAsync(code);
+            await _hub.Clients.Group($"user:{LocalUser.Id}")
+                .SendAsync("auth:updated", new { platform = "twitch", authenticated = true, username = _twitchAuth.BotUsername });
             return Content("""
                 <html>
                 <body style='background:#1a1a2e;color:#e0e0e0;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;'>
@@ -220,6 +247,8 @@ public class AuthController : ControllerBase
         try
         {
             await _kickAuth.HandleCallbackAsync(code);
+            await _hub.Clients.Group($"user:{LocalUser.Id}")
+                .SendAsync("auth:updated", new { platform = "kick", authenticated = true, channel = _kickAuth.ChannelName });
             return Content("""
                 <html>
                 <body style='background:#1a1a2e;color:#e0e0e0;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;'>

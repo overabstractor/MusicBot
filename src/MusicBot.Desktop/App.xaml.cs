@@ -143,6 +143,11 @@ public partial class App : SysWin.Application
         {
             // Window already exists — reset it to the login page (may have been in silent-restore state)
             _tiktokLogin.ResetAndShowLogin();
+            // Restore window to a visible, normal-sized state regardless of how it was created
+            _tiktokLogin.ShowInTaskbar = true;
+            _tiktokLogin.WindowState   = SysWin.WindowState.Normal;
+            _tiktokLogin.Width         = 480;
+            _tiktokLogin.Height        = 700;
             _tiktokLogin.Show();
             _tiktokLogin.Activate();
             return;
@@ -180,25 +185,9 @@ public partial class App : SysWin.Application
                         break;
 
                     case "twitch":
-                        // Clear Twitch OAuth session cookies from the main WebView2
-                        if (_mainWindow?.IsLoaded == true)
-                            await _mainWindow.DeleteCookiesForDomainsAsync(new[]
-                            {
-                                "https://www.twitch.tv",
-                                "https://id.twitch.tv",
-                                "https://passport.twitch.tv",
-                            });
-                        break;
-
                     case "kick":
-                        // Clear Kick OAuth session cookies from the main WebView2
-                        if (_mainWindow?.IsLoaded == true)
-                            await _mainWindow.DeleteCookiesForDomainsAsync(new[]
-                            {
-                                "https://www.kick.com",
-                                "https://kick.com",
-                                "https://id.kick.com",
-                            });
+                        // OAuth token is cleared from DB by TwitchAuthService/KickAuthService.
+                        // No WebView2 cookies to clear — auth happens in the system browser.
                         break;
                 }
                 tcs.SetResult();

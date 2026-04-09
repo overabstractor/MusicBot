@@ -19,10 +19,11 @@ public class YtDlpSetupService : BackgroundService
         try
         {
             await _downloader.EnsureYtDlpAsync();
+            await _downloader.EnsureFfmpegAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error inesperado durante la configuración de yt-dlp");
+            _logger.LogError(ex, "Error inesperado durante la configuración de yt-dlp/ffmpeg");
         }
     }
 }

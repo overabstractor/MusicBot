@@ -218,6 +218,10 @@ export const api = {
   getTikTokAuthStatus: () => request<{ authenticated: boolean; username: string | null; cancelled: boolean }>("/api/auth/tiktok/status"),
   disconnectTikTokAuth: () => request<void>("/api/auth/tiktok", { method: "DELETE" }),
 
+  // Open a URL in the user's default system browser (for OAuth flows)
+  openInBrowser: (url: string) =>
+    request<void>(`/api/auth/open-in-browser?url=${encodeURIComponent(url)}`, { method: "POST" }),
+
   // Twitch OAuth
   getTwitchAuthUrl:    () => request<{ url: string }>("/api/auth/twitch"),
   getTwitchStatus:     () => request<{ authenticated: boolean; username: string | null }>("/api/auth/twitch/status"),

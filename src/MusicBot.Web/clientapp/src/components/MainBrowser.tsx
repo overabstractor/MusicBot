@@ -43,12 +43,13 @@ interface Props {
   kickEvents: IntegrationEvent[];
   tickerMessages: TickerMessage[];
   overlayToken: string;
+  authUpdatedAt?: number;
 }
 
 export const MainBrowser: React.FC<Props> = ({
   selectedPlaylistId, onSelectPlaylist, onClearSelection, onPlaylistsChanged, nowPlayingUri, queueUpdateCount,
   playlistsRefreshKey, likedUris, onToggleLike,
-  settings, tiktokEvents, twitchEvents, kickEvents, tickerMessages, overlayToken,
+  settings, tiktokEvents, twitchEvents, kickEvents, tickerMessages, overlayToken, authUpdatedAt,
 }) => {
   const [confirmModal, confirm] = useConfirm();
   const [browserTab, setBrowserTab] = useState<BrowserTab>("home");
@@ -444,7 +445,7 @@ export const MainBrowser: React.FC<Props> = ({
 
       {/* ── Settings / Platforms / Overlays / Ticker panels ── */}
       {browserTab === "settings"  && <div className="browser-panel-content"><SettingsPanel settings={settings} /></div>}
-      {browserTab === "platforms" && <div className="browser-panel-content"><PlatformConnections tiktokEvents={tiktokEvents} twitchEvents={twitchEvents} kickEvents={kickEvents} /></div>}
+      {browserTab === "platforms" && <div className="browser-panel-content"><PlatformConnections tiktokEvents={tiktokEvents} twitchEvents={twitchEvents} kickEvents={kickEvents} authUpdatedAt={authUpdatedAt} /></div>}
       {browserTab === "overlays"  && <div className="browser-panel-content"><OverlayLinks overlayToken={overlayToken} /></div>}
       {browserTab === "ticker"    && <div className="browser-panel-content"><TickerMessages messages={tickerMessages} /></div>}
 

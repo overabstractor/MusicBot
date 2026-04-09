@@ -38,7 +38,7 @@ export const Dashboard: React.FC = () => {
     nowPlaying, appQueue, activePlaylistName, connected,
     tiktokStatus, twitchStatus, kickStatus,
     integrationEvents, queueSettings, tickerMessages,
-    queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, dismissDownloadError,
+    queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, authUpdatedAt, dismissDownloadError,
   } = useSignalR(OVERLAY_TOKEN);
 
   const { theme, toggle: toggleTheme } = useTheme();
@@ -198,6 +198,7 @@ export const Dashboard: React.FC = () => {
           tiktokEvents={integrationEvents.filter(e => e.source === "tiktok")}
           twitchEvents={integrationEvents.filter(e => e.source === "twitch")}
           kickEvents={integrationEvents.filter(e => e.source === "kick")}
+          authUpdatedAt={authUpdatedAt}
           tickerMessages={tickerMessages}
           overlayToken={OVERLAY_TOKEN}
         />

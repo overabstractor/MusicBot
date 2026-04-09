@@ -22,6 +22,14 @@ public partial class TikTokLoginWindow : Window
     private enum State { WaitingForLogin, WaitingForProfileRedirect, Done }
     private State _state = State.WaitingForLogin;
 
+    // Known non-username path segments that TikTok can redirect to after login
+    private static readonly HashSet<string> _ignoredHandles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "explore", "creators", "live", "following", "foryou", "for-you",
+        "friends", "messages", "notifications", "profile", "login",
+        "home", "discover", "search", "upload", "fyp",
+    };
+
     private bool _silentRestore;
 
     // Polls for sessionid cookie while on the login page — detects QR login completion
@@ -29,13 +37,6 @@ public partial class TikTokLoginWindow : Window
 
     // Cookies captured right after login, held until username is resolved
     private string? _pendingCookieString;
-
-    // Pages whose /@handle we must NOT treat as the logged-in username
-    private static readonly HashSet<string> _ignoredHandles = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "explore", "creators", "live", "following", "foryou",
-        "friends", "messages", "notifications", "profile", "login",
-    };
 
     public TikTokLoginWindow()
     {
@@ -153,14 +154,30 @@ public partial class TikTokLoginWindow : Window
             .Where(c => !string.IsNullOrWhiteSpace(c.Value))
             .Select(c => $"{c.Name}={c.Value}"));
 
-        // Navigate to /profile/ — TikTok redirects to /@username, giving us the handle for free
-        _state = State.WaitingForProfileRedirect;
         Dispatcher.Invoke(() =>
         {
-            StatusText.Text = "Detectando usuario…";
+            StatusText.Text       = "Detectando usuario…";
             StatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
-            WebView.CoreWebView2.Navigate(ProfileUrl);
         });
+
+        // Fast path: extract username via JS without an extra page load
+        var username = await TryGetUsernameViaJsAsync(cookies);
+
+        if (username != null)
+        {
+            _state = State.Done;
+            Serilog.Log.Information("TikTok username via JS: {Username}", username);
+            MusicBot.AppEvents.NotifyTikTokCookiesCaptured(_pendingCookieString, username);
+            Dispatcher.Invoke(() => StatusText.Text = $"Sesión iniciada como @{username}. Cerrando…");
+            await Task.Delay(800);
+            Dispatcher.Invoke(Hide);
+        }
+        else
+        {
+            // Fallback: navigate to /profile/ and let the redirect reveal the handle
+            _state = State.WaitingForProfileRedirect;
+            Dispatcher.Invoke(() => WebView.CoreWebView2.Navigate(ProfileUrl));
+        }
     }
 
     // ── State: reading username from /profile/ redirect ───────────────────────
@@ -215,6 +232,83 @@ public partial class TikTokLoginWindow : Window
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Tries to extract the logged-in TikTok username via JavaScript without navigating to another page.
+    /// Checks (in order): current URL, TikTok's in-page state, passport API, and cookies.
+    /// </summary>
+    private async Task<string?> TryGetUsernameViaJsAsync(IReadOnlyList<CoreWebView2Cookie> cookies)
+    {
+        // 1. Fast: check cookies directly (some TikTok regions set a 'unique_id' cookie)
+        foreach (var name in new[] { "unique_id", "user_unique_id", "username" })
+        {
+            var ck = cookies.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(ck?.Value))
+            {
+                var val = Uri.UnescapeDataString(ck.Value).TrimStart('@');
+                if (!string.IsNullOrWhiteSpace(val) && !_ignoredHandles.Contains(val))
+                {
+                    Serilog.Log.Information("TikTok username from cookie '{Name}': {Username}", name, val);
+                    return val;
+                }
+            }
+        }
+
+        // 2. Try JavaScript: current URL handle + in-page state + passport API
+        const string script = """
+            (async function() {
+                try {
+                    // a. Current URL may already be /@username after login
+                    const urlM = location.href.match(/tiktok\.com\/@([A-Za-z0-9._]+)/);
+                    if (urlM?.[1]) return urlM[1];
+
+                    // b. TikTok SPA global state (_SIGI_STATE or SIGI_STATE)
+                    const sigi = window._SIGI_STATE || window.SIGI_STATE;
+                    if (sigi) {
+                        const u = sigi?.LoginReducer?.loginUser?.uniqueId
+                               || sigi?.UserModule?.loginUserInfo?.uniqueId;
+                        if (u) return String(u);
+                    }
+
+                    // c. TikTok passport API (internal, available when logged in)
+                    try {
+                        const r = await fetch('/api/passport/account/info/v2/?aid=1988', { credentials: 'include' });
+                        if (r.ok) {
+                            const d = await r.json();
+                            const u = d?.data?.user_info?.username || d?.data?.user_info?.unique_id;
+                            if (u) return String(u);
+                        }
+                    } catch(e) {}
+
+                    // d. Webcast user API (also authenticated)
+                    try {
+                        const r2 = await fetch('https://webcast.tiktok.com/webcast/user/me/?aid=1988', { credentials: 'include' });
+                        if (r2.ok) {
+                            const d2 = await r2.json();
+                            const u2 = d2?.data?.user?.uniqueId || d2?.data?.uniqueId;
+                            if (u2) return String(u2);
+                        }
+                    } catch(e) {}
+                } catch(e) {}
+                return null;
+            })()
+            """;
+
+        try
+        {
+            var raw = await WebView.CoreWebView2.ExecuteScriptAsync(script);
+            if (raw == "null" || string.IsNullOrWhiteSpace(raw)) return null;
+            var handle = JsonSerializer.Deserialize<string>(raw)?.TrimStart('@');
+            if (!string.IsNullOrWhiteSpace(handle) && !_ignoredHandles.Contains(handle))
+                return handle;
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Debug(ex, "TikTok JS username extraction failed (will fall back to /profile/)");
+        }
+
+        return null;
+    }
 
     private static string? ExtractHandleFromUrl(string url)
     {

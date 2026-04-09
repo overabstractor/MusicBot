@@ -8,9 +8,10 @@ interface Props {
   tiktokEvents: IntegrationEvent[];
   twitchEvents: IntegrationEvent[];
   kickEvents:   IntegrationEvent[];
+  authUpdatedAt?: number;
 }
 
-export const PlatformConnections: React.FC<Props> = ({ tiktokEvents, twitchEvents, kickEvents }) => {
+export const PlatformConnections: React.FC<Props> = ({ tiktokEvents, twitchEvents, kickEvents, authUpdatedAt }) => {
   const [platforms, setPlatforms] = useState<PlatformState[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,8 +41,8 @@ export const PlatformConnections: React.FC<Props> = ({ tiktokEvents, twitchEvent
   return (
     <div className="platforms-grid">
       <TikTokCard state={tiktok} onSaved={refresh} events={tiktokEvents} />
-      <TwitchCard state={twitch} onSaved={refresh} events={twitchEvents} />
-      <KickCard   state={kick}   onSaved={refresh} events={kickEvents} />
+      <TwitchCard state={twitch} onSaved={refresh} events={twitchEvents} authUpdatedAt={authUpdatedAt} />
+      <KickCard   state={kick}   onSaved={refresh} events={kickEvents}   authUpdatedAt={authUpdatedAt} />
     </div>
   );
 };
@@ -214,8 +215,8 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 
 // ── Twitch card ───────────────────────────────────────────────────────────────
 
-const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[] }> = ({
-  state, onSaved, events,
+const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[]; authUpdatedAt?: number }> = ({
+  state, onSaved, events, authUpdatedAt,
 }) => {
   const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
@@ -226,8 +227,14 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   const [authBusy, setAuthBusy] = useState(false);
 
   useEffect(() => {
-    api.getTwitchStatus().then(setTwitchAuth).catch(() => setTwitchAuth({ authenticated: false, username: null }));
-  }, []);
+    api.getTwitchStatus().then(r => {
+      setTwitchAuth(r);
+      if (r.authenticated && r.username) {
+        setAuthBusy(false);
+        onSaved();
+      }
+    }).catch(() => setTwitchAuth({ authenticated: false, username: null }));
+  }, [authUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveAndConnect = async (username: string) => {
     setConnecting(true);
@@ -247,9 +254,8 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     setAuthBusy(true);
     try {
       const { url } = await api.getTwitchAuthUrl();
-      const popup = window.open(url, "_blank", "width=500,height=700");
+      await api.openInBrowser(url);
       const poll = setInterval(async () => {
-        if (popup?.closed) { clearInterval(poll); setAuthBusy(false); return; }
         const r = await api.getTwitchStatus().catch(() => ({ authenticated: false, username: null }));
         if (r.authenticated) {
           clearInterval(poll);
@@ -333,8 +339,8 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 
 // ── Kick card ─────────────────────────────────────────────────────────────────
 
-const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[] }> = ({
-  state, onSaved, events,
+const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[]; authUpdatedAt?: number }> = ({
+  state, onSaved, events, authUpdatedAt,
 }) => {
   const [confirmModal, confirm] = useConfirm();
   const cfg = state?.config as KickConfig | null;
@@ -353,9 +359,13 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
   useEffect(() => {
     api.getKickStatus().then(r => {
       setKickAuth(r);
-      if (r.authenticated && r.channel && !channel) setChannel(r.channel);
+      if (r.authenticated && r.channel) {
+        if (!channel) setChannel(r.channel);
+        setAuthBusy(false);
+        onSaved();
+      }
     }).catch(() => setKickAuth({ authenticated: false, channel: null }));
-  }, []);
+  }, [authUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveAndConnect = async (ch: string) => {
     setConnecting(true);
@@ -375,13 +385,8 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
     setAuthBusy(true);
     try {
       const { url } = await api.getKickAuthUrl();
-      const popup = window.open(url, "_blank", "width=500,height=700");
+      await api.openInBrowser(url);
       const poll = setInterval(async () => {
-        if (popup?.closed) {
-          clearInterval(poll);
-          setAuthBusy(false);
-          return;
-        }
         const r = await api.getKickStatus().catch(() => ({ authenticated: false, channel: null }));
         if (r.authenticated) {
           clearInterval(poll);

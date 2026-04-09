@@ -55,10 +55,64 @@ public class YtDlpDownloaderService
         _ytdl = new YoutubeDL
         {
             YoutubeDLPath  = ResolveYtDlpPath(_settings.YtDlpPath),
-            FFmpegPath     = _settings.FfmpegPath ?? "ffmpeg",
+            FFmpegPath     = ResolveFfmpegPath(_settings.FfmpegPath),
             OutputFolder   = _settings.LibraryPath,
             OverwriteFiles = false,
         };
+    }
+
+    /// <summary>
+    /// Ensures ffmpeg is available next to the executable.
+    /// Downloads it automatically if missing.
+    /// Called by YtDlpSetupService at startup.
+    /// </summary>
+    public async Task EnsureFfmpegAsync()
+    {
+        var path = ResolveFfmpegPath(_settings.FfmpegPath);
+
+        if (File.Exists(path))
+        {
+            _logger.LogInformation("ffmpeg disponible en '{Path}'", path);
+            _ytdl.FFmpegPath = path;
+            return;
+        }
+
+        if (IsOnPath(_settings.FfmpegPath))
+        {
+            _logger.LogInformation("ffmpeg encontrado en PATH");
+            return;
+        }
+
+        _logger.LogInformation("ffmpeg no encontrado — descargando automáticamente en '{Dir}'...",
+            AppContext.BaseDirectory);
+
+        try
+        {
+            await YoutubeDLSharp.Utils.DownloadFFmpeg(AppContext.BaseDirectory);
+            _ytdl.FFmpegPath = path;
+            _logger.LogInformation("ffmpeg descargado correctamente en '{Path}'", path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudo descargar ffmpeg automáticamente. " +
+                "Instálalo manualmente con: winget install Gyan.FFmpeg");
+        }
+    }
+
+    /// <summary>
+    /// Resolves the effective ffmpeg path:
+    /// 1. Next to the executable (preferred — works after auto-download)
+    /// 2. Configured path if absolute and exists
+    /// 3. Configured name if on PATH
+    /// 4. Falls back to BaseDirectory/ffmpeg.exe (download target)
+    /// </summary>
+    private static string ResolveFfmpegPath(string configured)
+    {
+        var appDirExe = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
+        if (File.Exists(appDirExe)) return appDirExe;
+        if (Path.IsPathRooted(configured) && File.Exists(configured)) return configured;
+        if (IsOnPath(configured)) return configured;
+        return appDirExe; // download target
     }
 
     /// <summary>

@@ -69,9 +69,10 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            Serilog.Log.Error(ex, "WebView2 falló al inicializar");
             SysWinMsg.Show(
-                $"No se pudo inicializar el navegador integrado.\n\n" +
-                $"Asegúrate de tener instalado el runtime de WebView2.\n\n{ex.Message}",
+                $"No se pudo inicializar el navegador integrado.\n\n{ex.Message}\n\n" +
+                $"Si el problema persiste, reinstala MusicBot para que vuelva a instalar WebView2 automáticamente.",
                 "MusicBot — Error de WebView2",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }

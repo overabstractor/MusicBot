@@ -74,6 +74,7 @@ export function useSignalR(overlayToken: string | null) {
   const [playlistUpdateCount, setPlaylistUpdateCount] = useState(0);
   const [downloadStates,     setDownloadStates]     = useState<Record<string, DownloadState>>({});
   const [downloadErrors,     setDownloadErrors]     = useState<Array<{ id: number; title: string; artist: string; reason?: string }>>([]);
+  const [authUpdatedAt,      setAuthUpdatedAt]      = useState(0);
 
   const connect = useCallback(async () => {
     // Abort if unmounted or a connection already exists
@@ -173,6 +174,8 @@ export function useSignalR(overlayToken: string | null) {
       }, 12000);
     });
 
+    conn.on("auth:updated", () => setAuthUpdatedAt(n => n + 1));
+
     conn.on("integration:event", (p: Omit<IntegrationEvent, "id" | "timestamp">) => {
       setIntegrationEvents(prev =>
         [{ ...p, id: ++_evId, timestamp: new Date() }, ...prev].slice(0, 30)
@@ -228,5 +231,5 @@ export function useSignalR(overlayToken: string | null) {
     };
   }, [connect, overlayToken]);
 
-  return { nowPlaying, spotifyQueue, appQueue, activePlaylistName, connected, tiktokStatus, twitchStatus, kickStatus, integrationEvents, queueSettings, tickerMessages, queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, dismissDownloadError: (id: number) => setDownloadErrors(prev => prev.filter(e => e.id !== id)) };
+  return { nowPlaying, spotifyQueue, appQueue, activePlaylistName, connected, tiktokStatus, twitchStatus, kickStatus, integrationEvents, queueSettings, tickerMessages, queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, authUpdatedAt, dismissDownloadError: (id: number) => setDownloadErrors(prev => prev.filter(e => e.id !== id)) };
 }
