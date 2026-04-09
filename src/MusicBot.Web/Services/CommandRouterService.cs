@@ -1,6 +1,7 @@
 using System.IO;
 using System.Web;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using MusicBot.Core.Interfaces;
 using MusicBot.Core.Models;
 using MusicBot.Hubs;
@@ -17,6 +18,8 @@ public class CommandRouterService
     private readonly KickVoteService               _kickVote;
     private readonly BannedSongService             _banned;
     private readonly PresenceCheckService          _presence;
+    private readonly AutoQueueService              _autoQueue;
+    private readonly IServiceScopeFactory          _scopeFactory;
     private readonly IHubContext<OverlayHub>       _hub;
 
     public CommandRouterService(
@@ -28,17 +31,21 @@ public class CommandRouterService
         KickVoteService kickVote,
         BannedSongService banned,
         PresenceCheckService presence,
+        AutoQueueService autoQueue,
+        IServiceScopeFactory scopeFactory,
         IHubContext<OverlayHub> hub)
     {
-        _logger     = logger;
-        _sync       = sync;
-        _metadata   = metadata;
-        _library    = library;
-        _downloader = downloader;
-        _kickVote   = kickVote;
-        _banned     = banned;
-        _presence   = presence;
-        _hub        = hub;
+        _logger       = logger;
+        _sync         = sync;
+        _metadata     = metadata;
+        _library      = library;
+        _downloader   = downloader;
+        _kickVote     = kickVote;
+        _banned       = banned;
+        _presence     = presence;
+        _autoQueue    = autoQueue;
+        _scopeFactory = scopeFactory;
+        _hub          = hub;
     }
 
     public async Task<CommandResult> HandleAsync(BotCommand command, UserServices services)
@@ -51,6 +58,11 @@ public class CommandRouterService
                 "skip"          => await HandleSkip(services),
                 "selfskip"      => await HandleUserSkip(command, services),
                 "revoke"        => HandleRevoke(command, services),
+                "song"          => HandleSong(services),
+                "like" or "love"=> await HandleLike(services),
+                "queue" or "cola"=> HandleQueue(services),
+                "pos" or "position" => HandlePos(command, services),
+                "history" or "historial" => await HandleHistory(),
                 "info"          => HandleInfo(command, services),
                 "aqui"          => HandleAqui(command),
                 "bump"          => HandleBump(command, services),
@@ -209,6 +221,18 @@ public class CommandRouterService
         return CommandResult.Ok($"@{command.RequestedBy} salteó su canción");
     }
 
+    /// <summary>Muestra la canción que está sonando actualmente.</summary>
+    private static CommandResult HandleSong(UserServices services)
+    {
+        var current = services.Queue.GetCurrentItem();
+        if (current == null)
+            return CommandResult.Ok("No hay ninguna canción sonando ahora mismo");
+
+        var song   = current.Song;
+        var artist = string.IsNullOrEmpty(song.Artist) ? "" : $" - {song.Artist}";
+        return CommandResult.Ok($"Sonando: \"{song.Title}{artist}\" (pedida por @{current.RequestedBy})");
+    }
+
     /// <summary>El usuario elimina su canción de la cola (upcoming).</summary>
     private static CommandResult HandleRevoke(BotCommand command, UserServices services)
     {
@@ -284,6 +308,75 @@ public class CommandRouterService
         return kept
             ? CommandResult.Ok("¡La canción se queda! El chat la salvó")
             : CommandResult.Fail("No hay canción esperando confirmación");
+    }
+
+    /// <summary>Agrega la canción actual a la auto-cola.</summary>
+    private async Task<CommandResult> HandleLike(UserServices services)
+    {
+        var current = services.Queue.GetCurrentItem();
+        if (current == null)
+            return CommandResult.Fail("No hay ninguna canción sonando ahora mismo");
+
+        var added = await _autoQueue.AddAsync(current.Song);
+        var title = current.Song.Title;
+        return added
+            ? CommandResult.Ok($"❤️ \"{title}\" añadida a la auto-cola")
+            : CommandResult.Fail($"\"{title}\" ya estaba en la auto-cola");
+    }
+
+    /// <summary>Muestra las próximas canciones en la cola.</summary>
+    private static CommandResult HandleQueue(UserServices services)
+    {
+        var upcoming = services.Queue.GetUpcoming()
+            .Where(i => !i.IsPlaylistItem)
+            .Take(5)
+            .ToList();
+
+        if (upcoming.Count == 0)
+            return CommandResult.Ok("La cola de solicitudes está vacía");
+
+        var items = string.Join(", ", upcoming.Select((i, idx) =>
+            $"#{idx + 1} \"{i.Song.Title}\" (@{i.RequestedBy})"));
+        return CommandResult.Ok($"Cola ({upcoming.Count}): {items}");
+    }
+
+    /// <summary>Muestra la posición del usuario en la cola.</summary>
+    private static CommandResult HandlePos(BotCommand command, UserServices services)
+    {
+        if (string.IsNullOrWhiteSpace(command.RequestedBy))
+            return CommandResult.Fail("RequestedBy es requerido");
+
+        var upcoming = services.Queue.GetUpcoming();
+        var idx = upcoming.FindIndex(i =>
+            i.RequestedBy.Equals(command.RequestedBy, StringComparison.OrdinalIgnoreCase));
+
+        if (idx < 0)
+            return CommandResult.Fail($"@{command.RequestedBy} no tienes canciones en la cola");
+
+        var item    = upcoming[idx];
+        var waitMs  = upcoming.Take(idx).Sum(i => i.Song.DurationMs);
+        var waitMin = (int)Math.Ceiling(waitMs / 60_000.0);
+        var waitStr = waitMin > 0 ? $" (~{waitMin} min)" : "";
+        return CommandResult.Ok(
+            $"@{command.RequestedBy}: \"{item.Song.Title}\" está en posición #{idx + 1}{waitStr}");
+    }
+
+    /// <summary>Muestra las últimas 3 canciones reproducidas.</summary>
+    private async Task<CommandResult> HandleHistory()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MusicBot.Data.MusicBotDbContext>();
+        var recent = await db.PlayedSongs
+            .OrderByDescending(p => p.PlayedAt)
+            .Take(3)
+            .ToListAsync();
+
+        if (recent.Count == 0)
+            return CommandResult.Ok("No hay historial de canciones aún");
+
+        var list = string.Join(", ", recent.Select(p =>
+            string.IsNullOrEmpty(p.Artist) ? $"\"{p.Title}\"" : $"\"{p.Title}\" ({p.Artist})"));
+        return CommandResult.Ok($"Últimas canciones: {list}");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

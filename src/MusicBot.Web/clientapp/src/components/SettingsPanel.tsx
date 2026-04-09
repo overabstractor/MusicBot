@@ -256,6 +256,24 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
       </div>
 
       <div className="settings-section">
+        <div className="settings-section-title">Auto-cola</div>
+
+        <label className="settings-row settings-row-toggle">
+          <span className="settings-label">Habilitar auto-cola</span>
+          <div
+            className={`settings-toggle${form.autoQueueEnabled ? " on" : ""}`}
+            onClick={() => set("autoQueueEnabled", !form.autoQueueEnabled)}
+          >
+            <div className="settings-toggle-thumb" />
+          </div>
+        </label>
+        <p className="settings-hint">
+          Cuando la cola de solicitudes está vacía, reproduce canciones aleatoriamente del pool de la auto-cola.
+          Administra el pool en el tab <strong>Auto-cola</strong>.
+        </p>
+      </div>
+
+      <div className="settings-section">
         <div className="settings-section-title">Aplicación</div>
 
         <div className="settings-row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 6 }}>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Search, X, Play, Plus, Music, ArrowLeft, Trash2, MoreHorizontal,
   Shuffle, Home, ListMusic, Download, Heart, Library,
-  Settings, Zap, Monitor, MessageSquare,
+  Settings, Zap, Monitor, MessageSquare, Terminal,
 } from "lucide-react";
 import { api } from "../services/api";
 import { Song, PlaylistLibrary, PlaylistLibrarySong } from "../types/models";
@@ -14,15 +14,20 @@ import { SettingsPanel } from "./SettingsPanel";
 import { PlatformConnections } from "./PlatformConnections";
 import { OverlayLinks } from "./OverlayLinks";
 import { TickerMessages } from "./TickerMessages";
+import { CommandsPanel } from "./CommandsPanel";
+import { AutoQueuePanel } from "./AutoQueuePanel";
 import { QueueSettings, IntegrationEvent, TickerMessage } from "../hooks/useSignalR";
+import { NowPlayingState } from "../types/models";
 
-type BrowserTab = "home" | "settings" | "platforms" | "overlays" | "ticker";
+type BrowserTab = "home" | "settings" | "platforms" | "overlays" | "ticker" | "commands" | "autocola";
 
 const BROWSER_TABS: { id: BrowserTab; label: string; icon: React.ReactNode }[] = [
   { id: "home",      label: "Mi librería", icon: <Library size={13} />        },
+  { id: "autocola",  label: "Auto-cola",   icon: <Heart size={13} />          },
   { id: "platforms", label: "Plataformas", icon: <Zap size={13} />            },
   { id: "overlays",  label: "Overlays",    icon: <Monitor size={13} />        },
   { id: "ticker",    label: "Mensajes",    icon: <MessageSquare size={13} />  },
+  { id: "commands",  label: "Comandos",    icon: <Terminal size={13} />       },
   { id: "settings",  label: "Ajustes",     icon: <Settings size={13} />       },
 ];
 
@@ -36,6 +41,7 @@ interface Props {
   playlistsRefreshKey?: number;
   likedUris?: Set<string>;
   onToggleLike?: (song: SongRef) => void;
+  nowPlaying?: NowPlayingState | null;
   // Settings tabs props
   settings: QueueSettings;
   tiktokEvents: IntegrationEvent[];
@@ -49,7 +55,7 @@ interface Props {
 export const MainBrowser: React.FC<Props> = ({
   selectedPlaylistId, onSelectPlaylist, onClearSelection, onPlaylistsChanged, nowPlayingUri, queueUpdateCount,
   playlistsRefreshKey, likedUris, onToggleLike,
-  settings, tiktokEvents, twitchEvents, kickEvents, tickerMessages, overlayToken, authUpdatedAt,
+  nowPlaying, settings, tiktokEvents, twitchEvents, kickEvents, tickerMessages, overlayToken, authUpdatedAt,
 }) => {
   const [confirmModal, confirm] = useConfirm();
   const [browserTab, setBrowserTab] = useState<BrowserTab>("home");
@@ -445,10 +451,12 @@ export const MainBrowser: React.FC<Props> = ({
       </div>
 
       {/* ── Settings / Platforms / Overlays / Ticker panels ── */}
+      {browserTab === "autocola"  && <div className="browser-panel-content"><AutoQueuePanel nowPlaying={nowPlaying} /></div>}
       {browserTab === "settings"  && <div className="browser-panel-content"><SettingsPanel settings={settings} /></div>}
       {browserTab === "platforms" && <div className="browser-panel-content"><PlatformConnections tiktokEvents={tiktokEvents} twitchEvents={twitchEvents} kickEvents={kickEvents} authUpdatedAt={authUpdatedAt} /></div>}
       {browserTab === "overlays"  && <div className="browser-panel-content"><OverlayLinks overlayToken={overlayToken} /></div>}
       {browserTab === "ticker"    && <div className="browser-panel-content"><TickerMessages messages={tickerMessages} /></div>}
+      {browserTab === "commands"  && <div className="browser-panel-content"><CommandsPanel /></div>}
 
       {/* ── Search bar (home tab only) ───────────────────────── */}
       {browserTab === "home" && <div className="browser-search-bar">

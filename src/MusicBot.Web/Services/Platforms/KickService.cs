@@ -100,30 +100,42 @@ public class KickService : BackgroundService
         try
         {
             var content = msg.Content?.Trim();
-            if (string.IsNullOrEmpty(content) || !content.StartsWith('!')) return;
+            if (string.IsNullOrEmpty(content) || content[0] is not ('!' or '.' or '/')) return;
 
             var username = msg.Sender?.Username ?? "viewer";
             var parts    = content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-            var cmd      = parts[0].ToLowerInvariant();
+            var cmd      = parts[0][1..].ToLowerInvariant(); // strip prefix char
             var args     = parts.Length > 1 ? parts[1].Trim() : "";
 
             BotCommand? command = cmd switch
             {
-                "!play" or "!sr" when !string.IsNullOrEmpty(args) =>
+                "play" or "sr" when !string.IsNullOrEmpty(args) =>
                     new BotCommand { Type = "play",     Query = args, RequestedBy = username, Platform = "kick" },
-                "!skip" =>
+                "skip" =>
                     new BotCommand { Type = "selfskip", RequestedBy = username, Platform = "kick" },
-                "!si" or "!yes" =>
+                "si" or "yes" =>
                     new BotCommand { Type = "si",       RequestedBy = username, Platform = "kick" },
-                "!no" =>
+                "no" =>
                     new BotCommand { Type = "no",       RequestedBy = username, Platform = "kick" },
-                "!revoke" or "!quitar" =>
+                "revoke" or "quitar" =>
                     new BotCommand { Type = "revoke",   RequestedBy = username, Platform = "kick" },
-                "!info" =>
+                "bump" =>
+                    new BotCommand { Type = "bump",     RequestedBy = username, Platform = "kick" },
+                "song" or "cancion" or "current" =>
+                    new BotCommand { Type = "song",     RequestedBy = username, Platform = "kick" },
+                "like" or "love" =>
+                    new BotCommand { Type = "like",     RequestedBy = username, Platform = "kick" },
+                "queue" or "cola" =>
+                    new BotCommand { Type = "queue",    RequestedBy = username, Platform = "kick" },
+                "pos" or "position" =>
+                    new BotCommand { Type = "pos",      RequestedBy = username, Platform = "kick" },
+                "history" or "historial" =>
+                    new BotCommand { Type = "history",  RequestedBy = username, Platform = "kick" },
+                "info" =>
                     new BotCommand { Type = "info",     RequestedBy = username, Platform = "kick" },
-                "!aqui" or "!here" =>
+                "aqui" or "here" =>
                     new BotCommand { Type = "aqui",     RequestedBy = username, Platform = "kick" },
-                "!keep" =>
+                "keep" =>
                     new BotCommand { Type = "keep",     RequestedBy = username, Platform = "kick" },
                 _ => null
             };

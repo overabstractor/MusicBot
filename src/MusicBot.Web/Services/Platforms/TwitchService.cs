@@ -123,30 +123,42 @@ public class TwitchService : BackgroundService
     private async Task OnMessage(OnMessageReceivedArgs e, TwitchClient client)
     {
         var message = e.ChatMessage.Message?.Trim();
-        if (string.IsNullOrEmpty(message) || !message.StartsWith('!')) return;
+        if (string.IsNullOrEmpty(message) || message[0] is not ('!' or '.' or '/')) return;
 
         var username = e.ChatMessage.Username;
         var parts    = message.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        var cmd      = parts[0].ToLowerInvariant();
+        var cmd      = parts[0][1..].ToLowerInvariant(); // strip prefix char
         var args     = parts.Length > 1 ? parts[1].Trim() : "";
 
         BotCommand? command = cmd switch
         {
-            "!play" or "!sr" when !string.IsNullOrEmpty(args) =>
+            "play" or "sr" when !string.IsNullOrEmpty(args) =>
                 new BotCommand { Type = "play",     Query = args, RequestedBy = username, Platform = "twitch" },
-            "!skip" =>
+            "skip" =>
                 new BotCommand { Type = "selfskip", RequestedBy = username, Platform = "twitch" },
-            "!si" or "!yes" =>
+            "si" or "yes" =>
                 new BotCommand { Type = "si",       RequestedBy = username, Platform = "twitch" },
-            "!no" =>
+            "no" =>
                 new BotCommand { Type = "no",       RequestedBy = username, Platform = "twitch" },
-            "!revoke" or "!quitar" =>
+            "revoke" or "quitar" =>
                 new BotCommand { Type = "revoke",   RequestedBy = username, Platform = "twitch" },
-            "!info" =>
+            "bump" =>
+                new BotCommand { Type = "bump",     RequestedBy = username, Platform = "twitch" },
+            "song" or "cancion" or "current" =>
+                new BotCommand { Type = "song",     RequestedBy = username, Platform = "twitch" },
+            "like" or "love" =>
+                new BotCommand { Type = "like",     RequestedBy = username, Platform = "twitch" },
+            "queue" or "cola" =>
+                new BotCommand { Type = "queue",    RequestedBy = username, Platform = "twitch" },
+            "pos" or "position" =>
+                new BotCommand { Type = "pos",      RequestedBy = username, Platform = "twitch" },
+            "history" or "historial" =>
+                new BotCommand { Type = "history",  RequestedBy = username, Platform = "twitch" },
+            "info" =>
                 new BotCommand { Type = "info",     RequestedBy = username, Platform = "twitch" },
-            "!aqui" or "!here" =>
+            "aqui" or "here" =>
                 new BotCommand { Type = "aqui",     RequestedBy = username, Platform = "twitch" },
-            "!keep" =>
+            "keep" =>
                 new BotCommand { Type = "keep",     RequestedBy = username, Platform = "twitch" },
             _ => null
         };

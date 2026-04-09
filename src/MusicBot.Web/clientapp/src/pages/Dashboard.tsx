@@ -190,6 +190,7 @@ export const Dashboard: React.FC = () => {
           onClearSelection={() => setSelectedPlaylist(null)}
           onPlaylistsChanged={() => setLibRefreshKey(k => k + 1)}
           nowPlayingUri={nowPlayingUri}
+          nowPlaying={nowPlaying}
           queueUpdateCount={queueUpdateCount}
           playlistsRefreshKey={libRefreshKey}
           likedUris={likedUris}

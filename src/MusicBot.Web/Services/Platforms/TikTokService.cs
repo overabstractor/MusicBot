@@ -133,29 +133,41 @@ public class TikTokService : BackgroundService
     {
         var username = e.Sender?.UniqueId ?? "viewer";
         var message  = e.Message?.Trim();
-        if (string.IsNullOrEmpty(message) || !message.StartsWith('!')) return;
+        if (string.IsNullOrEmpty(message) || message[0] is not ('!' or '.' or '/')) return;
 
         var parts = message.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        var cmd   = parts[0].ToLowerInvariant();
+        var cmd   = parts[0][1..].ToLowerInvariant(); // strip prefix char
         var args  = parts.Length > 1 ? parts[1].Trim() : "";
 
         BotCommand? command = cmd switch
         {
-            "!play" or "!sr" when !string.IsNullOrEmpty(args) =>
+            "play" or "sr" when !string.IsNullOrEmpty(args) =>
                 new BotCommand { Type = "play",     Query = args, RequestedBy = username, Platform = "tiktok" },
-            "!skip" =>
+            "skip" =>
                 new BotCommand { Type = "selfskip", RequestedBy = username, Platform = "tiktok" },
-            "!si" or "!yes" =>
+            "si" or "yes" =>
                 new BotCommand { Type = "si",       RequestedBy = username, Platform = "tiktok" },
-            "!no" =>
+            "no" =>
                 new BotCommand { Type = "no",       RequestedBy = username, Platform = "tiktok" },
-            "!revoke" or "!quitar" =>
+            "revoke" or "quitar" =>
                 new BotCommand { Type = "revoke",   RequestedBy = username, Platform = "tiktok" },
-            "!info" =>
+            "bump" =>
+                new BotCommand { Type = "bump",     RequestedBy = username, Platform = "tiktok" },
+            "song" or "cancion" or "current" =>
+                new BotCommand { Type = "song",     RequestedBy = username, Platform = "tiktok" },
+            "like" or "love" =>
+                new BotCommand { Type = "like",     RequestedBy = username, Platform = "tiktok" },
+            "queue" or "cola" =>
+                new BotCommand { Type = "queue",    RequestedBy = username, Platform = "tiktok" },
+            "pos" or "position" =>
+                new BotCommand { Type = "pos",      RequestedBy = username, Platform = "tiktok" },
+            "history" or "historial" =>
+                new BotCommand { Type = "history",  RequestedBy = username, Platform = "tiktok" },
+            "info" =>
                 new BotCommand { Type = "info",     RequestedBy = username, Platform = "tiktok" },
-            "!aqui" or "!here" =>
+            "aqui" or "here" =>
                 new BotCommand { Type = "aqui",     RequestedBy = username, Platform = "tiktok" },
-            "!keep" =>
+            "keep" =>
                 new BotCommand { Type = "keep",     RequestedBy = username, Platform = "tiktok" },
             _ => null
         };

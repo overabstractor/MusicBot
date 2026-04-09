@@ -295,7 +295,7 @@ public class PlatformConnectionManager
 
             _logger.LogDebug("TikTok chat @{User}: {Message}", username, message);
 
-            if (!message.StartsWith('!')) return;
+            if (message[0] is not ('!' or '.' or '/')) return;
             await RouteCommand(userId, username, message, "tiktok");
         }
         catch (Exception ex)
@@ -405,7 +405,7 @@ public class PlatformConnectionManager
         client.OnMessageReceived += async (_, e) =>
         {
             var msg = e.ChatMessage.Message?.Trim();
-            if (!string.IsNullOrEmpty(msg) && msg.StartsWith('!'))
+            if (!string.IsNullOrEmpty(msg) && msg[0] is ('!' or '.' or '/'))
                 await RouteCommand(userId, e.ChatMessage.Username, msg, "twitch");
         };
 
@@ -431,7 +431,7 @@ public class PlatformConnectionManager
         client.OnMessageReceived += msg =>
         {
             var content = msg.Content?.Trim();
-            if (!string.IsNullOrEmpty(content) && content.StartsWith('!'))
+            if (!string.IsNullOrEmpty(content) && content[0] is ('!' or '.' or '/'))
                 _ = RouteCommand(userId, msg.Sender?.Username ?? "viewer", content, "kick");
         };
 
@@ -463,26 +463,38 @@ public class PlatformConnectionManager
     private async Task<CommandResult?> RouteCommand(Guid userId, string username, string message, string platform)
     {
         var parts = message.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        var cmd   = parts[0].ToLowerInvariant();
+        var cmd   = parts[0][1..].ToLowerInvariant(); // strip prefix char (! . /)
         var args  = parts.Length > 1 ? parts[1].Trim() : "";
 
         BotCommand? command = cmd switch
         {
-            "!play" or "!sr" when !string.IsNullOrEmpty(args) =>
+            "play" or "sr" when !string.IsNullOrEmpty(args) =>
                 new BotCommand { Type = "play",     Query = args, RequestedBy = username, Platform = platform },
-            "!skip" =>
+            "skip" =>
                 new BotCommand { Type = "selfskip", RequestedBy = username, Platform = platform },
-            "!si" or "!yes" =>
+            "si" or "yes" =>
                 new BotCommand { Type = "si",       RequestedBy = username, Platform = platform },
-            "!no" =>
+            "no" =>
                 new BotCommand { Type = "no",       RequestedBy = username, Platform = platform },
-            "!revoke" or "!quitar" =>
+            "revoke" or "quitar" =>
                 new BotCommand { Type = "revoke",   RequestedBy = username, Platform = platform },
-            "!info" =>
+            "bump" =>
+                new BotCommand { Type = "bump",     RequestedBy = username, Platform = platform },
+            "song" or "cancion" or "current" =>
+                new BotCommand { Type = "song",     RequestedBy = username, Platform = platform },
+            "like" or "love" =>
+                new BotCommand { Type = "like",     RequestedBy = username, Platform = platform },
+            "queue" or "cola" =>
+                new BotCommand { Type = "queue",    RequestedBy = username, Platform = platform },
+            "pos" or "position" =>
+                new BotCommand { Type = "pos",      RequestedBy = username, Platform = platform },
+            "history" or "historial" =>
+                new BotCommand { Type = "history",  RequestedBy = username, Platform = platform },
+            "info" =>
                 new BotCommand { Type = "info",     RequestedBy = username, Platform = platform },
-            "!aqui" or "!here" =>
+            "aqui" or "here" =>
                 new BotCommand { Type = "aqui",     RequestedBy = username, Platform = platform },
-            "!keep" =>
+            "keep" =>
                 new BotCommand { Type = "keep",     RequestedBy = username, Platform = platform },
             _ => null
         };
