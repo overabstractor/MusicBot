@@ -49,10 +49,11 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
     setImporting(true);
     setImportMsg(null);
     try {
-      const name = importName.trim() || "Lista importada";
+      const userProvidedName = importName.trim();
+      const name = userProvidedName || `Lista ${Date.now()}`;
       const p    = await api.createPlaylist(name);
-      const r    = await api.importPlaylistSongs(p.id, url);
-      setImportMsg({ text: `✓ ${r.added} canciones importadas`, err: false });
+      const r    = await api.importPlaylistSongs(p.id, url, userProvidedName || undefined);
+      setImportMsg({ text: `✓ ${r.added} canciones importadas${r.name ? ` · "${r.name}"` : ""}`, err: false });
       setImportUrl(""); setImportName("");
       await load();
       onSelect(p.id);

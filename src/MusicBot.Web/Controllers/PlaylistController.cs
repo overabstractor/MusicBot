@@ -214,9 +214,10 @@ public class PlaylistController : ControllerBase
         if (playlist == null) return NotFound();
 
         List<Song> tracks;
+        string? importedName;
         try
         {
-            tracks = await _downloader.ImportPlaylistAsync(req.Url, 500);
+            (tracks, importedName) = await _downloader.ImportPlaylistAsync(req.Url, 500);
         }
         catch (Exception ex)
         {
@@ -226,6 +227,16 @@ public class PlaylistController : ControllerBase
         if (tracks.Count == 0)
             return BadRequest(new { error = "No se encontraron canciones en esa URL" });
 
+        // Auto-rename to the YouTube playlist title only when the user did not
+        // supply their own name (frontend passes userProvidedName when it did).
+        string? finalName = null;
+        bool userChoseName = !string.IsNullOrWhiteSpace(req.UserProvidedName);
+        if (!userChoseName && !string.IsNullOrEmpty(importedName) && !playlist.IsSystem)
+        {
+            await _playlists.RenameAsync(id, importedName);
+            finalName = importedName;
+        }
+
         var added = await _playlists.BulkAddAsync(id, tracks);
 
         // If this playlist is active, reload the background playlist
@@ -233,7 +244,7 @@ public class PlaylistController : ControllerBase
             await ReloadBackgroundPlaylistAsync(id);
 
         await BroadcastStatusAsync();
-        return Ok(new { added, skipped = tracks.Count - added, total = tracks.Count });
+        return Ok(new { added, skipped = tracks.Count - added, total = tracks.Count, name = finalName });
     }
 
     // ── Playback ──────────────────────────────────────────────────────────────
@@ -371,7 +382,7 @@ public class PlaylistController : ControllerBase
 
 public record PlaylistCreateRequest(string Name);
 public record PlaylistSongRequest(string SpotifyUri, string Title, string Artist, string? CoverUrl, int DurationMs);
-public record PlaylistImportRequest(string Url);
+public record PlaylistImportRequest(string Url, string? UserProvidedName = null);
 public record PlaylistPlayRequest(bool Shuffle = false);
 public record PlaySongRequest(bool Shuffle = false);
 public record PinReorderRequest(List<int> Ids);

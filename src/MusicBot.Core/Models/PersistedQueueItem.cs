@@ -16,7 +16,8 @@ public class PersistedQueueItem
     public int    DurationMs { get; set; }
 
     // Queue metadata
-    public string RequestedBy { get; set; } = "";
-    public string Platform    { get; set; } = "";
-    public long   AddedAt     { get; set; }
+    public string RequestedBy    { get; set; } = "";
+    public string Platform       { get; set; } = "";
+    public long   AddedAt        { get; set; }
+    public bool   IsPlaylistItem { get; set; }
 }

@@ -128,7 +128,7 @@ public class CommandsController : ControllerBase
             return BadRequest(new { error = "URL requerida" });
         try
         {
-            var tracks = await _downloader.ImportPlaylistAsync(url, limit);
+            var (tracks, _) = await _downloader.ImportPlaylistAsync(url, limit);
             return Ok(tracks);
         }
         catch (Exception ex)

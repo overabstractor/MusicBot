@@ -322,7 +322,7 @@ public class YtDlpDownloaderService
         return url.Replace("music.youtube.com", "www.youtube.com", StringComparison.OrdinalIgnoreCase);
     }
 
-    public async Task<List<Song>> ImportPlaylistAsync(string playlistUrl, int maxTracks = 200)
+    public async Task<(List<Song> Songs, string? PlaylistName)> ImportPlaylistAsync(string playlistUrl, int maxTracks = 200)
     {
         playlistUrl = NormalizeYouTubeUrl(playlistUrl);
         _logger.LogInformation("Importing playlist: {Url} (max {Max})", playlistUrl, maxTracks);
@@ -337,12 +337,12 @@ public class YtDlpDownloaderService
             UseShellExecute        = false,
             CreateNoWindow         = true,
         };
-        // --print outputs one line per entry (id<TAB>title<TAB>channel<TAB>duration).
-        // More reliable than -j/-J for paginated YouTube playlists.
-        // Thumbnail is always reconstructable from the video ID.
+        // --print outputs one line per entry:
+        //   playlist_title<TAB>id<TAB>title<TAB>channel<TAB>duration
+        // playlist_title is the same for every line; we capture it from the first.
         psi.ArgumentList.Add("--flat-playlist");
         psi.ArgumentList.Add("--print");
-        psi.ArgumentList.Add("%(id)s\t%(title)s\t%(channel)s\t%(duration)s");
+        psi.ArgumentList.Add("%(playlist_title)s\t%(id)s\t%(title)s\t%(channel)s\t%(duration)s");
         psi.ArgumentList.Add("--no-warnings");
         psi.ArgumentList.Add("--playlist-items");
         psi.ArgumentList.Add($"1-{maxTracks}");
@@ -351,7 +351,8 @@ public class YtDlpDownloaderService
         using var process = new Process { StartInfo = psi };
         process.Start();
 
-        var songs = new List<Song>();
+        var songs        = new List<Song>();
+        string? playlistName = null;
         try
         {
             string? line;
@@ -359,11 +360,15 @@ public class YtDlpDownloaderService
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
-                var parts  = line.Split('\t');
-                var id     = parts.Length > 0 ? parts[0].Trim() : null;
-                var title  = parts.Length > 1 ? parts[1].Trim() : "";
-                var chan    = parts.Length > 2 ? parts[2].Trim() : "";
-                var durStr = parts.Length > 3 ? parts[3].Trim() : "0";
+                var parts      = line.Split('\t');
+                var plTitle    = parts.Length > 0 ? parts[0].Trim() : null;
+                var id         = parts.Length > 1 ? parts[1].Trim() : null;
+                var title      = parts.Length > 2 ? parts[2].Trim() : "";
+                var chan        = parts.Length > 3 ? parts[3].Trim() : "";
+                var durStr     = parts.Length > 4 ? parts[4].Trim() : "0";
+
+                if (playlistName == null && !string.IsNullOrEmpty(plTitle) && plTitle != "NA")
+                    playlistName = plTitle;
 
                 if (string.IsNullOrEmpty(id) || id == "NA") continue;
 
@@ -393,7 +398,7 @@ public class YtDlpDownloaderService
 
         try { await process.WaitForExitAsync(); } catch { }
         _logger.LogInformation("Playlist import complete: {N} tracks from {Url}", songs.Count, playlistUrl);
-        return songs;
+        return (songs, playlistName);
     }
 
     /// <summary>Search YouTube and return matching songs.</summary>

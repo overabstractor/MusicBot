@@ -65,7 +65,7 @@ public class AutoQueueController : ControllerBase
 
         if (TryExtractYouTubePlaylistId(req.Url, out _))
         {
-            tracks = await _downloader.ImportPlaylistAsync(req.Url, 100);
+            (tracks, _) = await _downloader.ImportPlaylistAsync(req.Url, 100);
         }
         else if (TryExtractSpotifyPlaylistId(req.Url, out var pid) && services.Spotify.IsAuthenticated)
         {

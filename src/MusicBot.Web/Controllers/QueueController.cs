@@ -190,7 +190,7 @@ public class QueueController : ControllerBase
 
         if (TryExtractYouTubePlaylistId(req.Url, out _))
         {
-            tracks = await _downloader.ImportPlaylistAsync(req.Url, int.MaxValue);
+            (tracks, _) = await _downloader.ImportPlaylistAsync(req.Url, int.MaxValue);
         }
         else if (TryExtractSpotifyPlaylistId(req.Url, out var playlistId) && services.Spotify.IsAuthenticated)
         {
@@ -245,7 +245,7 @@ public class QueueController : ControllerBase
         if (!TryExtractYouTubePlaylistId(req.Url, out _))
             return BadRequest(new { error = "Solo se admiten playlists de YouTube para la cola de fondo" });
 
-        var tracks = await _downloader.ImportPlaylistAsync(req.Url, 500);
+        var (tracks, _) = await _downloader.ImportPlaylistAsync(req.Url, 500);
         if (tracks.Count == 0)
             return BadRequest(new { error = "La playlist está vacía o no se pudo importar" });
 

@@ -344,6 +344,9 @@ public class QueueService : IQueueService
             _backgroundPlaylist = new List<Song>(songs);
             _backgroundPlaylistName = playlistName;
             _playlistIndex = 0;
+            // Remove any stale playlist-origin items from the explicit queue so the
+            // new playlist's songs take effect immediately without old ones blocking.
+            _upcoming.RemoveAll(i => i.IsPlaylistItem);
         }
         OnQueueUpdated?.Invoke(GetState());
     }

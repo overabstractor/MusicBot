@@ -269,8 +269,8 @@ export const api = {
   removePlaylistSong: (id: number, uri: string) =>
     request<void>(`/api/playlists/${id}/songs/${encodeURIComponent(uri)}`, { method: "DELETE" }),
 
-  importPlaylistSongs: (id: number, url: string) =>
-    request<{ added: number; skipped: number; total: number }>(`/api/playlists/${id}/import`, { method: "POST", body: JSON.stringify({ url }) }),
+  importPlaylistSongs: (id: number, url: string, userProvidedName?: string) =>
+    request<{ added: number; skipped: number; total: number; name?: string }>(`/api/playlists/${id}/import`, { method: "POST", body: JSON.stringify({ url, userProvidedName }) }),
 
   activatePlaylist: (id: number, shuffle = false) =>
     request<{ message: string }>(`/api/playlists/${id}/play`, {

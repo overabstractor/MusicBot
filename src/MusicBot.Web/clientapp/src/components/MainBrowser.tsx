@@ -290,10 +290,11 @@ export const MainBrowser: React.FC<Props> = ({
     setLibImporting(true);
     setLibImportMsg(null);
     try {
-      const name = libImportName.trim() || "Lista importada";
+      const userProvidedName = libImportName.trim();
+      const name = userProvidedName || `Lista ${Date.now()}`;
       const p    = await api.createPlaylist(name);
-      const r    = await api.importPlaylistSongs(p.id, url);
-      setLibImportMsg({ text: `✓ ${r.added} canciones importadas`, err: false });
+      const r    = await api.importPlaylistSongs(p.id, url, userProvidedName || undefined);
+      setLibImportMsg({ text: `✓ ${r.added} canciones importadas${r.name ? ` · "${r.name}"` : ""}`, err: false });
       setLibImportUrl(""); setLibImportName("");
       onPlaylistsChanged();
       await loadHome();
