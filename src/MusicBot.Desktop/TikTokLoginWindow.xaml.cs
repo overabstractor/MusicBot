@@ -22,6 +22,9 @@ public partial class TikTokLoginWindow : Window
     private enum State { WaitingForLogin, WaitingForProfileRedirect, Done }
     private State _state = State.WaitingForLogin;
 
+    private static readonly System.Windows.Media.SolidColorBrush _brushMuted =
+        new(System.Windows.Media.Color.FromRgb(0x8B, 0x94, 0x9E));
+
     // Known non-username path segments that TikTok can redirect to after login
     private static readonly HashSet<string> _ignoredHandles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -59,7 +62,9 @@ public partial class TikTokLoginWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_silentRestore) return;
+        SetStatus("Iniciando navegador…", neutral: true);
         await InitWebViewAsync(contextMenus: true);
+        ShowOverlay("Cargando TikTok…");
         WebView.CoreWebView2.Navigate(LoginUrl);
         StartSessionPolling();
     }
@@ -88,8 +93,10 @@ public partial class TikTokLoginWindow : Window
 
     private async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-        // Hide loading overlay once the first page finishes loading
         Dispatcher.Invoke(() => LoadingOverlay.Visibility = Visibility.Collapsed);
+
+        if (!_silentRestore && _state == State.WaitingForLogin)
+            SetStatus("Inicia sesión con tu cuenta de TikTok.", neutral: true);
 
         try
         {
@@ -108,11 +115,7 @@ public partial class TikTokLoginWindow : Window
         {
             Serilog.Log.Warning(ex, "TikTok login window error in state {State}", _state);
             if (!_silentRestore)
-                Dispatcher.Invoke(() =>
-                {
-                    StatusText.Text = $"Error: {ex.Message}";
-                    StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
-                });
+                SetStatus($"Error: {ex.Message}", error: true);
         }
     }
 
@@ -157,11 +160,7 @@ public partial class TikTokLoginWindow : Window
             .Where(c => !string.IsNullOrWhiteSpace(c.Value))
             .Select(c => $"{c.Name}={c.Value}"));
 
-        Dispatcher.Invoke(() =>
-        {
-            StatusText.Text       = "Detectando usuario…";
-            StatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
-        });
+        SetStatus("Sesión detectada — identificando usuario…", neutral: true);
 
         // Fast path: extract username via JS — retry up to 3 times with short delays
         // (TikTok's SPA state may not be initialised the instant the session cookie appears)
@@ -177,15 +176,19 @@ public partial class TikTokLoginWindow : Window
             _state = State.Done;
             Serilog.Log.Information("TikTok username via JS: {Username}", username);
             MusicBot.AppEvents.NotifyTikTokCookiesCaptured(_pendingCookieString, username);
-            Dispatcher.Invoke(() => StatusText.Text = $"Sesión iniciada como @{username}. Cerrando…");
-            await Task.Delay(800);
+            SetStatus($"¡Listo! Sesión iniciada como @{username}", success: true);
+            await Task.Delay(1000);
             Dispatcher.Invoke(Hide);
         }
         else
         {
             // Fallback: navigate to /profile/ and let the redirect reveal the handle
             _state = State.WaitingForProfileRedirect;
-            Dispatcher.Invoke(() => WebView.CoreWebView2.Navigate(ProfileUrl));
+            Dispatcher.Invoke(() =>
+            {
+                ShowOverlay("Verificando perfil…");
+                WebView.CoreWebView2.Navigate(ProfileUrl);
+            });
         }
     }
 
@@ -229,14 +232,11 @@ public partial class TikTokLoginWindow : Window
 
         MusicBot.AppEvents.NotifyTikTokCookiesCaptured(_pendingCookieString ?? "", username);
 
-        Dispatcher.Invoke(() =>
-        {
-            StatusText.Text = username != null
-                ? $"Sesión iniciada como @{username}. Cerrando…"
-                : "Sesión capturada. Cerrando…";
-        });
+        SetStatus(username != null
+            ? $"¡Listo! Sesión iniciada como @{username}"
+            : "Sesión capturada. Cerrando…", success: true);
 
-        await Task.Delay(800);
+        await Task.Delay(1000);
         Dispatcher.Invoke(Hide);
     }
 
@@ -336,6 +336,30 @@ public partial class TikTokLoginWindow : Window
         }
 
         return null;
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+
+    private void SetStatus(string text, bool neutral = false, bool success = false, bool error = false)
+    {
+        if (_silentRestore) return;
+        Dispatcher.Invoke(() =>
+        {
+            StatusText.Text = text;
+            StatusText.Foreground = error   ? System.Windows.Media.Brushes.OrangeRed
+                                  : success ? System.Windows.Media.Brushes.LightGreen
+                                  :           _brushMuted;
+        });
+    }
+
+    private void ShowOverlay(string label)
+    {
+        if (_silentRestore) return;
+        Dispatcher.Invoke(() =>
+        {
+            OverlayLabel.Text  = label;
+            LoadingOverlay.Visibility = Visibility.Visible;
+        });
     }
 
     private static string? ExtractHandleFromUrl(string url)

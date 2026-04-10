@@ -41,7 +41,8 @@
                                  Width="180" Height="4"
                                  Foreground="#FF004F"
                                  Background="#2D333B"/>
-                    <TextBlock Text="Cargando TikTok…"
+                    <TextBlock x:Name="OverlayLabel"
+                               Text="Cargando TikTok…"
                                Foreground="#8B949E"
                                FontSize="13"
                                Margin="0,14,0,0"
