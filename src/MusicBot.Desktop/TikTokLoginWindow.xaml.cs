@@ -152,20 +152,28 @@ public partial class TikTokLoginWindow : Window
             return;
         }
 
-        // Capture cookies for later
-        _pendingCookieString = string.Join("; ", cookies
-            .Where(c => !string.IsNullOrWhiteSpace(c.Value))
-            .Select(c => $"{c.Name}={c.Value}"));
-
         SetStatus("Sesión detectada — identificando usuario…", neutral: true);
 
-        // Fast path: extract username via JS — retry up to 3 times with short delays
-        // (TikTok's SPA state may not be initialised the instant the session cookie appears)
+        // Brief pause: TikTok's backend may take a moment to propagate the new session
+        // before its own APIs return the correct user info.
+        await Task.Delay(400);
+
+        // Retry up to 4 times re-fetching cookies each time — TikTok sometimes sets
+        // unique_id / user_unique_id cookies a second or two after the sessionid appears.
         string? username = null;
-        for (int attempt = 0; attempt < 3 && username == null; attempt++)
+        for (int attempt = 0; attempt < 4 && username == null; attempt++)
         {
-            if (attempt > 0) await Task.Delay(600);
-            username = await TryGetUsernameViaJsAsync(cookies);
+            if (attempt > 0) await Task.Delay(900);
+
+            var latestCookies = await WebView.CoreWebView2.CookieManager
+                .GetCookiesAsync("https://www.tiktok.com");
+
+            // Refresh the pending cookie string so it captures everything TikTok has set
+            _pendingCookieString = string.Join("; ", latestCookies
+                .Where(c => !string.IsNullOrWhiteSpace(c.Value))
+                .Select(c => $"{c.Name}={c.Value}"));
+
+            username = await TryGetUsernameViaJsAsync(latestCookies);
         }
 
         if (username != null)
@@ -193,22 +201,34 @@ public partial class TikTokLoginWindow : Window
     {
         _state = State.Done;
 
-        // The final URL after the redirect is /@username — extract it directly
+        // 1. Best case: TikTok redirected /profile/ → /@username — grab it from the URL
         var source   = WebView.CoreWebView2.Source ?? "";
         var username = ExtractHandleFromUrl(source);
-
         if (username != null)
-        {
             Serilog.Log.Information("TikTok username from profile redirect URL: {Username}", username);
-        }
-        else
-        {
-            // Fallback: re-read cookies now that we're on the main site
-            // (TikTok may set more cookies after the session page loads)
-            var cookies = await WebView.CoreWebView2.CookieManager
-                .GetCookiesAsync("https://www.tiktok.com");
 
-            foreach (var name in new[] { "username", "user_unique_id", "unique_id" })
+        // 2. Re-fetch cookies from the now-stable page context (may have more than before)
+        var cookies = await WebView.CoreWebView2.CookieManager
+            .GetCookiesAsync("https://www.tiktok.com");
+
+        // Update cookie string with whatever is available now
+        var cookieStr = string.Join("; ", cookies
+            .Where(c => !string.IsNullOrWhiteSpace(c.Value))
+            .Select(c => $"{c.Name}={c.Value}"));
+        if (!string.IsNullOrWhiteSpace(cookieStr))
+            _pendingCookieString = cookieStr;
+
+        // 3. Full JS extraction (including API calls) from the new page context.
+        //    If we landed on /@username the URL check inside TryGetUsernameViaJsAsync
+        //    will succeed immediately; otherwise the API calls have a better chance
+        //    now that the page has fully loaded.
+        if (username == null)
+            username = await TryGetUsernameViaJsAsync(cookies);
+
+        // 4. Last resort: cookie names
+        if (username == null)
+        {
+            foreach (var name in new[] { "unique_id", "user_unique_id", "username" })
             {
                 var ck = cookies.FirstOrDefault(c =>
                     c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -222,9 +242,7 @@ public partial class TikTokLoginWindow : Window
             }
         }
 
-        Serilog.Log.Information("TikTok login complete — user={Username}",
-            username ?? "(not detected)");
-
+        Serilog.Log.Information("TikTok login complete — user={Username}", username ?? "(not detected)");
         MusicBot.AppEvents.NotifyTikTokCookiesCaptured(_pendingCookieString ?? "", username);
 
         SetStatus(username != null
@@ -258,15 +276,19 @@ public partial class TikTokLoginWindow : Window
             }
         }
 
-        // 2. Try JavaScript: current URL handle + in-page state + multiple APIs
+        // 2. Try JavaScript: URL → in-page state → authenticated API calls
+        //    All fetch() calls have a 5-second abort timeout so a hanging request
+        //    can never block the whole detection chain.
         const string script = """
             (async function() {
+                const ft = (url, opts) =>
+                    fetch(url, { ...opts, signal: AbortSignal.timeout(5000) });
                 try {
                     // a. Current URL may already be /@username after login
                     const urlM = location.href.match(/tiktok\.com\/@([A-Za-z0-9._]+)/);
                     if (urlM?.[1]) return urlM[1];
 
-                    // b. TikTok SPA global state (multiple known shapes)
+                    // b. TikTok SPA global state (multiple known shapes across versions)
                     const sigi = window._SIGI_STATE || window.SIGI_STATE;
                     if (sigi) {
                         const u = sigi?.LoginReducer?.loginUser?.uniqueId
@@ -276,42 +298,42 @@ public partial class TikTokLoginWindow : Window
                     }
 
                     // c. Next.js / SSR initial data (newer TikTok versions)
-                    if (window.__NEXT_DATA__) {
-                        const nd = window.__NEXT_DATA__;
+                    const nd = window.__NEXT_DATA__;
+                    if (nd) {
                         const u = nd?.props?.pageProps?.userInfo?.user?.uniqueId
                                || nd?.props?.pageProps?.loginUser?.uniqueId;
                         if (u) return String(u);
                     }
 
-                    // d. TikTok passport API (internal, available when logged in)
+                    // d. Passport API — same-origin, most reliable when logged in.
+                    //    TikTok uses different response shapes across regions/versions;
+                    //    try every known field path.
                     try {
-                        const r = await fetch('/api/passport/account/info/v2/?aid=1988', { credentials: 'include' });
+                        const r = await ft('/api/passport/account/info/v2/?aid=1988', { credentials: 'include' });
                         if (r.ok) {
                             const d = await r.json();
-                            const u = d?.data?.user_info?.username || d?.data?.user_info?.unique_id;
+                            const u = d?.data?.user_info?.unique_id
+                                   || d?.data?.user_info?.username
+                                   || d?.data?.unique_id
+                                   || d?.data?.username
+                                   || d?.data?.user?.uniqueId
+                                   || d?.data?.user?.unique_id;
                             if (u) return String(u);
                         }
                     } catch(e) {}
 
-                    // e. Webcast user API (also authenticated)
+                    // e. Webcast user API (cross-origin but TikTok allows it from www)
                     try {
-                        const r2 = await fetch('https://webcast.tiktok.com/webcast/user/me/?aid=1988', { credentials: 'include' });
+                        const r2 = await ft('https://webcast.tiktok.com/webcast/user/me/?aid=1988', { credentials: 'include' });
                         if (r2.ok) {
                             const d2 = await r2.json();
-                            const u2 = d2?.data?.user?.uniqueId || d2?.data?.uniqueId;
+                            const u2 = d2?.data?.user?.uniqueId
+                                    || d2?.data?.user?.unique_id
+                                    || d2?.data?.uniqueId;
                             if (u2) return String(u2);
                         }
                     } catch(e) {}
 
-                    // f. TikTok node/detail API used by the web app
-                    try {
-                        const r3 = await fetch('/api/user/detail/?aid=1988&secUid=&uniqueId=', { credentials: 'include' });
-                        if (r3.ok) {
-                            const d3 = await r3.json();
-                            const u3 = d3?.userInfo?.user?.uniqueId;
-                            if (u3) return String(u3);
-                        }
-                    } catch(e) {}
                 } catch(e) {}
                 return null;
             })()
