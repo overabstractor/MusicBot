@@ -75,51 +75,13 @@ public partial class TikTokLoginWindow : Window
         WebView.CoreWebView2.Navigate(HomeUrl);
     }
 
-    // Analytics/tracking domains that make TikTok's login page sluggish.
-    // Blocking these can cut initial load time by several seconds.
-    private static readonly string[] _blockedDomains =
-    [
-        "analytics.tiktok.com",
-        "mon.tiktok.com",
-        "mcs.zijieapi.com",
-        "mcs.us.tiktok.com",
-        "log.byteoversea.com",
-        "tp.byteoversea.net",
-        "ads-b.bytedance.net",
-        "ads.tiktok.com",
-        "business-api.tiktok.com",
-        "pi.tiktok.com",
-        "metrics.tiktokv.com",
-        "stat.bytedance.com",
-        "starling.tiktok.com",
-    ];
-
     private async Task InitWebViewAsync(bool contextMenus)
     {
         await WebView.EnsureCoreWebView2Async();
         WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = contextMenus;
         WebView.CoreWebView2.Settings.AreDevToolsEnabled            = false;
         WebView.CoreWebView2.IsMuted                                = true;
-
-        // Block analytics/tracking requests so the login page loads faster
-        WebView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
-        WebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
-
         WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
-    }
-
-    private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
-    {
-        var uri = e.Request.Uri;
-        foreach (var domain in _blockedDomains)
-        {
-            if (uri.Contains(domain, StringComparison.OrdinalIgnoreCase))
-            {
-                e.Response = WebView.CoreWebView2.Environment.CreateWebResourceResponse(
-                    null, 204, "No Content", "");
-                return;
-            }
-        }
     }
 
     // ── Navigation state machine ──────────────────────────────────────────────
