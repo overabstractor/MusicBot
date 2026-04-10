@@ -92,8 +92,6 @@ public partial class TikTokLoginWindow : Window
 
     private async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-        Dispatcher.Invoke(() => LoadingOverlay.Visibility = Visibility.Collapsed);
-
         if (!_silentRestore && _state == State.WaitingForLogin)
             SetStatus("Inicia sesión con tu cuenta de TikTok.", neutral: true);
 
@@ -346,16 +344,6 @@ public partial class TikTokLoginWindow : Window
             StatusText.Foreground = error   ? System.Windows.Media.Brushes.OrangeRed
                                   : success ? System.Windows.Media.Brushes.LightGreen
                                   :           _brushMuted;
-        });
-    }
-
-    private void ShowOverlay(string label)
-    {
-        if (_silentRestore) return;
-        Dispatcher.Invoke(() =>
-        {
-            OverlayLabel.Text  = label;
-            LoadingOverlay.Visibility = Visibility.Visible;
         });
     }
 

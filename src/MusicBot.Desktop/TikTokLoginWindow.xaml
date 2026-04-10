@@ -20,7 +20,7 @@
                            FontSize="15" FontWeight="SemiBold"
                            Foreground="#E6EDF3"/>
                 <TextBlock x:Name="StatusText"
-                           Text="Inicia sesión con tu cuenta de TikTok. Las cookies se guardarán automáticamente."
+                           Text="Cargando TikTok…"
                            FontSize="12"
                            Foreground="#8B949E"
                            TextWrapping="Wrap"
@@ -28,27 +28,7 @@
             </StackPanel>
         </Border>
 
-        <!-- WebView2 + loading overlay -->
-        <Grid Grid.Row="1">
-            <wv2:WebView2 x:Name="WebView"/>
-
-            <!-- Loading overlay — visible while WebView2 initializes -->
-            <Border x:Name="LoadingOverlay"
-                    Background="#0D1117"
-                    Visibility="Visible">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <ProgressBar IsIndeterminate="True"
-                                 Width="180" Height="4"
-                                 Foreground="#FF004F"
-                                 Background="#2D333B"/>
-                    <TextBlock x:Name="OverlayLabel"
-                               Text="Cargando TikTok…"
-                               Foreground="#8B949E"
-                               FontSize="13"
-                               Margin="0,14,0,0"
-                               HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Border>
-        </Grid>
+        <!-- WebView2 — ocupa toda la fila -->
+        <wv2:WebView2 x:Name="WebView" Grid.Row="1"/>
     </Grid>
 </Window>
