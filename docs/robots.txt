@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://overabstractor.github.io/MusicBot/sitemap.xml

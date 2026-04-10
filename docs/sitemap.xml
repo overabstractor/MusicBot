@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+
+  <url>
+    <loc>https://overabstractor.github.io/MusicBot/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/"/>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <url>
+    <loc>https://overabstractor.github.io/MusicBot/es/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <url>
+    <loc>https://overabstractor.github.io/MusicBot/privacy.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/privacy.html"/>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+  <url>
+    <loc>https://overabstractor.github.io/MusicBot/es/privacy.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/privacy.html"/>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <url>
+    <loc>https://overabstractor.github.io/MusicBot/tos.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/tos.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/tos.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/tos.html"/>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
+
+  <url>
+    <loc>https://overabstractor.github.io/MusicBot/es/tos.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/tos.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/tos.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/tos.html"/>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+</urlset>

@@ -1,9 +1,24 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MusicBot — Política de Privacidad</title>
+  <title>MusicBot — Privacy Policy</title>
+  <meta name="description" content="MusicBot privacy policy. No data is collected or transmitted to external servers. Everything runs locally on your PC." />
+
+  <!-- Canonical & hreflang -->
+  <link rel="canonical" href="https://overabstractor.github.io/MusicBot/privacy.html" />
+  <link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/privacy.html" />
+  <link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/privacy.html" />
+  <link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/privacy.html" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://overabstractor.github.io/MusicBot/privacy.html" />
+  <meta property="og:title" content="MusicBot — Privacy Policy" />
+  <meta property="og:description" content="MusicBot does not collect, store or transmit any personal data to external servers. Everything runs locally on your PC." />
+  <meta property="og:site_name" content="MusicBot" />
+
   <style>
     :root {
       --bg:      #0f0f14;
@@ -40,7 +55,7 @@
       color: var(--text);
     }
     .nav-logo svg { opacity: .85; }
-    .nav-links { display: flex; gap: 24px; }
+    .nav-links { display: flex; gap: 16px; align-items: center; }
     .nav-links a {
       color: var(--muted);
       text-decoration: none;
@@ -48,6 +63,16 @@
       transition: color .2s;
     }
     .nav-links a:hover { color: var(--text); }
+    .lang-btn {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--muted) !important;
+    }
+    .lang-btn:hover { color: var(--text) !important; background: rgba(255,255,255,0.05); }
     main {
       flex: 1;
       max-width: 760px;
@@ -133,59 +158,60 @@
       MusicBot
     </a>
     <div class="nav-links">
-      <a href="tos.html">Términos</a>
-      <a href="privacy.html">Privacidad</a>
+      <a href="tos.html">Terms</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="es/privacy.html" class="lang-btn">ES</a>
     </div>
   </nav>
 
   <main>
-    <div class="doc-title">Política de Privacidad</div>
-    <div class="doc-date">Última actualización: abril 2025</div>
+    <div class="doc-title">Privacy Policy</div>
+    <div class="doc-date">Last updated: April 2025</div>
 
     <div class="highlight">
-      <p>MusicBot no recopila, almacena ni transmite ningún dato personal a servidores externos. Todo funciona localmente en tu PC.</p>
+      <p>MusicBot does not collect, store or transmit any personal data to external servers. Everything runs locally on your PC.</p>
     </div>
 
-    <h2>1. Datos que se almacenan localmente</h2>
-    <p>MusicBot guarda la siguiente información en tu PC, dentro del directorio de la aplicación:</p>
+    <h2>1. Data stored locally</h2>
+    <p>MusicBot saves the following information on your PC, inside the application directory:</p>
     <ul>
-      <li>Configuración de la aplicación (ajustes, rutas de archivos).</li>
-      <li>Historial de canciones reproducidas y cola persistente.</li>
-      <li>Tokens de autenticación de Spotify, Twitch y Kick almacenados en la base de datos local.</li>
-      <li>Archivos de audio descargados desde YouTube en la carpeta de biblioteca.</li>
-      <li>Registros de actividad (logs) almacenados localmente.</li>
+      <li>Application settings (preferences, file paths).</li>
+      <li>Playback history and persistent queue.</li>
+      <li>Spotify, Twitch and Kick authentication tokens stored in the local database.</li>
+      <li>Audio files downloaded from YouTube in the library folder.</li>
+      <li>Activity logs stored locally.</li>
     </ul>
 
-    <h2>2. Lo que NO hacemos</h2>
+    <h2>2. What we do NOT do</h2>
     <ul>
-      <li>No enviamos ningún dato a servidores propios.</li>
-      <li>No incluimos telemetría, analíticas ni rastreo de uso.</li>
-      <li>No compartimos información con terceros.</li>
-      <li>No requerimos registro de cuenta en nuestros sistemas.</li>
+      <li>We do not send any data to our own servers.</li>
+      <li>We do not include telemetry, analytics or usage tracking.</li>
+      <li>We do not share information with third parties.</li>
+      <li>We do not require account registration in our systems.</li>
     </ul>
 
-    <h2>3. Servicios de terceros</h2>
-    <p>Al usar MusicBot, la aplicación se comunica directamente con los servicios que configures:</p>
+    <h2>3. Third-party services</h2>
+    <p>When using MusicBot, the application communicates directly with the services you configure:</p>
     <ul>
-      <li><strong>YouTube (via yt-dlp)</strong> — para buscar y descargar audio. Las solicitudes se realizan desde tu IP.</li>
-      <li><strong>TikTok, Twitch, Kick</strong> — para leer el chat en tiempo real mediante sus APIs oficiales.</li>
-      <li><strong>iTunes Search API</strong> — para obtener metadatos y carátulas de canciones.</li>
+      <li><strong>YouTube (via yt-dlp)</strong> — to search and download audio. Requests are made from your IP.</li>
+      <li><strong>TikTok, Twitch, Kick</strong> — to read chat in real time via their official APIs.</li>
+      <li><strong>iTunes Search API</strong> — to fetch song metadata and cover art.</li>
     </ul>
-    <p>Cada uno de estos servicios tiene su propia política de privacidad. MusicBot no controla cómo gestionan los datos que reciben.</p>
+    <p>Each of these services has its own privacy policy. MusicBot does not control how they handle the data they receive.</p>
 
-    <h2>4. Datos de autenticación</h2>
-    <p>Los tokens OAuth de Twitch y Kick, así como las credenciales de sesión de TikTok, se almacenan únicamente en la base de datos local (<code>musicbot.db</code>) en tu PC. Nunca abandonan tu equipo.</p>
+    <h2>4. Authentication data</h2>
+    <p>OAuth tokens for Twitch and Kick, as well as TikTok session credentials, are stored exclusively in the local database (<code>musicbot.db</code>) on your PC. They never leave your device.</p>
 
-    <h2>5. Desinstalación</h2>
-    <p>Al desinstalar MusicBot, todos los datos locales (base de datos, archivos de audio, logs) permanecen en tu PC hasta que los elimines manualmente desde el directorio de la aplicación.</p>
+    <h2>5. Uninstallation</h2>
+    <p>When you uninstall MusicBot, all local data (database, audio files, logs) remains on your PC until you manually delete it from the application directory.</p>
 
-    <h2>6. Contacto</h2>
-    <p>Si tienes preguntas sobre esta política, puedes abrir un issue en el <a href="https://github.com/overabstractor/MusicBot/issues" target="_blank">repositorio de GitHub</a>.</p>
+    <h2>6. Contact</h2>
+    <p>If you have questions about this policy, you can open an issue on the <a href="https://github.com/overabstractor/MusicBot/issues" target="_blank">GitHub repository</a>.</p>
   </main>
 
   <footer>
     <span>© 2025 MusicBot</span>
-    <a href="index.html">← Volver al inicio</a>
+    <a href="index.html">← Back to home</a>
   </footer>
 
 </body>

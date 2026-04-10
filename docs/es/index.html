@@ -1,30 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MusicBot — Song request bot for streamers</title>
-  <meta name="description" content="Let your audience request songs on TikTok, Twitch and Kick. MusicBot downloads and plays them on your PC with OBS-ready overlays. Free, open source, Windows." />
+  <title>MusicBot — Bot de solicitudes de canciones para streamers</title>
+  <meta name="description" content="Deja que tu audiencia pida canciones en TikTok, Twitch y Kick. MusicBot descarga y reproduce en tu PC con overlays listos para OBS. Gratis, código abierto, Windows." />
 
   <!-- Canonical & hreflang -->
-  <link rel="canonical" href="https://overabstractor.github.io/MusicBot/" />
+  <link rel="canonical" href="https://overabstractor.github.io/MusicBot/es/" />
   <link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/" />
   <link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/" />
   <link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/" />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://overabstractor.github.io/MusicBot/" />
-  <meta property="og:title" content="MusicBot — Song request bot for streamers" />
-  <meta property="og:description" content="Let your audience request songs on TikTok, Twitch and Kick. MusicBot downloads and plays them on your PC with OBS-ready overlays." />
+  <meta property="og:url" content="https://overabstractor.github.io/MusicBot/es/" />
+  <meta property="og:title" content="MusicBot — Bot de solicitudes de canciones para streamers" />
+  <meta property="og:description" content="Deja que tu audiencia pida canciones en TikTok, Twitch y Kick. MusicBot descarga y reproduce en tu PC con overlays listos para OBS." />
   <meta property="og:site_name" content="MusicBot" />
-  <meta property="og:locale" content="en_US" />
-  <meta property="og:locale:alternate" content="es_ES" />
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:locale:alternate" content="en_US" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="MusicBot — Song request bot for streamers" />
-  <meta name="twitter:description" content="Let your audience request songs on TikTok, Twitch and Kick. Free, open source Windows app." />
+  <meta name="twitter:title" content="MusicBot — Bot de solicitudes de canciones para streamers" />
+  <meta name="twitter:description" content="Deja que tu audiencia pida canciones en TikTok, Twitch y Kick. Gratis, código abierto, Windows." />
 
   <style>
     :root {
@@ -148,7 +148,6 @@
       overflow: hidden;
     }
 
-    /* Animated gradient orbs */
     .hero::before {
       content: "";
       position: absolute;
@@ -174,7 +173,6 @@
       50%       { opacity: 1;   transform: translateX(-50%) scale(1.1); }
     }
 
-    /* Grid texture overlay */
     .hero-grid {
       position: absolute;
       inset: 0;
@@ -283,20 +281,9 @@
       max-width: 480px;
       text-align: left;
     }
-    .dl-notice-icon {
-      flex-shrink: 0;
-      margin-top: 1px;
-      color: #fbbf24;
-    }
-    .dl-notice-text {
-      font-size: 13px;
-      line-height: 1.6;
-      color: var(--muted2);
-    }
-    .dl-notice-text strong {
-      color: #fbbf24;
-      font-weight: 600;
-    }
+    .dl-notice-icon { flex-shrink: 0; margin-top: 1px; color: #fbbf24; }
+    .dl-notice-text { font-size: 13px; line-height: 1.6; color: var(--muted2); }
+    .dl-notice-text strong { color: #fbbf24; font-weight: 600; }
     .dl-notice-steps {
       margin-top: 6px;
       padding-left: 0;
@@ -305,17 +292,8 @@
       flex-direction: column;
       gap: 3px;
     }
-    .dl-notice-steps li {
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
-    }
-    .dl-notice-steps li::before {
-      content: "→";
-      color: #fbbf24;
-      font-size: 11px;
-      flex-shrink: 0;
-    }
+    .dl-notice-steps li { display: flex; align-items: baseline; gap: 6px; }
+    .dl-notice-steps li::before { content: "→"; color: #fbbf24; font-size: 11px; flex-shrink: 0; }
 
     .btn {
       display: inline-flex;
@@ -335,7 +313,6 @@
       box-shadow: 0 4px 24px rgba(124,106,247,0.35);
     }
     .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(124,106,247,0.5); }
-
     .btn-ghost {
       background: rgba(255,255,255,0.05);
       color: var(--text);
@@ -343,7 +320,6 @@
     }
     .btn-ghost:hover { background: rgba(255,255,255,0.09); }
 
-    /* App mockup */
     .hero-mockup {
       position: relative;
       z-index: 2;
@@ -371,24 +347,13 @@
       gap: 8px;
       border-bottom: 1px solid var(--border);
     }
-    .mockup-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-    }
+    .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
     .mockup-dot:nth-child(1) { background: #ff5f57; }
     .mockup-dot:nth-child(2) { background: #febc2e; }
     .mockup-dot:nth-child(3) { background: #28c840; }
-    .mockup-title {
-      margin: auto;
-      font-size: 12px;
-      color: var(--muted);
-    }
+    .mockup-title { margin: auto; font-size: 12px; color: var(--muted); }
 
-    .mockup-body {
-      display: grid;
-      grid-template-columns: 280px 1fr;
-      min-height: 280px;
-    }
+    .mockup-body { display: grid; grid-template-columns: 280px 1fr; min-height: 280px; }
 
     .mockup-player {
       background: linear-gradient(160deg, #1a1040 0%, #0f0f1e 100%);
@@ -399,13 +364,7 @@
       gap: 14px;
     }
 
-    .mockup-np-label {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
+    .mockup-np-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 
     .mockup-np-card {
       background: rgba(124,106,247,0.1);
@@ -426,187 +385,57 @@
     }
 
     .mockup-track-info { flex: 1; min-width: 0; }
-    .mockup-track-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .mockup-track-artist {
-      font-size: 11px;
-      color: var(--muted2);
-      margin-top: 2px;
-    }
+    .mockup-track-title { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mockup-track-artist { font-size: 11px; color: var(--muted2); margin-top: 2px; }
+    .mockup-progress-track { height: 3px; background: rgba(255,255,255,0.1); border-radius: 99px; margin-top: 10px; }
+    .mockup-progress-fill { height: 100%; width: 42%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; }
 
-    .mockup-progress-track {
-      height: 3px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 99px;
-      margin-top: 10px;
-    }
-    .mockup-progress-fill {
-      height: 100%;
-      width: 42%;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      border-radius: 99px;
-    }
+    .mockup-controls { display: flex; gap: 8px; justify-content: center; }
+    .mockup-ctrl-btn { width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; color: var(--muted2); font-size: 13px; }
+    .mockup-ctrl-btn.primary { background: var(--accent); color: #fff; }
 
-    .mockup-controls {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-    }
-    .mockup-ctrl-btn {
-      width: 32px; height: 32px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.06);
-      display: flex; align-items: center; justify-content: center;
-      color: var(--muted2);
-      font-size: 13px;
-    }
-    .mockup-ctrl-btn.primary {
-      background: var(--accent);
-      color: #fff;
-    }
+    .mockup-queue { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .mockup-queue-header { display: flex; justify-content: space-between; align-items: center; }
+    .mockup-queue-title { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    .mockup-chip { font-size: 10px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted2); padding: 2px 8px; border-radius: 99px; }
 
-    .mockup-queue {
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .mockup-queue-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .mockup-queue-title {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-    .mockup-chip {
-      font-size: 10px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--muted2);
-      padding: 2px 8px;
-      border-radius: 99px;
-    }
-
-    .mockup-queue-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.03);
-    }
+    .mockup-queue-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.03); }
     .mockup-queue-row.active { background: rgba(124,106,247,0.1); border: 1px solid rgba(124,106,247,0.15); }
     .mockup-queue-num { font-size: 11px; color: var(--muted); width: 14px; text-align: center; flex-shrink: 0; }
-    .mockup-queue-thumb {
-      width: 32px; height: 32px;
-      border-radius: 6px;
-      flex-shrink: 0;
-    }
+    .mockup-queue-thumb { width: 32px; height: 32px; border-radius: 6px; flex-shrink: 0; }
     .mockup-queue-info { flex: 1; min-width: 0; }
-    .mockup-queue-name {
-      font-size: 12px;
-      font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    .mockup-queue-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .mockup-queue-meta { font-size: 10px; color: var(--muted); display: flex; gap: 6px; margin-top: 2px; }
 
-    .mockup-platform-badge {
-      font-size: 9px;
-      font-weight: 700;
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
+    .mockup-platform-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
     .badge-tiktok { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.15); }
     .badge-twitch { background: rgba(145,70,255,0.2); color: #bf94ff; border: 1px solid rgba(145,70,255,0.3); }
     .badge-kick   { background: rgba(83,252,38,0.15); color: #53fc26; border: 1px solid rgba(83,252,38,0.3); }
-    .badge-web    { background: rgba(124,106,247,0.15); color: var(--accent2); border: 1px solid rgba(124,106,247,0.25); }
 
     /* ═══════════════════════════════════════
        STATS BAR
     ═══════════════════════════════════════ */
     .stats-bar {
-      display: flex;
-      justify-content: center;
-      gap: 0;
+      display: flex; justify-content: center; gap: 0;
       border-top: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
       background: var(--surface);
       overflow: hidden;
     }
-
-    .stat-item {
-      flex: 1;
-      max-width: 240px;
-      padding: 28px 24px;
-      text-align: center;
-      border-right: 1px solid var(--border);
-    }
+    .stat-item { flex: 1; max-width: 240px; padding: 28px 24px; text-align: center; border-right: 1px solid var(--border); }
     .stat-item:last-child { border-right: none; }
-
-    .stat-value {
-      font-size: 28px;
-      font-weight: 800;
-      letter-spacing: -1px;
-      background: linear-gradient(135deg, var(--accent2), var(--accent3));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
+    .stat-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; background: linear-gradient(135deg, var(--accent2), var(--accent3)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     .stat-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
 
     /* ═══════════════════════════════════════
        FEATURES
     ═══════════════════════════════════════ */
-    .section {
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 100px 24px;
-    }
+    .section { max-width: 1080px; margin: 0 auto; padding: 100px 24px; }
+    .section-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent2); margin-bottom: 16px; }
+    .section-title { font-size: clamp(28px, 4vw, 42px); font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 16px; }
+    .section-sub { font-size: 17px; color: var(--muted2); max-width: 560px; line-height: 1.6; margin-bottom: 56px; }
 
-    .section-eyebrow {
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--accent2);
-      margin-bottom: 16px;
-    }
-
-    .section-title {
-      font-size: clamp(28px, 4vw, 42px);
-      font-weight: 800;
-      letter-spacing: -1.5px;
-      line-height: 1.1;
-      margin-bottom: 16px;
-    }
-
-    .section-sub {
-      font-size: 17px;
-      color: var(--muted2);
-      max-width: 560px;
-      line-height: 1.6;
-      margin-bottom: 56px;
-    }
-
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-    }
+    .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 
     .feature-card {
       background: var(--surface);
@@ -620,24 +449,11 @@
       position: relative;
       overflow: hidden;
     }
-    .feature-card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,106,247,0.07), transparent);
-      opacity: 0;
-      transition: opacity .3s;
-    }
+    .feature-card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,106,247,0.07), transparent); opacity: 0; transition: opacity .3s; }
     .feature-card:hover { border-color: rgba(124,106,247,0.35); transform: translateY(-3px); }
     .feature-card:hover::before { opacity: 1; }
 
-    .feature-icon {
-      width: 44px; height: 44px;
-      border-radius: 12px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px;
-      flex-shrink: 0;
-    }
+    .feature-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
     .feature-icon.purple { background: rgba(124,106,247,0.15); }
     .feature-icon.pink   { background: rgba(244,114,182,0.15); }
     .feature-icon.green  { background: rgba(52,211,153,0.15); }
@@ -645,242 +461,65 @@
     .feature-icon.orange { background: rgba(251,146,60,0.15); }
     .feature-icon.cyan   { background: rgba(34,211,238,0.15); }
 
-    .feature-card h3 {
-      font-size: 16px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-    }
-    .feature-card p {
-      font-size: 14px;
-      color: var(--muted2);
-      line-height: 1.6;
-      flex: 1;
-    }
+    .feature-card h3 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+    .feature-card p { font-size: 14px; color: var(--muted2); line-height: 1.6; flex: 1; }
 
     /* ═══════════════════════════════════════
        HOW IT WORKS
     ═══════════════════════════════════════ */
-    .how-section {
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-    }
+    .how-section { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .how-inner { max-width: 1080px; margin: 0 auto; padding: 100px 24px; }
 
-    .how-inner {
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 100px 24px;
-    }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 56px; position: relative; }
+    .steps::before { content: ""; position: absolute; top: 28px; left: calc(33.33% - 0px); right: calc(33.33% - 0px); height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.4; }
 
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0;
-      margin-top: 56px;
-      position: relative;
-    }
-
-    .steps::before {
-      content: "";
-      position: absolute;
-      top: 28px;
-      left: calc(33.33% - 0px);
-      right: calc(33.33% - 0px);
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--accent), transparent);
-      opacity: 0.4;
-    }
-
-    .step {
-      padding: 0 32px;
-      text-align: center;
-    }
+    .step { padding: 0 32px; text-align: center; }
     .step:not(:last-child) { border-right: 1px solid var(--border); }
-
-    .step-num {
-      width: 56px; height: 56px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, var(--accent), #9d60f8);
-      color: #fff;
-      font-size: 22px;
-      font-weight: 800;
-      display: flex; align-items: center; justify-content: center;
-      margin: 0 auto 20px;
-      box-shadow: 0 8px 24px rgba(124,106,247,0.35);
-    }
-
-    .step h3 {
-      font-size: 17px;
-      font-weight: 700;
-      margin-bottom: 10px;
-      letter-spacing: -0.3px;
-    }
-    .step p {
-      font-size: 14px;
-      color: var(--muted2);
-      line-height: 1.6;
-    }
+    .step-num { width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(135deg, var(--accent), #9d60f8); color: #fff; font-size: 22px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; box-shadow: 0 8px 24px rgba(124,106,247,0.35); }
+    .step h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.3px; }
+    .step p { font-size: 14px; color: var(--muted2); line-height: 1.6; }
 
     /* ═══════════════════════════════════════
        PLATFORMS
     ═══════════════════════════════════════ */
-    .platforms-section {
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 100px 24px;
-      text-align: center;
-    }
+    .platforms-section { max-width: 1080px; margin: 0 auto; padding: 100px 24px; text-align: center; }
+    .platforms-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 56px; }
 
-    .platforms-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-top: 56px;
-    }
-
-    .platform-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 36px 28px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      transition: transform .25s, border-color .25s;
-    }
+    .platform-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 36px 28px; display: flex; flex-direction: column; align-items: center; gap: 16px; transition: transform .25s, border-color .25s; }
     .platform-card:hover { transform: translateY(-4px); }
-
-    .platform-logo {
-      width: 64px; height: 64px;
-      border-radius: 18px;
-      display: flex; align-items: center; justify-content: center;
-    }
+    .platform-logo { width: 64px; height: 64px; border-radius: 18px; display: flex; align-items: center; justify-content: center; }
     .platform-logo.tiktok { background: #000; border: 1px solid rgba(255,255,255,0.1); }
     .platform-logo.twitch { background: #9146ff; }
     .platform-logo.kick   { background: #53fc26; }
-
     .platform-card:hover.tiktok-card { border-color: rgba(255,255,255,0.2); }
     .platform-card:hover.twitch-card { border-color: rgba(145,70,255,0.4); }
     .platform-card:hover.kick-card   { border-color: rgba(83,252,38,0.4); }
+    .platform-card h3 { font-size: 18px; font-weight: 700; }
+    .platform-card p { font-size: 14px; color: var(--muted2); line-height: 1.6; text-align: center; }
 
-    .platform-card h3 {
-      font-size: 18px;
-      font-weight: 700;
-    }
-    .platform-card p {
-      font-size: 14px;
-      color: var(--muted2);
-      line-height: 1.6;
-      text-align: center;
-    }
-
-    .platform-features {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      width: 100%;
-      margin-top: 4px;
-    }
-    .platform-feature {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: var(--muted2);
-    }
-    .platform-feature::before {
-      content: "✓";
-      color: var(--green);
-      font-weight: 700;
-      font-size: 12px;
-    }
+    .platform-features { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 4px; }
+    .platform-feature { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted2); }
+    .platform-feature::before { content: "✓"; color: var(--green); font-weight: 700; font-size: 12px; }
 
     /* ═══════════════════════════════════════
        OPEN SOURCE BANNER
     ═══════════════════════════════════════ */
-    .oss-section {
-      background: linear-gradient(135deg, rgba(124,106,247,0.08) 0%, rgba(244,114,182,0.06) 100%);
-      border-top: 1px solid rgba(124,106,247,0.15);
-      border-bottom: 1px solid rgba(124,106,247,0.15);
-    }
-
-    .oss-inner {
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 80px 24px;
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 20px;
-    }
-
-    .oss-icon {
-      width: 64px; height: 64px;
-      background: rgba(124,106,247,0.15);
-      border: 1px solid rgba(124,106,247,0.3);
-      border-radius: 18px;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    .oss-inner h2 {
-      font-size: clamp(24px, 3.5vw, 36px);
-      font-weight: 800;
-      letter-spacing: -1px;
-    }
-
-    .oss-inner p {
-      font-size: 16px;
-      color: var(--muted2);
-      line-height: 1.65;
-      max-width: 480px;
-    }
+    .oss-section { background: linear-gradient(135deg, rgba(124,106,247,0.08) 0%, rgba(244,114,182,0.06) 100%); border-top: 1px solid rgba(124,106,247,0.15); border-bottom: 1px solid rgba(124,106,247,0.15); }
+    .oss-inner { max-width: 760px; margin: 0 auto; padding: 80px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+    .oss-icon { width: 64px; height: 64px; background: rgba(124,106,247,0.15); border: 1px solid rgba(124,106,247,0.3); border-radius: 18px; display: flex; align-items: center; justify-content: center; }
+    .oss-inner h2 { font-size: clamp(24px, 3.5vw, 36px); font-weight: 800; letter-spacing: -1px; }
+    .oss-inner p { font-size: 16px; color: var(--muted2); line-height: 1.65; max-width: 480px; }
 
     /* ═══════════════════════════════════════
        FOOTER
     ═══════════════════════════════════════ */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 40px 48px;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      align-items: center;
-      gap: 24px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-
-    .footer-brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 600;
-      color: var(--muted2);
-    }
-
-    .footer-brand-icon {
-      width: 24px; height: 24px;
-      background: linear-gradient(135deg, #4c35d4, #7c6af7);
-      border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    .footer-links {
-      display: flex;
-      gap: 24px;
-      justify-content: center;
-    }
-    .footer-links a {
-      color: var(--muted);
-      transition: color .2s;
-    }
+    footer { border-top: 1px solid var(--border); padding: 40px 48px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px; font-size: 13px; color: var(--muted); }
+    .footer-brand { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--muted2); }
+    .footer-brand-icon { width: 24px; height: 24px; background: linear-gradient(135deg, #4c35d4, #7c6af7); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .footer-links { display: flex; gap: 24px; justify-content: center; }
+    .footer-links a { color: var(--muted); transition: color .2s; }
     .footer-links a:hover { color: var(--text); }
-
-    .footer-right {
-      text-align: right;
-      color: var(--muted);
-    }
+    .footer-right { text-align: right; color: var(--muted); }
 
     /* ═══════════════════════════════════════
        RESPONSIVE
@@ -888,16 +527,13 @@
     @media (max-width: 900px) {
       nav { padding: 0 24px; }
       .nav-links a:not(.nav-btn):not(.lang-btn) { display: none; }
-
       .mockup-body { grid-template-columns: 1fr; }
       .mockup-player { border-right: none; border-bottom: 1px solid var(--border); }
-
       .features-grid { grid-template-columns: 1fr 1fr; }
       .steps { grid-template-columns: 1fr; gap: 32px; }
       .steps::before { display: none; }
       .step { border-right: none !important; border-bottom: 1px solid var(--border); padding-bottom: 32px; }
       .step:last-child { border-bottom: none; padding-bottom: 0; }
-
       .platforms-grid { grid-template-columns: 1fr; }
       .stats-bar { flex-wrap: wrap; }
       .stat-item { border-right: none; border-bottom: 1px solid var(--border); max-width: 100%; }
@@ -927,14 +563,14 @@
     </div>
     <div class="nav-links">
       <a id="link-repo">GitHub</a>
-      <a id="link-releases">Releases</a>
-      <a href="tos.html">Terms</a>
-      <a href="es/" class="lang-btn">ES</a>
+      <a id="link-releases">Versiones</a>
+      <a href="tos.html">Términos</a>
+      <a href="../" class="lang-btn">EN</a>
       <a id="nav-dl" class="nav-btn">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
         </svg>
-        Download
+        Descargar
       </a>
     </div>
   </nav>
@@ -946,15 +582,15 @@
 
       <div class="hero-badge">
         <span class="badge-dot"></span>
-        Free · Open Source · Windows
+        Gratis · Open Source · Windows
       </div>
 
-      <h1>Your audience picks<br>the <span class="grad">next song</span></h1>
+      <h1>Tu audiencia elige<br>la <span class="grad">próxima canción</span></h1>
 
       <p class="hero-sub">
-        MusicBot connects your TikTok, Twitch and Kick chat to your PC.
-        Viewers request songs, you play them instantly —
-        no subscriptions, no external servers, OBS overlay included.
+        MusicBot conecta tu chat de TikTok, Twitch y Kick con tu PC.
+        Los espectadores piden canciones, tú las reproduces al instante —
+        sin suscripciones, sin servidores externos, con overlay para OBS incluido.
       </p>
 
       <div class="hero-platforms">
@@ -977,11 +613,11 @@
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
           </svg>
-          Download for Windows
+          Descargar para Windows
         </a>
         <a id="btn-source" href="#" class="btn btn-ghost">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-          View on GitHub
+          Ver en GitHub
         </a>
       </div>
 
@@ -990,12 +626,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         </svg>
         <div class="dl-notice-text">
-          <strong>Windows may show a warning during installation.</strong>
-          This is normal for new apps without a digital signature. To continue:
+          <strong>Windows puede mostrar una advertencia al instalar.</strong>
+          Es normal para apps nuevas sin firma digital. Para continuar:
           <ul class="dl-notice-steps">
-            <li>In your browser, click <strong>Keep</strong> if asked to confirm the download.</li>
-            <li>When running the installer, click <strong>More info</strong>.</li>
-            <li>Then click <strong>Run anyway</strong>.</li>
+            <li>En el navegador, haz clic en <strong>Conservar</strong> si te pide confirmar la descarga.</li>
+            <li>Al ejecutar el instalador, haz clic en <strong>Más información</strong>.</li>
+            <li>Luego en <strong>Ejecutar de todas formas</strong>.</li>
           </ul>
         </div>
       </div>
@@ -1013,7 +649,7 @@
         </div>
         <div class="mockup-body">
           <div class="mockup-player">
-            <div class="mockup-np-label">Now Playing</div>
+            <div class="mockup-np-label">Reproduciendo ahora</div>
             <div class="mockup-np-card">
               <div class="mockup-cover">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="rgba(255,255,255,0.9)"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
@@ -1034,8 +670,8 @@
           </div>
           <div class="mockup-queue">
             <div class="mockup-queue-header">
-              <span class="mockup-queue-title">Playback Queue</span>
-              <span class="mockup-chip">4 songs</span>
+              <span class="mockup-queue-title">Cola de reproducción</span>
+              <span class="mockup-chip">4 canciones</span>
             </div>
             <div class="mockup-queue-row active">
               <span class="mockup-queue-num">1</span>
@@ -1044,7 +680,7 @@
                 <div class="mockup-queue-name">Levitating</div>
                 <div class="mockup-queue-meta">
                   <span class="mockup-platform-badge badge-tiktok">TikTok</span>
-                  <span>Dua Lipa · @user1</span>
+                  <span>Dua Lipa · @usuario1</span>
                 </div>
               </div>
             </div>
@@ -1081,64 +717,64 @@
   <div class="stats-bar">
     <div class="stat-item">
       <div class="stat-value">3</div>
-      <div class="stat-label">Streaming platforms</div>
+      <div class="stat-label">Plataformas de streaming</div>
     </div>
     <div class="stat-item">
       <div class="stat-value">100%</div>
-      <div class="stat-label">Local — no external servers</div>
+      <div class="stat-label">Local — sin servidores externos</div>
     </div>
     <div class="stat-item">
-      <div class="stat-value">$0</div>
-      <div class="stat-label">Free forever</div>
+      <div class="stat-value">0€</div>
+      <div class="stat-label">Gratis para siempre</div>
     </div>
     <div class="stat-item">
       <div class="stat-value">Open</div>
-      <div class="stat-label">Source on GitHub</div>
+      <div class="stat-label">Código abierto en GitHub</div>
     </div>
   </div>
 
   <!-- ══ FEATURES ══════════════════════════ -->
   <div class="section">
-    <p class="section-eyebrow">Features</p>
-    <h2 class="section-title">Everything you need<br>to manage requests</h2>
-    <p class="section-sub">Built by and for streamers. No learning curve, ready in minutes.</p>
+    <p class="section-eyebrow">Características</p>
+    <h2 class="section-title">Todo lo que necesitas<br>para gestionar solicitudes</h2>
+    <p class="section-sub">Diseñado por y para streamers. Sin curvas de aprendizaje, listo en minutos.</p>
 
     <div class="features-grid">
 
       <div class="feature-card">
         <div class="feature-icon purple">🎵</div>
-        <h3>Real-time queue</h3>
-        <p>Viewers use <code>!play song name</code> in chat. The queue updates instantly in your dashboard and OBS overlay.</p>
+        <h3>Cola en tiempo real</h3>
+        <p>Los espectadores usan <code>!play nombre canción</code> en el chat. La cola se actualiza al instante en tu panel y en el overlay de OBS.</p>
       </div>
 
       <div class="feature-card">
         <div class="feature-icon pink">⚡</div>
-        <h3>Simultaneous multi-platform</h3>
-        <p>Connect TikTok Live, Twitch and Kick at the same time. Requests from all platforms merge into one single queue.</p>
+        <h3>Multi-plataforma simultáneo</h3>
+        <p>Conecta TikTok Live, Twitch y Kick al mismo tiempo. Las solicitudes de todas las plataformas se mezclan en una sola cola.</p>
       </div>
 
       <div class="feature-card">
         <div class="feature-icon green">📺</div>
-        <h3>OBS Overlay</h3>
-        <p>Add the overlay URL as a Browser Source in OBS, TikTok Live Studio or Meld. Shows current song and queue with animations.</p>
+        <h3>Overlay para OBS</h3>
+        <p>Añade la URL del overlay como Browser Source en OBS, TikTok Live Studio o Meld. Muestra la canción actual y la cola con animaciones.</p>
       </div>
 
       <div class="feature-card">
         <div class="feature-icon blue">⬇</div>
-        <h3>Auto-download</h3>
-        <p>MusicBot finds and downloads YouTube audio via yt-dlp automatically. The song starts playing instantly without any action from you.</p>
+        <h3>Descarga automática</h3>
+        <p>MusicBot encuentra y descarga el audio de YouTube vía yt-dlp sin que tengas que hacer nada. La canción empieza a sonar al instante.</p>
       </div>
 
       <div class="feature-card">
         <div class="feature-icon orange">🎛</div>
-        <h3>Full control</h3>
-        <p>Reorder the queue with drag &amp; drop, skip songs, adjust volume, change the audio device and ban problematic songs.</p>
+        <h3>Control total</h3>
+        <p>Reordena la cola con drag &amp; drop, salta canciones, ajusta el volumen, cambia el dispositivo de audio y banea canciones problemáticas.</p>
       </div>
 
       <div class="feature-card">
         <div class="feature-icon cyan">🎲</div>
-        <h3>Smart Auto-Queue</h3>
-        <p>When there are no requests, MusicBot automatically picks from your configured song pool. Silence never interrupts your stream.</p>
+        <h3>Auto Cola inteligente</h3>
+        <p>Cuando no hay solicitudes, MusicBot elige automáticamente del pool de canciones que configures. El silencio nunca interrumpe tu stream.</p>
       </div>
 
     </div>
@@ -1147,24 +783,24 @@
   <!-- ══ HOW IT WORKS ══════════════════════ -->
   <div class="how-section">
     <div class="how-inner">
-      <p class="section-eyebrow">How it works</p>
-      <h2 class="section-title">From chat to your speakers<br>in seconds</h2>
+      <p class="section-eyebrow">Cómo funciona</p>
+      <h2 class="section-title">Del chat a tus altavoces<br>en segundos</h2>
 
       <div class="steps">
         <div class="step">
           <div class="step-num">1</div>
-          <h3>Viewer requests a song</h3>
-          <p>Types <strong>!play artist name</strong> in TikTok, Twitch or Kick chat during your live stream.</p>
+          <h3>Espectador pide una canción</h3>
+          <p>Escribe <strong>!play nombre artista</strong> en el chat de TikTok, Twitch o Kick durante tu directo.</p>
         </div>
         <div class="step">
           <div class="step-num">2</div>
-          <h3>MusicBot downloads it</h3>
-          <p>In the background, yt-dlp finds and downloads the YouTube audio. A progress bar appears in your dashboard.</p>
+          <h3>MusicBot la descarga</h3>
+          <p>En segundo plano, yt-dlp encuentra y descarga el audio de YouTube. La barra de progreso aparece en tu panel.</p>
         </div>
         <div class="step">
           <div class="step-num">3</div>
-          <h3>Plays on your PC and overlay</h3>
-          <p>The song plays via WASAPI on your chosen audio device and the OBS overlay updates automatically.</p>
+          <h3>Suena en tu PC y en el overlay</h3>
+          <p>La canción se reproduce vía WASAPI en tu dispositivo de audio elegido y el overlay de OBS se actualiza automáticamente.</p>
         </div>
       </div>
     </div>
@@ -1172,9 +808,9 @@
 
   <!-- ══ PLATFORMS ═════════════════════════ -->
   <div class="platforms-section">
-    <p class="section-eyebrow">Integrations</p>
-    <h2 class="section-title">Three platforms. One queue.</h2>
-    <p class="section-sub" style="margin:16px auto 0; text-align:center;">Connect all your platforms simultaneously without complex configuration.</p>
+    <p class="section-eyebrow">Integraciones</p>
+    <h2 class="section-title">Tres plataformas. Una sola cola.</h2>
+    <p class="section-sub" style="margin:16px auto 0; text-align:center;">Conecta todas tus plataformas simultáneamente sin configuraciones complicadas.</p>
 
     <div class="platforms-grid">
 
@@ -1183,11 +819,11 @@
           <svg width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.83a8.17 8.17 0 004.78 1.52V6.9a4.85 4.85 0 01-1.01-.21z"/></svg>
         </div>
         <h3>TikTok Live</h3>
-        <p>Connects directly to your live using your TikTok account. Compatible with coin gifts to prioritize the queue.</p>
+        <p>Se conecta directamente a tu live usando tu cuenta de TikTok. Compatible con regalos de monedas para dar prioridad en la cola.</p>
         <div class="platform-features">
-          <span class="platform-feature"><code>!play</code> commands in chat</span>
-          <span class="platform-feature">Queue bump with coin gifts</span>
-          <span class="platform-feature">Skip votes</span>
+          <span class="platform-feature">Comandos <code>!play</code> en el chat</span>
+          <span class="platform-feature">Bump por regalos de monedas</span>
+          <span class="platform-feature">Votos de skip</span>
         </div>
       </div>
 
@@ -1196,11 +832,11 @@
           <svg width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>
         </div>
         <h3>Twitch</h3>
-        <p>Official OAuth chat bot for Twitch. Automatically replies in chat confirming each request.</p>
+        <p>Bot de chat OAuth oficial para Twitch. Responde automáticamente en el chat confirmando cada solicitud.</p>
         <div class="platform-features">
-          <span class="platform-feature">OAuth chat bot</span>
-          <span class="platform-feature">Automatic replies</span>
-          <span class="platform-feature">Per-user song limit</span>
+          <span class="platform-feature">Bot de chat con OAuth</span>
+          <span class="platform-feature">Respuestas automáticas</span>
+          <span class="platform-feature">Límite de canciones por usuario</span>
         </div>
       </div>
 
@@ -1209,11 +845,11 @@
           <svg width="32" height="32" viewBox="0 0 24 24" fill="#000"><path d="M2 2h20v20H2zm6 5v10l4-4 4 4V7"/></svg>
         </div>
         <h3>Kick</h3>
-        <p>Full integration with Kick.com via official API. Listens to chat in real time with secure OAuth authentication.</p>
+        <p>Integración completa con Kick.com vía API oficial. Escucha el chat en tiempo real con autenticación OAuth segura.</p>
         <div class="platform-features">
-          <span class="platform-feature">OAuth with PKCE</span>
-          <span class="platform-feature">Real-time chat</span>
-          <span class="platform-feature">Auto-reconnect</span>
+          <span class="platform-feature">OAuth con PKCE</span>
+          <span class="platform-feature">Chat en tiempo real</span>
+          <span class="platform-feature">Reconexión automática</span>
         </div>
       </div>
 
@@ -1228,16 +864,16 @@
       </div>
       <h2>100% Open Source</h2>
       <p>
-        MusicBot is free software. No telemetry, no subscriptions, no tricks.
-        Review the code, contribute improvements or adapt the app to your needs.
-        All code is on GitHub under an open license.
+        MusicBot es software libre. Sin telemetría, sin suscripciones, sin trucos.
+        Revisa el código, contribuye mejoras o adapta la app a tus necesidades.
+        Todo el código está en GitHub bajo licencia abierta.
       </p>
       <div class="cta-group">
         <a id="oss-repo" href="#" class="btn btn-primary">
-          View source code
+          Ver código fuente
         </a>
         <a id="oss-dl" href="#" class="btn btn-ghost">
-          Download latest version
+          Descargar última versión
         </a>
       </div>
     </div>
@@ -1256,11 +892,11 @@
     </div>
     <div class="footer-links">
       <a id="footer-repo">GitHub</a>
-      <a id="footer-releases">Releases</a>
-      <a href="tos.html">Terms</a>
-      <a href="privacy.html">Privacy</a>
+      <a id="footer-releases">Versiones</a>
+      <a href="tos.html">Términos</a>
+      <a href="privacy.html">Privacidad</a>
     </div>
-    <div class="footer-right">© 2025 MusicBot — Made for streamers</div>
+    <div class="footer-right">© 2025 MusicBot — Hecho para streamers</div>
   </footer>
 
   <script>

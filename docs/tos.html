@@ -1,10 +1,25 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MusicBot — Términos de Servicio</title>
+  <title>MusicBot — Terms of Service</title>
+  <meta name="description" content="MusicBot terms of service. Free, open source Windows desktop app for managing song requests during live streams." />
+
+  <!-- Canonical & hreflang -->
+  <link rel="canonical" href="https://overabstractor.github.io/MusicBot/tos.html" />
+  <link rel="alternate" hreflang="en" href="https://overabstractor.github.io/MusicBot/tos.html" />
+  <link rel="alternate" hreflang="es" href="https://overabstractor.github.io/MusicBot/es/tos.html" />
+  <link rel="alternate" hreflang="x-default" href="https://overabstractor.github.io/MusicBot/tos.html" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://overabstractor.github.io/MusicBot/tos.html" />
+  <meta property="og:title" content="MusicBot — Terms of Service" />
+  <meta property="og:description" content="MusicBot is free and open source software. By using it you accept these terms." />
+  <meta property="og:site_name" content="MusicBot" />
+
   <style>
     :root {
       --bg: #0f0f14;
@@ -55,10 +70,7 @@
       opacity: .85;
     }
 
-    .nav-links {
-      display: flex;
-      gap: 24px;
-    }
+    .nav-links { display: flex; gap: 16px; align-items: center; }
 
     .nav-links a {
       color: var(--muted);
@@ -70,6 +82,17 @@
     .nav-links a:hover {
       color: var(--text);
     }
+
+    .lang-btn {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--muted) !important;
+    }
+    .lang-btn:hover { color: var(--text) !important; background: rgba(255,255,255,0.05); }
 
     main {
       flex: 1;
@@ -175,60 +198,56 @@
       MusicBot
     </a>
     <div class="nav-links">
-      <a href="tos.html">Términos</a>
-      <a href="privacy.html">Privacidad</a>
+      <a href="tos.html">Terms</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="es/tos.html" class="lang-btn">ES</a>
     </div>
   </nav>
 
   <main>
-    <div class="doc-title">Términos de Servicio</div>
-    <div class="doc-date">Última actualización: abril 2025</div>
+    <div class="doc-title">Terms of Service</div>
+    <div class="doc-date">Last updated: April 2025</div>
 
     <div class="highlight">
-      <p>MusicBot es software gratuito y de código abierto. Al usarlo aceptas estos términos.</p>
+      <p>MusicBot is free and open source software. By using it you accept these terms.</p>
     </div>
 
-    <h2>1. Uso del software</h2>
-    <p>MusicBot es una aplicación de escritorio para Windows que permite gestionar solicitudes de canciones durante
-      transmisiones en vivo. Puedes usarla de forma gratuita, modificarla y distribuirla bajo los términos de la
-      licencia del repositorio.</p>
+    <h2>1. Use of the software</h2>
+    <p>MusicBot is a Windows desktop application for managing song requests during live streams. You may use it free of charge, modify it and distribute it under the terms of the repository's license.</p>
 
-    <h2>2. Cumplimiento con servicios de terceros</h2>
-    <p>MusicBot se integra con plataformas externas. Es tu responsabilidad cumplir con los términos de cada una:</p>
+    <h2>2. Compliance with third-party services</h2>
+    <p>MusicBot integrates with external platforms. It is your responsibility to comply with each one's terms:</p>
     <ul>
-      <li><strong>YouTube</strong> — la reproducción de audio se realiza mediante yt-dlp. Debes respetar los <a
-          href="https://www.youtube.com/t/terms" target="_blank">Términos de Servicio de YouTube</a>.</li>
-      <li><strong>TikTok</strong> — la conexión al chat de TikTok Live está sujeta a los <a
-          href="https://www.tiktok.com/legal/terms-of-service" target="_blank">Términos de TikTok</a>.</li>
-      <li><strong>Twitch</strong> — el acceso a la API de Twitch está sujeto a los <a
-          href="https://www.twitch.tv/p/legal/terms-of-service/" target="_blank">Términos de Twitch</a>.</li>
-      <li><strong>Kick</strong> — el uso de la API de Kick está sujeto a sus términos de servicio vigentes.</li>
+      <li><strong>YouTube</strong> — audio playback is performed via yt-dlp. You must comply with <a
+          href="https://www.youtube.com/t/terms" target="_blank">YouTube's Terms of Service</a>.</li>
+      <li><strong>TikTok</strong> — connecting to TikTok Live chat is subject to <a
+          href="https://www.tiktok.com/legal/terms-of-service" target="_blank">TikTok's Terms</a>.</li>
+      <li><strong>Twitch</strong> — access to the Twitch API is subject to <a
+          href="https://www.twitch.tv/p/legal/terms-of-service/" target="_blank">Twitch's Terms of Service</a>.</li>
+      <li><strong>Kick</strong> — use of the Kick API is subject to its current terms of service.</li>
     </ul>
 
-    <h2>3. Uso permitido</h2>
-    <p>MusicBot está diseñado para uso personal en transmisiones en vivo. No está permitido usarlo para:</p>
+    <h2>3. Permitted use</h2>
+    <p>MusicBot is designed for personal use during live streams. The following are not permitted:</p>
     <ul>
-      <li>Descargar o distribuir contenido con derechos de autor de forma masiva.</li>
-      <li>Automatizar solicitudes de forma fraudulenta o abusiva.</li>
-      <li>Cualquier actividad que viole las leyes aplicables en tu jurisdicción.</li>
+      <li>Downloading or distributing copyrighted content in bulk.</li>
+      <li>Automating requests in a fraudulent or abusive manner.</li>
+      <li>Any activity that violates applicable laws in your jurisdiction.</li>
     </ul>
 
-    <h2>4. Sin garantías</h2>
-    <p>MusicBot se proporciona "tal cual", sin garantías de ningún tipo. No garantizamos disponibilidad continua,
-      compatibilidad con futuras versiones de las plataformas integradas ni ausencia de errores.</p>
+    <h2>4. No warranties</h2>
+    <p>MusicBot is provided "as is", without warranties of any kind. We do not guarantee continuous availability, compatibility with future versions of integrated platforms, or the absence of errors.</p>
 
-    <h2>5. Limitación de responsabilidad</h2>
-    <p>Los desarrolladores de MusicBot no serán responsables por daños directos, indirectos o incidentales derivados del
-      uso o la imposibilidad de uso del software, incluyendo suspensiones de cuenta en plataformas de terceros.</p>
+    <h2>5. Limitation of liability</h2>
+    <p>The developers of MusicBot shall not be liable for direct, indirect or incidental damages arising from the use or inability to use the software, including account suspensions on third-party platforms.</p>
 
-    <h2>6. Cambios en los términos</h2>
-    <p>Estos términos pueden actualizarse. Los cambios se reflejarán en esta página con una nueva fecha de
-      actualización. El uso continuado del software implica la aceptación de los términos vigentes.</p>
+    <h2>6. Changes to the terms</h2>
+    <p>These terms may be updated. Changes will be reflected on this page with a new update date. Continued use of the software implies acceptance of the current terms.</p>
   </main>
 
   <footer>
     <span>© 2025 MusicBot</span>
-    <a href="index.html">← Volver al inicio</a>
+    <a href="index.html">← Back to home</a>
   </footer>
 
 </body>
