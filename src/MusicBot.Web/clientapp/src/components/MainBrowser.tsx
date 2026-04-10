@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Search, X, Play, Plus, Music, ArrowLeft, Trash2, MoreHorizontal,
-  Shuffle, Home, ListMusic, Download, Heart, Library,
+  Shuffle, Home, ListMusic, Download, Heart, Library, Pencil,
   Settings, Zap, Monitor, MessageSquare, Terminal,
 } from "lucide-react";
 import { api } from "../services/api";
@@ -16,6 +16,7 @@ import { OverlayLinks } from "./OverlayLinks";
 import { TickerMessages } from "./TickerMessages";
 import { CommandsPanel } from "./CommandsPanel";
 import { AutoQueuePanel } from "./AutoQueuePanel";
+import { FormModal } from "./FormModal";
 import { QueueSettings, IntegrationEvent, TickerMessage } from "../hooks/useSignalR";
 import { NowPlayingState } from "../types/models";
 
@@ -86,6 +87,10 @@ export const MainBrowser: React.FC<Props> = ({
   const [activating,      setActivating]      = useState(false);
   const [shufflePlaylist, setShufflePlaylist] = useState(false);
 
+  // ── Rename playlist ────────────────────────────────────────────────────────
+  const [renamingPlaylist, setRenamingPlaylist] = useState(false);
+  const [renameValue,      setRenameValue]      = useState("");
+
   // ── Unsaved playlist preview (from search result) ─────────────────────────
   const [previewMeta,    setPreviewMeta]    = useState<Song | null>(null);   // the playlist Song entry
   const [previewTracks,  setPreviewTracks]  = useState<Song[] | null>(null);
@@ -144,6 +149,7 @@ export const MainBrowser: React.FC<Props> = ({
   // ── Load saved playlist detail ─────────────────────────────────────────────
   const loadDetail = useCallback(async (id: number) => {
     setLoadingDetail(true);
+    setRenamingPlaylist(false);
     try {
       const [pls, allPls, songList] = await Promise.all([
         api.getPlaylists().then(l => l.find(p => p.id === id) ?? null),
@@ -344,6 +350,19 @@ export const MainBrowser: React.FC<Props> = ({
     } catch { flash("Error al detener", true); }
   };
 
+  const handleRenamePlaylist = async () => {
+    if (!selectedPlaylistId || !renameValue.trim()) return;
+    try {
+      await api.renamePlaylist(selectedPlaylistId, renameValue.trim());
+      setRenamingPlaylist(false);
+      setPlaylist(p => p ? { ...p, name: renameValue.trim() } : p);
+      onPlaylistsChanged();
+      loadHome();
+    } catch (err: unknown) {
+      flash(err instanceof Error ? err.message : "Error al renombrar", true);
+    }
+  };
+
   const handleDeletePlaylist = async () => {
     if (!selectedPlaylistId || !playlist) return;
     const ok = await confirm({ title: `¿Eliminar "${playlist.name}"?`, message: "Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true });
@@ -433,6 +452,90 @@ export const MainBrowser: React.FC<Props> = ({
   return (
     <div className="main-browser">
       {confirmModal}
+
+      {/* ── Create playlist modal ───────────────────────────── */}
+      {showLibCreate && (
+        <FormModal title="Nueva lista" onClose={() => { setShowLibCreate(false); setLibCreateName(""); }}>
+          <form onSubmit={handleLibCreate} style={{ display: "contents" }}>
+            <span className="form-modal-label">Nombre</span>
+            <input
+              className="input"
+              placeholder="Mi lista…"
+              value={libCreateName}
+              onChange={e => setLibCreateName(e.target.value)}
+              autoFocus
+              disabled={libCreating}
+            />
+            <div className="form-modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => { setShowLibCreate(false); setLibCreateName(""); }}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={libCreating || !libCreateName.trim()}>
+                {libCreating ? "Creando…" : "Crear"}
+              </button>
+            </div>
+          </form>
+        </FormModal>
+      )}
+
+      {/* ── Import playlist modal ───────────────────────────── */}
+      {showLibImport && (
+        <FormModal title="Importar lista de YouTube" onClose={() => { setShowLibImport(false); setLibImportUrl(""); setLibImportName(""); setLibImportMsg(null); }}>
+          <form onSubmit={handleLibImport} style={{ display: "contents" }}>
+            <span className="form-modal-label">URL de la lista</span>
+            <input
+              className="input"
+              placeholder="https://www.youtube.com/playlist?list=…"
+              value={libImportUrl}
+              onChange={e => setLibImportUrl(e.target.value)}
+              autoFocus
+              disabled={libImporting}
+            />
+            <span className="form-modal-label">Nombre (opcional)</span>
+            <input
+              className="input"
+              placeholder="Se usará el título de YouTube si se deja vacío"
+              value={libImportName}
+              onChange={e => setLibImportName(e.target.value)}
+              disabled={libImporting}
+            />
+            {libImportMsg && (
+              <span className={`lib-import-msg${libImportMsg.err ? " err" : ""}`}>{libImportMsg.text}</span>
+            )}
+            <div className="form-modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => { setShowLibImport(false); setLibImportUrl(""); setLibImportName(""); setLibImportMsg(null); }}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={libImporting || !libImportUrl.trim()}>
+                {libImporting ? "Importando…" : "Importar"}
+              </button>
+            </div>
+          </form>
+        </FormModal>
+      )}
+
+      {/* ── Rename playlist modal ───────────────────────────── */}
+      {renamingPlaylist && (
+        <FormModal title="Renombrar lista" onClose={() => setRenamingPlaylist(false)}>
+          <form onSubmit={e => { e.preventDefault(); handleRenamePlaylist(); }} style={{ display: "contents" }}>
+            <span className="form-modal-label">Nuevo nombre</span>
+            <input
+              className="input"
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              autoFocus
+            />
+            <div className="form-modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setRenamingPlaylist(false)}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={!renameValue.trim()}>
+                Guardar
+              </button>
+            </div>
+          </form>
+        </FormModal>
+      )}
 
       {/* ── Tab bar ─────────────────────────────────────────── */}
       <div className="browser-tab-bar">
@@ -617,62 +720,20 @@ export const MainBrowser: React.FC<Props> = ({
           {/* Library toolbar */}
           <div className="browser-lib-toolbar">
             <button
-              className={`lib-sidebar-create-btn${showLibImport ? " active" : ""}`}
+              className="lib-sidebar-create-btn"
               title="Importar lista de YouTube"
-              onClick={() => { setShowLibImport(v => !v); setShowLibCreate(false); setLibImportMsg(null); }}
+              onClick={() => { setShowLibImport(true); setLibImportMsg(null); }}
             >
               <Download size={15} />
             </button>
             <button
-              className={`lib-sidebar-create-btn${showLibCreate ? " active" : ""}`}
+              className="lib-sidebar-create-btn"
               title="Crear lista"
-              onClick={() => { setShowLibCreate(v => !v); setShowLibImport(false); }}
+              onClick={() => setShowLibCreate(true)}
             >
               <Plus size={16} />
             </button>
           </div>
-
-          {showLibCreate && (
-            <form className="lib-sidebar-create-form" onSubmit={handleLibCreate}>
-              <input
-                className="input input-sm"
-                placeholder="Nombre de la lista…"
-                value={libCreateName}
-                onChange={e => setLibCreateName(e.target.value)}
-                autoFocus
-                disabled={libCreating}
-              />
-              <button type="submit" className="btn btn-primary btn-sm" disabled={libCreating || !libCreateName.trim()}>
-                Crear
-              </button>
-            </form>
-          )}
-
-          {showLibImport && (
-            <form className="lib-sidebar-create-form lib-sidebar-import-form" onSubmit={handleLibImport}>
-              <input
-                className="input input-sm"
-                placeholder="URL de YouTube o YouTube Music…"
-                value={libImportUrl}
-                onChange={e => setLibImportUrl(e.target.value)}
-                autoFocus
-                disabled={libImporting}
-              />
-              <input
-                className="input input-sm"
-                placeholder="Nombre (opcional)"
-                value={libImportName}
-                onChange={e => setLibImportName(e.target.value)}
-                disabled={libImporting}
-              />
-              {libImportMsg && (
-                <span className={`lib-import-msg${libImportMsg.err ? " err" : ""}`}>{libImportMsg.text}</span>
-              )}
-              <button type="submit" className="btn btn-primary btn-sm" disabled={libImporting || !libImportUrl.trim()}>
-                {libImporting ? "Importando…" : "Importar"}
-              </button>
-            </form>
-          )}
 
           {!loadingHome && playlists.length > 0 && (
             <section className="browser-section">
@@ -899,9 +960,18 @@ export const MainBrowser: React.FC<Props> = ({
                     <Shuffle size={16} />
                   </button>
                   {!playlist.isSystem && (
-                    <button className="pl-action-btn pl-action-danger" onClick={handleDeletePlaylist} title="Eliminar lista">
-                      <Trash2 size={16} />
-                    </button>
+                    <>
+                      <button
+                        className="pl-action-btn"
+                        onClick={() => { setRenamingPlaylist(true); setRenameValue(playlist.name); }}
+                        title="Renombrar lista"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button className="pl-action-btn pl-action-danger" onClick={handleDeletePlaylist} title="Eliminar lista">
+                        <Trash2 size={16} />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
