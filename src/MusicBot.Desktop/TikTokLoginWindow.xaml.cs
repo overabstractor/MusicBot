@@ -75,19 +75,60 @@ public partial class TikTokLoginWindow : Window
         WebView.CoreWebView2.Navigate(HomeUrl);
     }
 
+    // Analytics/tracking domains that make TikTok's login page sluggish.
+    // Blocking these can cut initial load time by several seconds.
+    private static readonly string[] _blockedDomains =
+    [
+        "analytics.tiktok.com",
+        "mon.tiktok.com",
+        "mcs.zijieapi.com",
+        "mcs.us.tiktok.com",
+        "log.byteoversea.com",
+        "tp.byteoversea.net",
+        "ads-b.bytedance.net",
+        "ads.tiktok.com",
+        "business-api.tiktok.com",
+        "pi.tiktok.com",
+        "metrics.tiktokv.com",
+        "stat.bytedance.com",
+        "starling.tiktok.com",
+    ];
+
     private async Task InitWebViewAsync(bool contextMenus)
     {
         await WebView.EnsureCoreWebView2Async();
         WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = contextMenus;
         WebView.CoreWebView2.Settings.AreDevToolsEnabled            = false;
         WebView.CoreWebView2.IsMuted                                = true;
+
+        // Block analytics/tracking requests so the login page loads faster
+        WebView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+        WebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
+
         WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+    }
+
+    private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        var uri = e.Request.Uri;
+        foreach (var domain in _blockedDomains)
+        {
+            if (uri.Contains(domain, StringComparison.OrdinalIgnoreCase))
+            {
+                e.Response = WebView.CoreWebView2.Environment.CreateWebResourceResponse(
+                    null, 204, "No Content", "");
+                return;
+            }
+        }
     }
 
     // ── Navigation state machine ──────────────────────────────────────────────
 
     private async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        // Hide loading overlay once the first page finishes loading
+        Dispatcher.Invoke(() => LoadingOverlay.Visibility = Visibility.Collapsed);
+
         try
         {
             switch (_state)
@@ -160,8 +201,14 @@ public partial class TikTokLoginWindow : Window
             StatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
         });
 
-        // Fast path: extract username via JS without an extra page load
-        var username = await TryGetUsernameViaJsAsync(cookies);
+        // Fast path: extract username via JS — retry up to 3 times with short delays
+        // (TikTok's SPA state may not be initialised the instant the session cookie appears)
+        string? username = null;
+        for (int attempt = 0; attempt < 3 && username == null; attempt++)
+        {
+            if (attempt > 0) await Task.Delay(600);
+            username = await TryGetUsernameViaJsAsync(cookies);
+        }
 
         if (username != null)
         {
@@ -254,7 +301,7 @@ public partial class TikTokLoginWindow : Window
             }
         }
 
-        // 2. Try JavaScript: current URL handle + in-page state + passport API
+        // 2. Try JavaScript: current URL handle + in-page state + multiple APIs
         const string script = """
             (async function() {
                 try {
@@ -262,15 +309,24 @@ public partial class TikTokLoginWindow : Window
                     const urlM = location.href.match(/tiktok\.com\/@([A-Za-z0-9._]+)/);
                     if (urlM?.[1]) return urlM[1];
 
-                    // b. TikTok SPA global state (_SIGI_STATE or SIGI_STATE)
+                    // b. TikTok SPA global state (multiple known shapes)
                     const sigi = window._SIGI_STATE || window.SIGI_STATE;
                     if (sigi) {
                         const u = sigi?.LoginReducer?.loginUser?.uniqueId
-                               || sigi?.UserModule?.loginUserInfo?.uniqueId;
+                               || sigi?.UserModule?.loginUserInfo?.uniqueId
+                               || sigi?.UserPage?.uniqueId;
                         if (u) return String(u);
                     }
 
-                    // c. TikTok passport API (internal, available when logged in)
+                    // c. Next.js / SSR initial data (newer TikTok versions)
+                    if (window.__NEXT_DATA__) {
+                        const nd = window.__NEXT_DATA__;
+                        const u = nd?.props?.pageProps?.userInfo?.user?.uniqueId
+                               || nd?.props?.pageProps?.loginUser?.uniqueId;
+                        if (u) return String(u);
+                    }
+
+                    // d. TikTok passport API (internal, available when logged in)
                     try {
                         const r = await fetch('/api/passport/account/info/v2/?aid=1988', { credentials: 'include' });
                         if (r.ok) {
@@ -280,13 +336,23 @@ public partial class TikTokLoginWindow : Window
                         }
                     } catch(e) {}
 
-                    // d. Webcast user API (also authenticated)
+                    // e. Webcast user API (also authenticated)
                     try {
                         const r2 = await fetch('https://webcast.tiktok.com/webcast/user/me/?aid=1988', { credentials: 'include' });
                         if (r2.ok) {
                             const d2 = await r2.json();
                             const u2 = d2?.data?.user?.uniqueId || d2?.data?.uniqueId;
                             if (u2) return String(u2);
+                        }
+                    } catch(e) {}
+
+                    // f. TikTok node/detail API used by the web app
+                    try {
+                        const r3 = await fetch('/api/user/detail/?aid=1988&secUid=&uniqueId=', { credentials: 'include' });
+                        if (r3.ok) {
+                            const d3 = await r3.json();
+                            const u3 = d3?.userInfo?.user?.uniqueId;
+                            if (u3) return String(u3);
                         }
                     } catch(e) {}
                 } catch(e) {}

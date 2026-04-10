@@ -28,7 +28,26 @@
             </StackPanel>
         </Border>
 
-        <!-- WebView2 -->
-        <wv2:WebView2 x:Name="WebView" Grid.Row="1"/>
+        <!-- WebView2 + loading overlay -->
+        <Grid Grid.Row="1">
+            <wv2:WebView2 x:Name="WebView"/>
+
+            <!-- Loading overlay — visible while WebView2 initializes -->
+            <Border x:Name="LoadingOverlay"
+                    Background="#0D1117"
+                    Visibility="Visible">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <ProgressBar IsIndeterminate="True"
+                                 Width="180" Height="4"
+                                 Foreground="#FF004F"
+                                 Background="#2D333B"/>
+                    <TextBlock Text="Cargando TikTok…"
+                               Foreground="#8B949E"
+                               FontSize="13"
+                               Margin="0,14,0,0"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

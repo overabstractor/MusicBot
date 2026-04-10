@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { PlatformState, TikTokConfig, TwitchConfig, KickConfig } from "../types/models";
 import { IntegrationEvent } from "../hooks/useSignalR";
 import { api } from "../services/api";
 import { useConfirm } from "../hooks/useConfirm";
 
 interface Props {
-  tiktokEvents: IntegrationEvent[];
-  twitchEvents: IntegrationEvent[];
-  kickEvents:   IntegrationEvent[];
+  tiktokEvents:  IntegrationEvent[];
+  twitchEvents:  IntegrationEvent[];
+  kickEvents:    IntegrationEvent[];
   authUpdatedAt?: number;
 }
 
@@ -40,7 +40,7 @@ export const PlatformConnections: React.FC<Props> = ({ tiktokEvents, twitchEvent
 
   return (
     <div className="platforms-grid">
-      <TikTokCard state={tiktok} onSaved={refresh} events={tiktokEvents} />
+      <TikTokCard state={tiktok} onSaved={refresh} events={tiktokEvents} authUpdatedAt={authUpdatedAt} />
       <TwitchCard state={twitch} onSaved={refresh} events={twitchEvents} authUpdatedAt={authUpdatedAt} />
       <KickCard   state={kick}   onSaved={refresh} events={kickEvents}   authUpdatedAt={authUpdatedAt} />
     </div>
@@ -88,8 +88,8 @@ const ConnectError: React.FC<{ message: string; onDismiss: () => void }> = ({ me
 
 // ── TikTok card ───────────────────────────────────────────────────────────────
 
-const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[] }> = ({
-  state, onSaved, events,
+const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[]; authUpdatedAt?: number }> = ({
+  state, onSaved, events, authUpdatedAt,
 }) => {
   const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
@@ -97,30 +97,57 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   const [connectError, setConnectError] = useState<string | null>(null);
   const [tiktokAuth, setTiktokAuth] = useState<{ authenticated: boolean; username: string | null } | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const fetchAuthStatus = useCallback(async () => {
+    try {
+      const r = await api.getTikTokAuthStatus();
+      setTiktokAuth(r);
+      return r;
+    } catch {
+      return { authenticated: false, username: null as string | null, cancelled: false };
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => { fetchAuthStatus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When the SignalR auth:updated event fires (pushed by backend on successful login)
   useEffect(() => {
-    api.getTikTokAuthStatus()
-      .then(setTiktokAuth)
-      .catch(() => setTiktokAuth({ authenticated: false, username: null }));
+    if (!authUpdatedAt) return;
+    fetchAuthStatus().then(async r => {
+      if (r.authenticated) {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        setAuthBusy(false);
+        if (r.username) await api.saveTikTok(r.username, autoConnect).catch(() => {});
+        onSaved();
+      }
+    });
+  }, [authUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stopPoll = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
 
   const handleLogin = async () => {
     setAuthBusy(true);
     try {
       await api.startTikTokLogin();
-      const poll = setInterval(async () => {
-        const r = await api.getTikTokAuthStatus().catch(() => ({ authenticated: false, username: null, cancelled: false }));
+      // Poll as fallback in case SignalR is unavailable; SignalR will stop the poll early
+      pollRef.current = setInterval(async () => {
+        const r = await api.getTikTokAuthStatus().catch(() => ({ authenticated: false, username: null as string | null, cancelled: false }));
         if (r.authenticated) {
-          clearInterval(poll);
+          stopPoll();
           setAuthBusy(false);
           setTiktokAuth(r);
           if (r.username) await api.saveTikTok(r.username, autoConnect).catch(() => {});
+          onSaved();
         } else if (r.cancelled) {
-          clearInterval(poll);
+          stopPoll();
           setAuthBusy(false);
         }
-      }, 1500);
-      setTimeout(() => { clearInterval(poll); setAuthBusy(false); }, 120_000);
+      }, 2500);
+      setTimeout(() => { stopPoll(); setAuthBusy(false); }, 120_000);
     } catch { setAuthBusy(false); }
   };
 
