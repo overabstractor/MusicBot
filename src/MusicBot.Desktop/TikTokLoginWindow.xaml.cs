@@ -62,9 +62,8 @@ public partial class TikTokLoginWindow : Window
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_silentRestore) return;
-        SetStatus("Iniciando navegador…", neutral: true);
+        // Overlay is already Visible by XAML default — no need to show/hide before WebView2 is ready
         await InitWebViewAsync(contextMenus: true);
-        ShowOverlay("Cargando TikTok…");
         WebView.CoreWebView2.Navigate(LoginUrl);
         StartSessionPolling();
     }
@@ -183,12 +182,10 @@ public partial class TikTokLoginWindow : Window
         else
         {
             // Fallback: navigate to /profile/ and let the redirect reveal the handle
+            // OnNavigationCompleted will re-show the overlay label when this navigation starts
             _state = State.WaitingForProfileRedirect;
-            Dispatcher.Invoke(() =>
-            {
-                ShowOverlay("Verificando perfil…");
-                WebView.CoreWebView2.Navigate(ProfileUrl);
-            });
+            SetStatus("Verificando perfil…", neutral: true);
+            Dispatcher.Invoke(() => WebView.CoreWebView2.Navigate(ProfileUrl));
         }
     }
 
