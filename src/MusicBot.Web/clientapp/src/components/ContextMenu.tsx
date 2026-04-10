@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Play, Plus, X, Ban, ListMusic, ChevronLeft, Search, Heart, SkipForward } from "lucide-react";
 import { api } from "../services/api";
 import { PlaylistMembership } from "../types/models";
@@ -23,17 +24,17 @@ interface Props {
   /** True when this is the currently playing track — shows Skip instead of Play/Enqueue */
   isNowPlaying?: boolean;
   onSkip?: () => void;
-  /** Override positioning of the menu container */
-  style?: React.CSSProperties;
+  /** The trigger element — used to calculate fixed position so the menu
+   *  escapes overflow:hidden and stacking-context constraints. */
+  anchorEl?: HTMLElement | null;
 }
 
 type View = "main" | "playlist";
 
 export const ContextMenu: React.FC<Props> = ({
-  song, isQueue, onClose, onRemove, onBan, defaultView, isNowPlaying, onSkip, style,
+  song, isQueue, onClose, onRemove, onBan, defaultView, isNowPlaying, onSkip, anchorEl,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
-
   const [view,         setView]         = useState<View>(defaultView ?? "main");
   const [memberships,  setMemberships]  = useState<PlaylistMembership[] | null>(null);
   const [search,       setSearch]       = useState("");
@@ -41,7 +42,7 @@ export const ContextMenu: React.FC<Props> = ({
   const [showCreate,   setShowCreate]   = useState(false);
   const [feedback,     setFeedback]     = useState<string | null>(null);
   const [busy,         setBusy]         = useState(false);
-  const [flipUp,       setFlipUp]       = useState(false);
+  const [pos,          setPos]          = useState<React.CSSProperties>({});
 
   // Close on outside click
   useEffect(() => {
@@ -52,12 +53,27 @@ export const ContextMenu: React.FC<Props> = ({
     return () => document.removeEventListener("mousedown", h);
   }, [onClose]);
 
-  // Smart positioning: flip upward if menu would overflow the viewport bottom
+  // Calculate fixed position from the anchor element so the menu renders
+  // at the viewport level — escapes overflow:hidden and stacking contexts.
   useEffect(() => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    if (rect.bottom > window.innerHeight - 8) setFlipUp(true);
-  });
+    const anchor = anchorEl ?? ref.current?.previousElementSibling as HTMLElement | null;
+    const menu   = ref.current;
+    if (!anchor || !menu) return;
+
+    const ar = anchor.getBoundingClientRect();
+    const menuH = menu.offsetHeight || 300;
+    const spaceBelow = window.innerHeight - ar.bottom;
+    const spaceAbove = ar.top;
+
+    const top = spaceBelow >= menuH || spaceBelow >= spaceAbove
+      ? ar.bottom + 4
+      : ar.top - menuH - 4;
+
+    // Align right edge of menu with right edge of anchor button
+    const right = window.innerWidth - ar.right;
+
+    setPos({ position: "fixed", top, right, bottom: "auto", left: "auto" });
+  }, [anchorEl]);
 
   // Fetch memberships when entering playlist view
   const openPlaylistView = async () => {
@@ -125,8 +141,8 @@ export const ContextMenu: React.FC<Props> = ({
   const filtered = (arr: PlaylistMembership[]) =>
     search ? arr.filter(m => m.name.toLowerCase().includes(search.toLowerCase())) : arr;
 
-  return (
-    <div className={`ctx-menu${flipUp ? " ctx-menu-flip-up" : ""}`} ref={ref} style={style}>
+  const menu = (
+    <div className="ctx-menu" ref={ref} style={pos}>
       {/* ── Main view ── */}
       {view === "main" && (
         <>
@@ -272,4 +288,6 @@ export const ContextMenu: React.FC<Props> = ({
       )}
     </div>
   );
+
+  return createPortal(menu, document.body);
 };
