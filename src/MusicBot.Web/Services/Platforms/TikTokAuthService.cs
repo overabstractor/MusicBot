@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using MusicBot.Data;
+using MusicBot.Hubs;
 
 namespace MusicBot.Services.Platforms;
 
@@ -14,6 +16,7 @@ public class TikTokAuthService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<TikTokAuthService> _logger;
+    private readonly IHubContext<OverlayHub> _hub;
 
     private string? _cookieString;
     private string? _username;
@@ -29,10 +32,11 @@ public class TikTokAuthService
     // Stores the initial DB load so App.xaml.cs can await it before triggering restore
     private readonly Task _initialLoad;
 
-    public TikTokAuthService(IServiceScopeFactory scopeFactory, ILogger<TikTokAuthService> logger)
+    public TikTokAuthService(IServiceScopeFactory scopeFactory, ILogger<TikTokAuthService> logger, IHubContext<OverlayHub> hub)
     {
         _scopeFactory = scopeFactory;
         _logger       = logger;
+        _hub          = hub;
 
         // Subscribe to Desktop events
         AppEvents.OnTikTokCookiesCaptured  += OnCookiesCaptured;
@@ -64,6 +68,11 @@ public class TikTokAuthService
         _savedAt      = DateTimeOffset.UtcNow;
         _logger.LogInformation("TikTok cookies captured — user={Username}", username ?? "(unknown)");
         _ = SaveToDbAsync(cookieString, username);
+
+        // Push auth:updated so the frontend stops polling immediately
+        _ = _hub.Clients
+                .Group($"user:{LocalUser.Id}")
+                .SendAsync("auth:updated", new { platform = "tiktok", authenticated = true, username });
     }
 
     // ── Public ────────────────────────────────────────────────────────────────

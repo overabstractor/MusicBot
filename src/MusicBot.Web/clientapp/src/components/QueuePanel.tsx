@@ -125,7 +125,7 @@ const DevicesView: React.FC = () => {
 const HistoryView: React.FC<{ refreshKey: number; likedUris?: Set<string>; onToggleLike?: (song: SongRef) => void }> = ({ refreshKey, likedUris, onToggleLike }) => {
   const [history,  setHistory]  = useState<HistoryItem[]>([]);
   const [loading,  setLoading]  = useState(true);
-  const [menuUri,  setMenuUri]  = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{ id: string; el: HTMLElement } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -166,15 +166,16 @@ const HistoryView: React.FC<{ refreshKey: number; likedUris?: Set<string>; onTog
               )}
               <button
                 className="qi-menu-btn"
-                onClick={e => { e.stopPropagation(); setMenuUri(v => v === item.id ? null : item.id); }}
+                onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.id === item.id ? null : { id: item.id, el: e.currentTarget }); }}
                 title="Más opciones"
               ><MoreHorizontal size={15} /></button>
             </div>
-            {menuUri === item.id && (
+            {menuAnchor?.id === item.id && (
               <ContextMenu
                 song={song}
                 isQueue={false}
-                onClose={() => setMenuUri(null)}
+                anchorEl={menuAnchor.el}
+                onClose={() => setMenuAnchor(null)}
               />
             )}
           </div>
@@ -191,7 +192,7 @@ export const QueuePanel: React.FC<Props> = ({
   activePlaylistName, likedUris, onToggleLike,
 }) => {
   const [historyTab, setHistoryTab] = useState(false);
-  const [menuUri,    setMenuUri]    = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{ uri: string; el: HTMLElement } | null>(null);
   const [dragUri,    setDragUri]    = useState<string | null>(null);
   const [dropIndex,  setDropIndex]  = useState<number | null>(null);
   const dragIndexRef = useRef<number>(-1);
@@ -350,15 +351,16 @@ export const QueuePanel: React.FC<Props> = ({
                       )}
                       <button
                         className="qi-menu-btn"
-                        onClick={e => { e.stopPropagation(); setMenuUri(v => v === item.song.spotifyUri ? null : item.song.spotifyUri); }}
+                        onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === item.song.spotifyUri ? null : { uri: item.song.spotifyUri, el: e.currentTarget }); }}
                         title="Más opciones"
                       ><MoreHorizontal size={15} /></button>
                     </div>
-                    {menuUri === item.song.spotifyUri && (
+                    {menuAnchor?.uri === item.song.spotifyUri && (
                       <ContextMenu
                         song={song}
                         isQueue
-                        onClose={() => setMenuUri(null)}
+                        anchorEl={menuAnchor.el}
+                        onClose={() => setMenuAnchor(null)}
                         onRemove={onRemove}
                         onBan={onBan}
                       />
@@ -384,7 +386,7 @@ export const QueuePanel: React.FC<Props> = ({
                   durationMs: item.song.durationMs,
                 };
                 return (
-                  <div key={item.song.spotifyUri} className="queue-item-row queue-item-bg" style={{ position: "relative" }}>
+                  <div key={item.song.spotifyUri} className="queue-item-row queue-item-bg">
                     <span className="qi-pos">{i + 1}</span>
                     {item.song.coverUrl
                       ? <img src={item.song.coverUrl} alt="" className="qi-cover" />
@@ -405,14 +407,15 @@ export const QueuePanel: React.FC<Props> = ({
                       )}
                       <button
                         className="qi-menu-btn"
-                        onClick={e => { e.stopPropagation(); setMenuUri(v => v === item.song.spotifyUri ? null : item.song.spotifyUri); }}
+                        onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === item.song.spotifyUri ? null : { uri: item.song.spotifyUri, el: e.currentTarget }); }}
                       ><MoreHorizontal size={15} /></button>
                     </div>
-                    {menuUri === item.song.spotifyUri && (
+                    {menuAnchor?.uri === item.song.spotifyUri && (
                       <ContextMenu
                         song={song}
                         isQueue={false}
-                        onClose={() => setMenuUri(null)}
+                        anchorEl={menuAnchor.el}
+                        onClose={() => setMenuAnchor(null)}
                       />
                     )}
                   </div>

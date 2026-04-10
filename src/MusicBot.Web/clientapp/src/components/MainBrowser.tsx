@@ -109,9 +109,9 @@ export const MainBrowser: React.FC<Props> = ({
   const dragSongIdxRef = useRef<number>(-1);
 
   // ── Context menus ──────────────────────────────────────────────────────────
-  const [menuUri,     setMenuUri]     = useState<string | null>(null);
-  // likeMenuUri: opens ContextMenu in "playlist" view (for ♥ click on liked songs)
-  const [likeMenuUri, setLikeMenuUri] = useState<string | null>(null);
+  const [menuAnchor,     setMenuAnchor]     = useState<{ uri: string; el: HTMLElement } | null>(null);
+  // likeMenuAnchor: opens ContextMenu in "playlist" view (for ♥ click on liked songs)
+  const [likeMenuAnchor, setLikeMenuAnchor] = useState<{ uri: string; el: HTMLElement } | null>(null);
 
   // ── Search dropdown ────────────────────────────────────────────────────────
   const [dropdownOpen,  setDropdownOpen]  = useState(false);
@@ -541,7 +541,7 @@ export const MainBrowser: React.FC<Props> = ({
                           <button
                             className="browser-dd-btn"
                             title="Más opciones"
-                            onClick={e => { e.stopPropagation(); setMenuUri(v => v === song.spotifyUri ? null : song.spotifyUri); }}
+                            onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === song.spotifyUri ? null : { uri: song.spotifyUri, el: e.currentTarget }); }}
                           ><MoreHorizontal size={14} /></button>
                           <button
                             className="browser-dd-play-btn"
@@ -554,11 +554,12 @@ export const MainBrowser: React.FC<Props> = ({
                             onClick={() => handleEnqueue(song)}
                           ><Plus size={14} /></button>
                         </div>
-                        {menuUri === song.spotifyUri && (
+                        {menuAnchor?.uri === song.spotifyUri && (
                           <ContextMenu
                             song={song}
                             isQueue={false}
-                            onClose={() => setMenuUri(null)}
+                            anchorEl={menuAnchor.el}
+                            onClose={() => setMenuAnchor(null)}
                           />
                         )}
                       </div>
@@ -828,16 +829,17 @@ export const MainBrowser: React.FC<Props> = ({
                         <button
                           className="pl-row-btn"
                           title="Más opciones"
-                          onClick={e => { e.stopPropagation(); setMenuUri(v => v === s.spotifyUri + i ? null : s.spotifyUri + i); }}
+                          onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === s.spotifyUri + i ? null : { uri: s.spotifyUri + i, el: e.currentTarget }); }}
                         >
                           <MoreHorizontal size={15} />
                         </button>
                       </div>
-                      {menuUri === s.spotifyUri + i && (
+                      {menuAnchor?.uri === s.spotifyUri + i && (
                         <ContextMenu
                           song={s}
                           isQueue={false}
-                          onClose={() => setMenuUri(null)}
+                          anchorEl={menuAnchor.el}
+                          onClose={() => setMenuAnchor(null)}
                         />
                       )}
                     </div>
@@ -1002,8 +1004,8 @@ export const MainBrowser: React.FC<Props> = ({
                           onClick={e => {
                             e.stopPropagation();
                             if (isLiked) {
-                              setLikeMenuUri(v => v === s.spotifyUri ? null : s.spotifyUri);
-                              setMenuUri(null);
+                              setLikeMenuAnchor(v => v?.uri === s.spotifyUri ? null : { uri: s.spotifyUri, el: e.currentTarget });
+                              setMenuAnchor(null);
                             } else {
                               onToggleLike?.(plSong);
                             }
@@ -1015,27 +1017,29 @@ export const MainBrowser: React.FC<Props> = ({
                         <button
                           className="pl-row-btn"
                           title="Más opciones"
-                          onClick={e => { e.stopPropagation(); setMenuUri(v => v === s.spotifyUri ? null : s.spotifyUri); setLikeMenuUri(null); }}
+                          onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === s.spotifyUri ? null : { uri: s.spotifyUri, el: e.currentTarget }); setLikeMenuAnchor(null); }}
                         >
                           <MoreHorizontal size={15} />
                         </button>
                       </div>
 
                       {/* Ellipsis context menu */}
-                      {menuUri === s.spotifyUri && (
+                      {menuAnchor?.uri === s.spotifyUri && (
                         <ContextMenu
                           song={plSong}
                           isQueue={false}
-                          onClose={() => setMenuUri(null)}
+                          anchorEl={menuAnchor.el}
+                          onClose={() => setMenuAnchor(null)}
                           onRemove={!playlist?.isSystem ? () => handleRemoveSong(s.spotifyUri) : undefined}
                         />
                       )}
                       {/* Like menu (opens membership view) */}
-                      {likeMenuUri === s.spotifyUri && (
+                      {likeMenuAnchor?.uri === s.spotifyUri && (
                         <ContextMenu
                           song={plSong}
                           isQueue={false}
-                          onClose={() => setLikeMenuUri(null)}
+                          anchorEl={likeMenuAnchor.el}
+                          onClose={() => setLikeMenuAnchor(null)}
                           defaultView="playlist"
                         />
                       )}

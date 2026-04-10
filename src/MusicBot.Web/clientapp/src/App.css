@@ -1246,10 +1246,19 @@ a:hover { text-decoration: underline; }
 
 .now-playing-row { background: var(--surface2); }
 .queue-item-bg {
-  opacity: 0.65;
   border-left: 2px solid transparent;
 }
-.queue-item-bg:hover { opacity: 0.85; }
+/* Apply opacity only to content children — NOT to the row itself.
+   opacity on the container creates a stacking context that makes the
+   ContextMenu inherit the translucency and traps its z-index. */
+.queue-item-bg .qi-pos,
+.queue-item-bg .qi-cover,
+.queue-item-bg .qi-info,
+.queue-item-bg .qi-actions { opacity: 0.65; transition: opacity 0.1s; }
+.queue-item-bg:hover .qi-pos,
+.queue-item-bg:hover .qi-cover,
+.queue-item-bg:hover .qi-info,
+.queue-item-bg:hover .qi-actions { opacity: 0.85; }
 .history-row { cursor: pointer; }
 
 .qi-pos {
@@ -1371,10 +1380,10 @@ a:hover { text-decoration: underline; }
 
 /* ── Context Menu ─────────────────────────── */
 .ctx-menu {
-  position: absolute;
-  right: 40px;
-  top: 0;
-  z-index: 500;
+  /* Portal-rendered at document.body — position:fixed escapes all
+     overflow:hidden containers and stacking-context constraints. */
+  position: fixed;
+  z-index: 9000;
   background: var(--surface2);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
@@ -1382,10 +1391,6 @@ a:hover { text-decoration: underline; }
   min-width: 200px;
   padding: 6px 0;
   overflow: hidden;
-}
-.ctx-menu.ctx-menu-flip-up {
-  top: auto;
-  bottom: 0;
 }
 
 .ctx-item {

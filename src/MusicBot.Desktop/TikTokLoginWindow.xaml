@@ -20,7 +20,7 @@
                            FontSize="15" FontWeight="SemiBold"
                            Foreground="#E6EDF3"/>
                 <TextBlock x:Name="StatusText"
-                           Text="Inicia sesión con tu cuenta de TikTok. Las cookies se guardarán automáticamente."
+                           Text="Cargando TikTok…"
                            FontSize="12"
                            Foreground="#8B949E"
                            TextWrapping="Wrap"
@@ -28,7 +28,7 @@
             </StackPanel>
         </Border>
 
-        <!-- WebView2 -->
+        <!-- WebView2 — ocupa toda la fila -->
         <wv2:WebView2 x:Name="WebView" Grid.Row="1"/>
     </Grid>
 </Window>
