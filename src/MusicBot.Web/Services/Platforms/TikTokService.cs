@@ -131,9 +131,17 @@ public class TikTokService : BackgroundService
 
     private async void OnChat(TikTokLiveClient sender, Chat e)
     {
-        var username = e.Sender?.UniqueId ?? "viewer";
-        var message  = e.Message?.Trim();
+        var username = e.Sender?.UniqueId
+            ?? e.Sender?.NickName;
+
+        var message = e.Message?.Trim();
         if (string.IsNullOrEmpty(message) || message[0] is not ('!' or '.' or '/')) return;
+
+        if (string.IsNullOrEmpty(username))
+        {
+            _logger.LogWarning("TikTok: comando ignorado de usuario anónimo (sin UniqueId ni NickName) — mensaje: {Message}", message);
+            return;
+        }
 
         var parts = message.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         var cmd   = parts[0][1..].ToLowerInvariant(); // strip prefix char
@@ -197,11 +205,17 @@ public class TikTokService : BackgroundService
     {
         try
         {
-            var username  = e.User?.UniqueId ?? "viewer";
+            var username  = e.User?.UniqueId ?? e.User?.NickName;
             var giftName  = e.Gift?.Name ?? "regalo";
             var diamonds  = e.Gift?.DiamondCost ?? 0;
             var repeat    = (int)(e.RepeatCount > 0 ? e.RepeatCount : 1);
             var coins     = diamonds * repeat;
+
+            if (string.IsNullOrEmpty(username))
+            {
+                _logger.LogWarning("TikTok: regalo ignorado de usuario anónimo (sin UniqueId ni NickName) — regalo: {Gift}", e.Gift?.Name);
+                return;
+            }
 
             if (coins <= 0) return;
 
