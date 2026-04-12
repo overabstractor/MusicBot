@@ -24,7 +24,8 @@
       "WebFetch(domain:developers.tiktok.com)",
       "Bash(curl:*)",
       "Bash(grep:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
