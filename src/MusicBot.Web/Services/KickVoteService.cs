@@ -30,6 +30,8 @@ public class KickVoteService
 
     public bool IsActive => _active;
 
+    public bool VotingEnabled => _settings.VotingEnabled;
+
     /// <summary>Returns the current in-progress vote state, or null if no vote is active.</summary>
     public object? GetCurrentVotePayload()
     {

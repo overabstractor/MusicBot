@@ -287,10 +287,14 @@ public class CommandRouterService
             : CommandResult.Fail($"{command.RequestedBy} no tiene canciones para subir");
     }
 
-    private async Task<CommandResult> HandleVote(string? username, bool skip)
+    private async Task<CommandResult?> HandleVote(string? username, bool skip)
     {
         if (string.IsNullOrWhiteSpace(username))
             return CommandResult.Fail("Debes indicar tu nombre de usuario para votar");
+
+        // Omit votes if voting is disabled, to avoid confusion.
+        // This means the "si"/"no" commands will simply do nothing when there's no kick vote in progress.
+        if (!_kickVote.VotingEnabled) return null;
 
         var result = await _kickVote.VoteAsync(username, skip);
         return result switch
