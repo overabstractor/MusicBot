@@ -7,11 +7,13 @@ namespace MusicBot.Services.Library;
 
 public class LocalLibraryService : ILocalLibraryService
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceScopeFactory        _scopeFactory;
+    private readonly ILogger<LocalLibraryService> _logger;
 
-    public LocalLibraryService(IServiceScopeFactory scopeFactory)
+    public LocalLibraryService(IServiceScopeFactory scopeFactory, ILogger<LocalLibraryService> logger)
     {
         _scopeFactory = scopeFactory;
+        _logger       = logger;
     }
 
     public async Task<CachedTrack?> FindByTrackIdAsync(string trackId)
@@ -61,8 +63,14 @@ public class LocalLibraryService : ILocalLibraryService
         var db  = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
         var row = await db.CachedTracks.FirstOrDefaultAsync(t => t.TrackId == trackId);
         if (row == null) return;
-        // Delete physical file
-        try { if (File.Exists(row.FilePath)) File.Delete(row.FilePath); } catch { /* ignore */ }
+        try
+        {
+            if (File.Exists(row.FilePath)) File.Delete(row.FilePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not delete cached file {Path} — will be cleaned up on next shutdown", row.FilePath);
+        }
         db.CachedTracks.Remove(row);
         await db.SaveChangesAsync();
     }
