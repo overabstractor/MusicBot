@@ -20,6 +20,7 @@ public class YtDlpSetupService : BackgroundService
         {
             await _downloader.EnsureYtDlpAsync();
             await _downloader.EnsureFfmpegAsync();
+            await _downloader.EnsureDenoAsync();
         }
         catch (Exception ex)
         {

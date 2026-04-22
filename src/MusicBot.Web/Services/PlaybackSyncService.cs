@@ -146,6 +146,19 @@ public class PlaybackSyncService : BackgroundService
             await EnsureLocalFileAsync(current.Song);
             await services.Player.PlayAsync(current.Song.LocalFilePath!);
         }
+        catch (Exception ex) when (IsRateLimitError(ex))
+        {
+            // Rate-limited after exhausting retries — skip the song.
+            // DownloadCoreAsync already waited up to 165s; don't add more delay here
+            // because the queue may have already advanced during that time.
+            _logger.LogWarning("Skipping \"{Title}\" after rate-limit retries exhausted", current.Song.Title);
+            _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
+            services.Queue.RemoveByUri(current.Song.SpotifyUri);
+            _ = _hub.Clients.Group($"user:{LocalUser.Id}")
+                    .SendAsync("queue:download-failed", new { title = current.Song.Title, artist = current.Song.Artist, reason = ex.Message });
+            await StartCurrentTrackAsync(services);
+            return;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Playback failed for \"{Title}\" — removing from queue", current.Song.Title);
@@ -348,6 +361,12 @@ public class PlaybackSyncService : BackgroundService
             || msg.Contains("This video is not available")
             || msg.Contains("has been removed")
             || msg.Contains("account associated with this video has been terminated");
+    }
+
+    private static bool IsRateLimitError(Exception ex)
+    {
+        var msg = ex.Message;
+        return msg.Contains("429") || msg.Contains("Too Many Requests");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

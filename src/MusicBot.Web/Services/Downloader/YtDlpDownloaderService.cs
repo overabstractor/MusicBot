@@ -66,6 +66,34 @@ public class YtDlpDownloaderService
     /// Downloads it automatically if missing.
     /// Called by YtDlpSetupService at startup.
     /// </summary>
+    /// <summary>
+    /// Ensures Deno is available next to the executable.
+    /// Deno is required by yt-dlp to resolve YouTube's JS challenges (bot detection / 429 errors).
+    /// </summary>
+    public async Task EnsureDenoAsync()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "deno.exe");
+
+        if (File.Exists(path))
+        {
+            _logger.LogInformation("Deno disponible en '{Path}'", path);
+            return;
+        }
+
+        _logger.LogInformation("Deno no encontrado — descargando automáticamente en '{Dir}'...",
+            AppContext.BaseDirectory);
+        try
+        {
+            await YoutubeDLSharp.Utils.DownloadDeno(AppContext.BaseDirectory);
+            _logger.LogInformation("Deno descargado correctamente en '{Path}'", path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudo descargar Deno automáticamente. " +
+                "Sin Deno, yt-dlp puede recibir errores 429 de YouTube.");
+        }
+    }
+
     public async Task EnsureFfmpegAsync()
     {
         var path = ResolveFfmpegPath(_settings.FfmpegPath);
@@ -338,11 +366,11 @@ public class YtDlpDownloaderService
             CreateNoWindow         = true,
         };
         // --print outputs one line per entry:
-        //   playlist_title<TAB>id<TAB>title<TAB>channel<TAB>duration
+        //   playlist_title<TAB>id<TAB>title<TAB>channel<TAB>duration<TAB>availability
         // playlist_title is the same for every line; we capture it from the first.
         psi.ArgumentList.Add("--flat-playlist");
         psi.ArgumentList.Add("--print");
-        psi.ArgumentList.Add("%(playlist_title)s\t%(id)s\t%(title)s\t%(channel)s\t%(duration)s");
+        psi.ArgumentList.Add("%(playlist_title)s\t%(id)s\t%(title)s\t%(channel)s\t%(duration)s\t%(availability)s");
         psi.ArgumentList.Add("--no-warnings");
         psi.ArgumentList.Add("--playlist-items");
         psi.ArgumentList.Add($"1-{maxTracks}");
@@ -352,6 +380,7 @@ public class YtDlpDownloaderService
         process.Start();
 
         var songs        = new List<Song>();
+        int skipped      = 0;
         string? playlistName = null;
         try
         {
@@ -360,17 +389,26 @@ public class YtDlpDownloaderService
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
-                var parts      = line.Split('\t');
-                var plTitle    = parts.Length > 0 ? parts[0].Trim() : null;
-                var id         = parts.Length > 1 ? parts[1].Trim() : null;
-                var title      = parts.Length > 2 ? parts[2].Trim() : "";
-                var chan        = parts.Length > 3 ? parts[3].Trim() : "";
-                var durStr     = parts.Length > 4 ? parts[4].Trim() : "0";
+                var parts        = line.Split('\t');
+                var plTitle      = parts.Length > 0 ? parts[0].Trim() : null;
+                var id           = parts.Length > 1 ? parts[1].Trim() : null;
+                var title        = parts.Length > 2 ? parts[2].Trim() : "";
+                var chan         = parts.Length > 3 ? parts[3].Trim() : "";
+                var durStr       = parts.Length > 4 ? parts[4].Trim() : "0";
+                var availability = parts.Length > 5 ? parts[5].Trim() : "NA";
 
                 if (playlistName == null && !string.IsNullOrEmpty(plTitle) && plTitle != "NA")
                     playlistName = plTitle;
 
                 if (string.IsNullOrEmpty(id) || id == "NA") continue;
+
+                if (IsUnavailablePlaylistEntry(title, availability))
+                {
+                    skipped++;
+                    _logger.LogDebug("Skipping unavailable playlist entry: id={Id} title={Title} availability={Av}",
+                        id, title, availability);
+                    continue;
+                }
 
                 double.TryParse(durStr is "NA" or "" ? "0" : durStr,
                     System.Globalization.NumberStyles.Any,
@@ -397,7 +435,11 @@ public class YtDlpDownloaderService
         }
 
         try { await process.WaitForExitAsync(); } catch { }
-        _logger.LogInformation("Playlist import complete: {N} tracks from {Url}", songs.Count, playlistUrl);
+        if (skipped > 0)
+            _logger.LogInformation("Playlist import complete: {N} tracks added, {Skipped} unavailable skipped from {Url}",
+                songs.Count, skipped, playlistUrl);
+        else
+            _logger.LogInformation("Playlist import complete: {N} tracks from {Url}", songs.Count, playlistUrl);
         return (songs, playlistName);
     }
 
@@ -572,6 +614,12 @@ public class YtDlpDownloaderService
                           entry.TryGetProperty("uploader", out var upEl) ? upEl.GetString() ?? "" : "";
             var thumb   = entry.TryGetProperty("thumbnail", out var thEl) ? thEl.GetString() ?? "" : "";
 
+            if (!isPlaylist)
+            {
+                var availability = entry.TryGetProperty("availability", out var avEl) ? avEl.GetString() ?? "NA" : "NA";
+                if (IsUnavailablePlaylistEntry(title, availability)) continue;
+            }
+
             if (isPlaylist)
             {
                 var count  = hasPlCount ? pcEl.GetInt32() : 0;
@@ -607,6 +655,21 @@ public class YtDlpDownloaderService
         return songs;
     }
 
+    /// <summary>
+    /// Returns true for playlist entries that are known to be unavailable at import time,
+    /// based on the availability field or YouTube's placeholder titles for private/deleted videos.
+    /// </summary>
+    private static bool IsUnavailablePlaylistEntry(string title, string availability)
+    {
+        // yt-dlp availability values that indicate the video cannot be played
+        if (availability is "private" or "premium_only" or "subscriber_only" or "needs_auth")
+            return true;
+
+        // YouTube substitutes these placeholder titles for deleted/private videos in playlists
+        var t = title.Trim('[', ']').ToLowerInvariant();
+        return t is "private video" or "deleted video";
+    }
+
     private static (string title, string artist) SplitVideoTitle(string videoTitle, string channelName)
     {
         var idx = videoTitle.IndexOf(" - ", StringComparison.Ordinal);
@@ -622,6 +685,20 @@ public class YtDlpDownloaderService
     }
 
     // ── Core download logic ──────────────────────────────────────────────────
+
+    private static bool IsRateLimitError(string[] errorOutput)
+    {
+        var combined = string.Join(" ", errorOutput);
+        return (combined.Contains("429") || combined.Contains("Too Many Requests"))
+            && !IsUnrecoverableOutputError(combined);
+    }
+
+    private static bool IsUnrecoverableOutputError(string combined) =>
+        combined.Contains("Video unavailable")
+        || combined.Contains("Private video")
+        || combined.Contains("This video is not available")
+        || combined.Contains("has been removed")
+        || combined.Contains("account associated with this video has been terminated");
 
     private async Task<string> DownloadCoreAsync(Song song)
     {
@@ -674,18 +751,37 @@ public class YtDlpDownloaderService
                 Output     = outputPath,
                 NoPlaylist = true,
             };
+            // Use tv_embedded client — avoids JS challenge requirements and bot-detection 429s
+            overrideOptions.AddCustomOption<string>("--extractor-args", "youtube:player_client=tv_embedded,web_embedded");
 
             var audioFormat = _settings.UseNativeAudioFormat
                 ? AudioConversionFormat.M4a   // no ffmpeg needed; Windows MF plays M4A natively
                 : AudioConversionFormat.Mp3;  // requires ffmpeg
 
-            var result = await _ytdl.RunAudioDownload(
-                url,
-                audioFormat,
-                progress: progress,
-                overrideOptions: overrideOptions);
+            // Retry up to 3 times on HTTP 429 with exponential backoff.
+            // 429 is transient — YouTube rate-limits bursts after large playlist imports.
+            RunResult<string>? result = null;
+            int[] retryDelaysSec = [45, 120];
+            for (int attempt = 0; attempt <= retryDelaysSec.Length; attempt++)
+            {
+                result = await _ytdl.RunAudioDownload(
+                    url,
+                    audioFormat,
+                    progress: progress,
+                    overrideOptions: overrideOptions);
 
-            if (!result.Success)
+                if (result.Success) break;
+                if (attempt == retryDelaysSec.Length) break;
+                if (!IsRateLimitError(result.ErrorOutput)) break;
+
+                var delaySec = retryDelaysSec[attempt];
+                _logger.LogWarning(
+                    "YouTube rate-limited (429) for \"{Title}\" — waiting {Delay}s before retry {Attempt}/{Max}",
+                    song.Title, delaySec, attempt + 1, retryDelaysSec.Length);
+                await Task.Delay(TimeSpan.FromSeconds(delaySec));
+            }
+
+            if (!result!.Success)
                 throw new InvalidOperationException(
                     $"yt-dlp failed for \"{song.Title}\": {string.Join("; ", result.ErrorOutput)}");
 
