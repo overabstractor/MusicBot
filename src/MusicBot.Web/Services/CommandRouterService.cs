@@ -201,8 +201,7 @@ public class CommandRouterService
 
     private async Task<CommandResult> HandleSkip(UserServices services)
     {
-        services.Queue.Skip();
-        await _sync.StartCurrentTrackAsync(services);
+        await _sync.SkipCurrentAsync(services);
         return CommandResult.Ok("Canción salteada");
     }
 
@@ -216,8 +215,7 @@ public class CommandRouterService
         if (!current.RequestedBy.Equals(command.RequestedBy, StringComparison.OrdinalIgnoreCase))
             return CommandResult.Fail($"La canción actual fue pedida por {current.RequestedBy}, no puedes saltarla");
 
-        services.Queue.Skip();
-        await _sync.StartCurrentTrackAsync(services);
+        await _sync.SkipCurrentAsync(services);
         return CommandResult.Ok($"@{command.RequestedBy} salteó su canción");
     }
 

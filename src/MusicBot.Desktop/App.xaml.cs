@@ -203,32 +203,37 @@ public partial class App : SysWin.Application
 
     private async void ExitApp()
     {
-        _tray.Visible = false;
         _logViewer?.Hide();
         _mainWindow?.Hide();
 
-        // Stop playback before shutting down
+        _tray.Text = "MusicBot — cerrando…";
+        _tray.ShowBalloonTip(10_000, "MusicBot", "Limpiando archivos descargados…", ToolTipIcon.Info);
+
+        // Stop playback first so NAudio releases file handles before cleanup
         try
         {
             var userContext = Host.Services.GetService<MusicBot.Services.UserContextManager>();
             if (userContext != null)
             {
                 var services = userContext.GetOrCreate(MusicBot.LocalUser.Id);
-                if (services.Player.IsPlaying)
-                    await services.Player.StopAsync();
+                await services.Player.StopAsync();
             }
         }
-        catch { /* best effort */ }
+        catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: error stopping playback"); }
 
         _tiktokLogin?.ForceClose();
 
-        // Cleanup old logs and orphaned music files before stopping the host
         CleanupOldLogs();
-        await CleanupOrphanedMusicFilesAsync();
+        int filesDeleted = await CleanupOrphanedMusicFilesAsync();
+
+        if (filesDeleted > 0)
+            _tray.ShowBalloonTip(4_000, "MusicBot", $"{filesDeleted} archivo(s) eliminado(s)", ToolTipIcon.Info);
+
+        _tray.Visible = false;
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try   { await Host.StopAsync(cts.Token); }
-        catch { /* ignore shutdown errors */ }
+        catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: error stopping host"); }
 
         Shutdown();
     }
@@ -240,40 +245,96 @@ public partial class App : SysWin.Application
         {
             var logsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
             if (!Directory.Exists(logsDir)) return;
-            var cutoff = DateTime.UtcNow.AddDays(-7);
+            var cutoff  = DateTime.UtcNow.AddDays(-7);
+            int deleted = 0;
             foreach (var file in Directory.GetFiles(logsDir, "*.log"))
             {
                 if (File.GetLastWriteTimeUtc(file) < cutoff)
-                    try { File.Delete(file); } catch { }
+                {
+                    try { File.Delete(file); deleted++; }
+                    catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: could not delete old log {Path}", file); }
+                }
             }
+            if (deleted > 0)
+                Serilog.Log.Information("Shutdown: deleted {Count} old log file(s)", deleted);
         }
-        catch { /* best effort */ }
+        catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: CleanupOldLogs failed"); }
     }
 
     /// <summary>
-    /// Deletes files in the music-library directory that are NOT referenced by
-    /// any CachedTrack in the database (orphaned downloads left by crashes or bugs).
+    /// Cleans up music files on shutdown. Returns the number of files deleted.
+    /// – SaveDownloads=false: deletes all cached tracks (files + DB rows).
+    /// – SaveDownloads=true:  deletes only orphaned files not tracked in the DB.
     /// </summary>
-    private async Task CleanupOrphanedMusicFilesAsync()
+    private async Task<int> CleanupOrphanedMusicFilesAsync()
     {
+        int totalDeleted = 0;
         try
         {
-            var settings = Host.Services.GetService<MusicLibrarySettings>();
-            var libPath  = settings?.LibraryPath;
-            if (string.IsNullOrEmpty(libPath) || !Directory.Exists(libPath)) return;
+            var settings = Host.Services.GetService<Microsoft.Extensions.Options.IOptions<MusicLibrarySettings>>();
+            var libPath  = settings?.Value.LibraryPath;
+            if (string.IsNullOrEmpty(libPath) || !Directory.Exists(libPath))
+            {
+                Serilog.Log.Information("Shutdown: music library path not configured or missing, skipping file cleanup");
+                return 0;
+            }
+
+            var queueSettings = Host.Services.GetService<QueueSettingsService>();
+            bool saveDownloads = queueSettings?.SaveDownloads ?? false;
+            Serilog.Log.Information("Shutdown: starting file cleanup (SaveDownloads={SaveDownloads}, path={Path})", saveDownloads, libPath);
 
             using var scope = Host.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
-            var knownPaths = (await db.CachedTracks.Select(t => t.FilePath).ToListAsync())
-                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var file in Directory.GetFiles(libPath))
+            if (!saveDownloads)
             {
-                if (!knownPaths.Contains(file))
-                    try { File.Delete(file); } catch { }
+                // Temp mode: delete every file tracked in the DB
+                var allTracks = await db.CachedTracks.ToListAsync();
+                Serilog.Log.Information("Shutdown: {Count} track(s) in CachedTracks", allTracks.Count);
+
+                foreach (var track in allTracks)
+                {
+                    try
+                    {
+                        if (File.Exists(track.FilePath)) { File.Delete(track.FilePath); totalDeleted++; }
+                    }
+                    catch (Exception ex)
+                    {
+                        Serilog.Log.Warning(ex, "Shutdown: could not delete {Path}", track.FilePath);
+                    }
+                }
+                db.CachedTracks.RemoveRange(allTracks);
+                await db.SaveChangesAsync();
+
+                // Second pass: catch files whose DB record was already removed mid-session
+                foreach (var file in Directory.GetFiles(libPath))
+                {
+                    try { File.Delete(file); totalDeleted++; }
+                    catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: could not delete orphan {Path}", file); }
+                }
             }
+            else
+            {
+                // Persistent mode: only remove files that escaped the DB
+                var knownPaths = (await db.CachedTracks.Select(t => t.FilePath).ToListAsync())
+                                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var file in Directory.GetFiles(libPath))
+                {
+                    if (!knownPaths.Contains(file))
+                    {
+                        try { File.Delete(file); totalDeleted++; }
+                        catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: could not delete orphan {Path}", file); }
+                    }
+                }
+            }
+
+            Serilog.Log.Information("Shutdown: file cleanup complete — {Deleted} file(s) deleted", totalDeleted);
         }
-        catch { /* best effort */ }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Shutdown: unhandled error in CleanupOrphanedMusicFilesAsync");
+        }
+        return totalDeleted;
     }
 
     // ── Tray icon ─────────────────────────────────────────────────────────────

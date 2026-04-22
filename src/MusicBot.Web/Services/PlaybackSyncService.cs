@@ -64,15 +64,13 @@ public class PlaybackSyncService : BackgroundService
         _kickVote.SkipCurrentSong = async () =>
         {
             var services = _userContext.GetOrCreate(LocalUser.Id);
-            services.Queue.Skip();
-            await StartCurrentTrackAsync(services);
+            await SkipCurrentAsync(services);
         };
 
         _presence.SkipCurrentSong = async () =>
         {
             var services = _userContext.GetOrCreate(LocalUser.Id);
-            services.Queue.Skip();
-            await StartCurrentTrackAsync(services);
+            await SkipCurrentAsync(services);
         };
 
         // Broadcast download events to overlay clients and track active state
@@ -127,6 +125,31 @@ public class PlaybackSyncService : BackgroundService
     // ── Public API ────────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Skips the current track, deletes its file when in temp mode, then starts the next.
+    /// Use this instead of calling Queue.Skip() + StartCurrentTrackAsync() directly.
+    /// </summary>
+    public async Task SkipCurrentAsync(UserServices services)
+    {
+        var current = services.Queue.GetCurrentItem();
+        _logger.LogInformation(
+            "SkipCurrentAsync: title={Title} localPath={Path} isPlaylist={IsPlaylist} saveDownloads={Save}",
+            current?.Song.Title ?? "(null)",
+            current?.Song.LocalFilePath ?? "(null)",
+            current?.IsPlaylistItem,
+            _queueSettings.SaveDownloads);
+
+        services.Queue.Skip();
+        await StartCurrentTrackAsync(services);
+
+        if (!_queueSettings.SaveDownloads && current?.Song.LocalFilePath != null)
+        {
+            _logger.LogInformation("Deleting skipped track \"{Title}\" ({Path})", current.Song.Title, current.Song.LocalFilePath);
+            _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
+            await _library.DeleteByTrackIdAsync(current.Song.SpotifyUri);
+        }
+    }
+
+    /// <summary>
     /// Called by CommandRouterService after a play/skip command.
     /// Plays the current queue item, waiting for download if needed.
     /// </summary>
@@ -145,6 +168,19 @@ public class PlaybackSyncService : BackgroundService
         {
             await EnsureLocalFileAsync(current.Song);
             await services.Player.PlayAsync(current.Song.LocalFilePath!);
+        }
+        catch (Exception ex) when (IsRateLimitError(ex))
+        {
+            // Rate-limited after exhausting retries — skip the song.
+            // DownloadCoreAsync already waited up to 165s; don't add more delay here
+            // because the queue may have already advanced during that time.
+            _logger.LogWarning("Skipping \"{Title}\" after rate-limit retries exhausted", current.Song.Title);
+            _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
+            services.Queue.RemoveByUri(current.Song.SpotifyUri);
+            _ = _hub.Clients.Group($"user:{LocalUser.Id}")
+                    .SendAsync("queue:download-failed", new { title = current.Song.Title, artist = current.Song.Artist, reason = ex.Message });
+            await StartCurrentTrackAsync(services);
+            return;
         }
         catch (Exception ex)
         {
@@ -231,7 +267,8 @@ public class PlaybackSyncService : BackgroundService
                             _downloader.InvalidateCachedDownload(next.Song.SpotifyUri);
                             if (next.Song.LocalFilePath != null && File.Exists(next.Song.LocalFilePath))
                             {
-                                try { File.Delete(next.Song.LocalFilePath); } catch { }
+                                try { File.Delete(next.Song.LocalFilePath); }
+                                catch (Exception fex) { _logger.LogWarning(fex, "Could not delete failed-download file {Path}", next.Song.LocalFilePath); }
                                 await _library.DeleteByTrackIdAsync(next.Song.SpotifyUri);
                             }
                             services.Queue.Skip();
@@ -240,12 +277,9 @@ public class PlaybackSyncService : BackgroundService
                             await StartCurrentTrackAsync(services);
                             return;
                         }
-                        // Delete the previous song's file if in temp mode.
-                        // Background-playlist items are never deleted — they'll be needed on the next cycle.
-                        if (!_queueSettings.SaveDownloads
-                            && current?.Song.LocalFilePath != null
-                            && current.IsPlaylistItem == false)
+                        if (!_queueSettings.SaveDownloads && current?.Song.LocalFilePath != null)
                         {
+                            _logger.LogInformation("Deleting played track \"{Title}\" ({Path})", current.Song.Title, current.Song.LocalFilePath);
                             _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
                             await _library.DeleteByTrackIdAsync(current.Song.SpotifyUri);
                         }
@@ -256,12 +290,9 @@ public class PlaybackSyncService : BackgroundService
                     }
                     else
                     {
-                        // Queue is empty; background playlist handles itself via Advance().
-                        // Only delete file for non-playlist items in temp mode.
-                        if (!_queueSettings.SaveDownloads
-                            && current?.Song.LocalFilePath != null
-                            && current.IsPlaylistItem == false)
+                        if (!_queueSettings.SaveDownloads && current?.Song.LocalFilePath != null)
                         {
+                            _logger.LogInformation("Deleting played track \"{Title}\" ({Path}) — queue now empty", current.Song.Title, current.Song.LocalFilePath);
                             _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
                             await _library.DeleteByTrackIdAsync(current.Song.SpotifyUri);
                         }
@@ -348,6 +379,12 @@ public class PlaybackSyncService : BackgroundService
             || msg.Contains("This video is not available")
             || msg.Contains("has been removed")
             || msg.Contains("account associated with this video has been terminated");
+    }
+
+    private static bool IsRateLimitError(Exception ex)
+    {
+        var msg = ex.Message;
+        return msg.Contains("429") || msg.Contains("Too Many Requests");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

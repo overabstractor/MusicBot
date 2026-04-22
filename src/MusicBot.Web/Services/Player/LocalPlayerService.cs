@@ -156,12 +156,19 @@ public class LocalPlayerService : ILocalPlayerService
         if (e.Exception != null)
         {
             _logger.LogError(e.Exception, "Playback error");
-            Task.Run(() => OnTrackEnded?.Invoke());
+            // Release the file handle before notifying listeners so callers can delete the file.
+            Task.Run(() => { ReleaseReader(); OnTrackEnded?.Invoke(); });
             return;
         }
 
         if (!_stoppedManually)
-            Task.Run(() => OnTrackEnded?.Invoke());
+            Task.Run(() => { ReleaseReader(); OnTrackEnded?.Invoke(); });
+    }
+
+    private void ReleaseReader()
+    {
+        var r = Interlocked.Exchange(ref _reader, null);
+        r?.Dispose();
     }
 
     private void StartTimer()
