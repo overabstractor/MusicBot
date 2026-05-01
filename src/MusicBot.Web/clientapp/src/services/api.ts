@@ -89,6 +89,18 @@ export const api = {
   shuffleQueue: () =>
     request<{ message: string }>("/api/queue/shuffle", { method: "POST" }),
 
+  shuffleBackgroundPlaylist: () =>
+    request<void>("/api/queue/shuffle-background", { method: "POST" }),
+
+  promoteFromBackground: (uri: string, toIndex?: number) =>
+    request<void>("/api/queue/promote-from-background", {
+      method: "POST",
+      body: JSON.stringify({ uri, toIndex }),
+    }),
+
+  prewarmNext: (count = 2) =>
+    request<void>(`/api/queue/prewarm-next?count=${count}`, { method: "POST" }),
+
   // Queue management
   clearUserQueue: () =>
     request<void>("/api/queue/user", { method: "DELETE" }),

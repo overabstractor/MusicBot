@@ -1,3 +1,4 @@
+using System.IO;
 using MusicBot.Core.Interfaces;
 using MusicBot.Core.Models;
 
@@ -368,6 +369,120 @@ public class QueueService : IQueueService
         }
         OnQueueUpdated?.Invoke(GetState());
     }
+
+    public void ShuffleBackgroundPlaylist()
+    {
+        lock (_lock)
+        {
+            if (_backgroundPlaylist.Count <= 1) return;
+            var rng = new Random();
+            for (int i = _backgroundPlaylist.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (_backgroundPlaylist[i], _backgroundPlaylist[j]) = (_backgroundPlaylist[j], _backgroundPlaylist[i]);
+            }
+            _playlistIndex = 0;
+        }
+        OnQueueUpdated?.Invoke(GetState());
+    }
+
+    public bool PromoteFromBackground(string spotifyUri, int? toIndex = null)
+    {
+        lock (_lock)
+        {
+            var bgIdx = _backgroundPlaylist.FindIndex(s => s.SpotifyUri == spotifyUri);
+            if (bgIdx < 0) return false;
+
+            if (_currentItem?.Song.SpotifyUri == spotifyUri) return false;
+            if (_upcoming.Any(i => i.Song.SpotifyUri == spotifyUri)) return false;
+
+            var src = _backgroundPlaylist[bgIdx];
+            var item = new QueueItem
+            {
+                Song = new Song
+                {
+                    SpotifyUri    = src.SpotifyUri,
+                    Title         = src.Title,
+                    Artist        = src.Artist,
+                    CoverUrl      = src.CoverUrl,
+                    DurationMs    = src.DurationMs,
+                    LocalFilePath = src.LocalFilePath,
+                },
+                RequestedBy    = "LocalUser",
+                Platform       = "web",
+                IsPlaylistItem = false,
+            };
+
+            // Insert at toIndex (clamped to user-item range) or before first playlist item
+            var firstPlaylistIdx = _upcoming.FindIndex(i => i.IsPlaylistItem);
+            var userCount = firstPlaylistIdx >= 0 ? firstPlaylistIdx : _upcoming.Count;
+
+            if (toIndex.HasValue)
+            {
+                var insertAt = Math.Clamp(toIndex.Value, 0, userCount);
+                _upcoming.Insert(insertAt, item);
+            }
+            else if (firstPlaylistIdx >= 0)
+            {
+                _upcoming.Insert(firstPlaylistIdx, item);
+            }
+            else
+            {
+                _upcoming.Add(item);
+            }
+
+            // Remove from background playlist and fix index
+            _backgroundPlaylist.RemoveAt(bgIdx);
+            if (_backgroundPlaylist.Count == 0)
+                _playlistIndex = 0;
+            else if (bgIdx < _playlistIndex)
+                _playlistIndex--;
+            else if (_playlistIndex >= _backgroundPlaylist.Count)
+                _playlistIndex = 0;
+
+            OnSongAdded?.Invoke(item);
+            EmitUpdate();
+            return true;
+        }
+    }
+
+    public List<Song> GetNextDownloadCandidates(int count)
+    {
+        lock (_lock)
+        {
+            var candidates = new List<Song>();
+            var seen = new HashSet<string>();
+            if (_currentItem != null) seen.Add(_currentItem.Song.SpotifyUri);
+
+            // First: user items
+            foreach (var item in _upcoming)
+            {
+                if (seen.Contains(item.Song.SpotifyUri)) continue;
+                seen.Add(item.Song.SpotifyUri);
+                if (!IsDownloaded(item.Song))
+                    candidates.Add(item.Song);
+                if (candidates.Count >= count) return candidates;
+            }
+
+            // Then: next bg playlist songs
+            int bgCount = _backgroundPlaylist.Count;
+            for (int i = 0; i < bgCount && candidates.Count < count; i++)
+            {
+                var song = _backgroundPlaylist[(_playlistIndex + i) % bgCount];
+                if (seen.Contains(song.SpotifyUri)) continue;
+                seen.Add(song.SpotifyUri);
+                if (!IsDownloaded(song))
+                    candidates.Add(song);
+            }
+
+            return candidates;
+        }
+    }
+
+    private static bool IsDownloaded(Song song) =>
+        song.LocalFilePath != null &&
+        File.Exists(song.LocalFilePath) &&
+        new FileInfo(song.LocalFilePath).Length > 100_000;
 
     public void SetBackgroundPlaylist(IEnumerable<Song> songs, string? playlistName = null)
     {

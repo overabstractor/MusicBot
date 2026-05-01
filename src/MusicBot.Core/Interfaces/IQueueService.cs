@@ -34,6 +34,12 @@ public interface IQueueService
     void ClearBackgroundPlaylist();
     (List<Song> Songs, int Index) GetBackgroundPlaylist();
     void Shuffle();
+    /// <summary>Randomizes the in-memory background playlist without touching the persisted library.</summary>
+    void ShuffleBackgroundPlaylist();
+    /// <summary>Moves a song from the background playlist into the user-requested upcoming queue. Returns false if not found, already present, or currently playing.</summary>
+    bool PromoteFromBackground(string spotifyUri, int? toIndex = null);
+    /// <summary>Returns the next songs that would be played and are not yet downloaded, for pre-warming.</summary>
+    List<Song> GetNextDownloadCandidates(int count);
     /// <summary>Removes all user-requested (non-playlist) items from the upcoming queue.</summary>
     void ClearUserQueue();
 

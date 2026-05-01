@@ -16,9 +16,12 @@ interface Props {
   song: SongRef;
   /** True when the song is already in the queue (shows remove/ban instead of play/enqueue) */
   isQueue: boolean;
+  /** True when this is a background playlist item — shows "Mover a la cola" */
+  isBackground?: boolean;
   onClose: () => void;
   onRemove?: (uri: string) => void;
   onBan?: (uri: string, title: string, artist: string) => void;
+  onPromoteToQueue?: (uri: string) => void;
   /** If set, opens directly in the playlist/memberships view */
   defaultView?: "main" | "playlist";
   /** True when this is the currently playing track — shows Skip instead of Play/Enqueue */
@@ -32,7 +35,7 @@ interface Props {
 type View = "main" | "playlist";
 
 export const ContextMenu: React.FC<Props> = ({
-  song, isQueue, onClose, onRemove, onBan, defaultView, isNowPlaying, onSkip, anchorEl,
+  song, isQueue, isBackground, onClose, onRemove, onBan, onPromoteToQueue, defaultView, isNowPlaying, onSkip, anchorEl,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [view,         setView]         = useState<View>(defaultView ?? "main");
@@ -163,6 +166,11 @@ export const ContextMenu: React.FC<Props> = ({
                 </button>
               )}
             </>
+          )}
+          {isBackground && onPromoteToQueue && (
+            <button className="ctx-item" onClick={() => { onPromoteToQueue(song.spotifyUri); onClose(); }}>
+              <Plus size={13} /> Mover a la cola
+            </button>
           )}
           <button className="ctx-item" onClick={openPlaylistView}>
             <ListMusic size={13} /> Guardar en playlist

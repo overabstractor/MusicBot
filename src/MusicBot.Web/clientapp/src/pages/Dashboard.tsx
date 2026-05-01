@@ -78,8 +78,28 @@ export const Dashboard: React.FC = () => {
   const handlePause  = useCallback(() => api.pause(),        []);
   const handleResume = useCallback(() => api.resume(),       []);
 
+  const prewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerPrewarmDebounced = useCallback(() => {
+    if (prewarmTimerRef.current) clearTimeout(prewarmTimerRef.current);
+    prewarmTimerRef.current = setTimeout(() => api.prewarmNext(2).catch(() => {}), 3000);
+  }, []);
+  useEffect(() => () => { if (prewarmTimerRef.current) clearTimeout(prewarmTimerRef.current); }, []);
+
   const handleRemove  = useCallback((uri: string)                          => { api.removeQueueItem(uri).catch(console.error); }, []);
-  const handleReorder = useCallback((uri: string, toIndex: number)         => { api.reorderQueue(uri, toIndex).catch(console.error); }, []);
+  const handleReorder = useCallback((uri: string, toIndex: number) => {
+    api.reorderQueue(uri, toIndex).catch(console.error);
+    triggerPrewarmDebounced();
+  }, [triggerPrewarmDebounced]);
+
+  const handlePromoteToQueue = useCallback((uri: string, toIndex?: number) => {
+    api.promoteFromBackground(uri, toIndex).catch(console.error);
+    triggerPrewarmDebounced();
+  }, [triggerPrewarmDebounced]);
+
+  const handleShuffleBackground = useCallback(() => {
+    api.shuffleBackgroundPlaylist().catch(console.error);
+    triggerPrewarmDebounced();
+  }, [triggerPrewarmDebounced]);
   const handleToggleQueue   = useCallback(() => setRightPanelMode(m => m === "queue" ? "nowplaying" : "queue"), []);
   const handleToggleDevices = useCallback(() => setRightPanelMode(m => m === "devices" ? "queue" : "devices"), []);
   const handleToggleShuffle = useCallback(async () => {
@@ -211,6 +231,8 @@ export const Dashboard: React.FC = () => {
           nowPlaying={nowPlaying}
           onRemove={handleRemove}
           onReorder={handleReorder}
+          onPromoteToQueue={handlePromoteToQueue}
+          onShuffleBackground={handleShuffleBackground}
           onBan={handleBan}
           downloadStates={downloadStates}
           queueUpdateCount={queueUpdateCount}

@@ -363,6 +363,45 @@ public class QueueController : ControllerBase
         services.Queue.Shuffle();
         return Ok(new { message = "Cola mezclada" });
     }
+
+    /// <summary>Randomize the in-memory background playlist without touching the persisted library</summary>
+    [HttpPost("shuffle-background")]
+    [ProducesResponseType(204)]
+    public IActionResult ShuffleBackground()
+    {
+        _userContext.GetOrCreate(LocalUser.Id).Queue.ShuffleBackgroundPlaylist();
+        return NoContent();
+    }
+
+    /// <summary>Promote a song from the background playlist into the user-requested queue</summary>
+    [HttpPost("promote-from-background")]
+    [ProducesResponseType(204)]
+    [ProducesResponseType(400)]
+    public IActionResult PromoteFromBackground([FromBody] PromoteFromBackgroundRequest req)
+    {
+        var ok = _userContext.GetOrCreate(LocalUser.Id).Queue.PromoteFromBackground(req.Uri, req.ToIndex);
+        return ok ? NoContent() : BadRequest(new { error = "Canción no encontrada en la playlist de fondo, ya está en la cola, o está sonando actualmente" });
+    }
+
+    /// <summary>Pre-warm downloads for the next N songs that are not yet cached</summary>
+    [HttpPost("prewarm-next")]
+    [ProducesResponseType(202)]
+    public IActionResult PrewarmNext([FromQuery] int count = 2)
+    {
+        count = Math.Clamp(count, 1, 5);
+        var services   = _userContext.GetOrCreate(LocalUser.Id);
+        var candidates = services.Queue.GetNextDownloadCandidates(count);
+        foreach (var song in candidates)
+        {
+            var captured = song;
+            _ = Task.Run(async () =>
+            {
+                try   { await _downloader.GetOrStartDownloadAsync(captured); }
+                catch { /* already logged inside the downloader */ }
+            });
+        }
+        return Accepted();
+    }
 }
 
 public class RemoveItemRequest { public string Uri { get; set; } = string.Empty; }
@@ -403,4 +442,10 @@ public class ImportPlaylistRequest
 public class SetPlaylistRequest
 {
     public string Url { get; set; } = string.Empty;
+}
+
+public class PromoteFromBackgroundRequest
+{
+    public string  Uri     { get; set; } = string.Empty;
+    public int?    ToIndex { get; set; }
 }

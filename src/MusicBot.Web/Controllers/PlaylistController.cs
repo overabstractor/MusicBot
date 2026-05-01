@@ -159,15 +159,6 @@ public class PlaylistController : ControllerBase
         if (!added)
             return Conflict(new { error = "La canción ya está en la lista" });
 
-        // If this playlist is active, append to background playlist in memory
-        if (playlist.IsActive)
-        {
-            var services = _userContext.GetOrCreate(LocalUser.Id);
-            var (songs, index) = services.Queue.GetBackgroundPlaylist();
-            songs.Add(song);
-            services.Queue.SetBackgroundPlaylist(songs);
-        }
-
         await BroadcastStatusAsync();
         return NoContent();
     }
@@ -177,10 +168,6 @@ public class PlaylistController : ControllerBase
     {
         var ok = await _playlists.ReorderSongAsync(id, req.SpotifyUri, req.ToIndex);
         if (!ok) return NotFound();
-
-        var playlist = await _playlists.GetByIdAsync(id);
-        if (playlist?.IsActive == true)
-            await ReloadBackgroundPlaylistAsync(id);
 
         await BroadcastStatusAsync();
         return NoContent();
@@ -192,11 +179,6 @@ public class PlaylistController : ControllerBase
         var spotifyUri = HttpUtility.UrlDecode(uri);
         var ok = await _playlists.RemoveSongAsync(id, spotifyUri);
         if (!ok) return NotFound();
-
-        // If active, reload background playlist from DB
-        var playlist = await _playlists.GetByIdAsync(id);
-        if (playlist?.IsActive == true)
-            await ReloadBackgroundPlaylistAsync(id);
 
         await BroadcastStatusAsync();
         return NoContent();
@@ -238,10 +220,6 @@ public class PlaylistController : ControllerBase
         }
 
         var added = await _playlists.BulkAddAsync(id, tracks);
-
-        // If this playlist is active, reload the background playlist
-        if (playlist.IsActive)
-            await ReloadBackgroundPlaylistAsync(id);
 
         await BroadcastStatusAsync();
         return Ok(new { added, skipped = tracks.Count - added, total = tracks.Count, name = finalName });
@@ -353,15 +331,6 @@ public class PlaylistController : ControllerBase
             songs.Add(song);
         }
         return songs;
-    }
-
-    private async Task ReloadBackgroundPlaylistAsync(int playlistId)
-    {
-        var playlist = await _playlists.GetByIdAsync(playlistId);
-        var dbSongs  = await _playlists.GetSongsAsync(playlistId);
-        var songs    = await MapToSongsAsync(dbSongs);
-        var services = _userContext.GetOrCreate(LocalUser.Id);
-        services.Queue.SetBackgroundPlaylist(songs, playlist?.Name);
     }
 
     private Task BroadcastStatusAsync() =>

@@ -13,6 +13,8 @@ interface Props {
   nowPlaying: NowPlayingState | null;
   onRemove: (uri: string) => void;
   onReorder?: (uri: string, toIndex: number) => void;
+  onPromoteToQueue?: (uri: string, toIndex?: number) => void;
+  onShuffleBackground?: () => void;
   onBan: (uri: string, title: string, artist: string) => void;
   downloadStates: Record<string, DownloadState>;
   queueUpdateCount: number;
@@ -188,8 +190,8 @@ const HistoryView: React.FC<{ refreshKey: number; likedUris?: Set<string>; onTog
 // ── Main QueuePanel ───────────────────────────────────────────────────────────
 
 export const QueuePanel: React.FC<Props> = ({
-  mode, items, nowPlaying, onRemove, onReorder, onBan, downloadStates, queueUpdateCount,
-  activePlaylistName, likedUris, onToggleLike,
+  mode, items, nowPlaying, onRemove, onReorder, onPromoteToQueue, onShuffleBackground,
+  onBan, downloadStates, queueUpdateCount, activePlaylistName, likedUris, onToggleLike,
 }) => {
   const [historyTab, setHistoryTab] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<{ uri: string; el: HTMLElement } | null>(null);
@@ -202,6 +204,7 @@ export const QueuePanel: React.FC<Props> = ({
   const userItems = items.filter(i => !i.isPlaylistItem);
   const bgItems   = items.filter(i =>  i.isPlaylistItem);
   const realIndex = (uri: string) => items.findIndex(it => it.song.spotifyUri === uri);
+  const isBgUri   = (uri: string) => bgItems.some(i => i.song.spotifyUri === uri);
 
   const handleClearUserQueue = async () => {
     const ok = await confirm({ title: "¿Limpiar la cola?", message: "Se eliminarán todas las canciones en espera. Esta acción no se puede deshacer.", confirmText: "Limpiar", danger: true });
@@ -313,10 +316,17 @@ export const QueuePanel: React.FC<Props> = ({
                     key={item.song.spotifyUri}
                     className={`queue-item-row${isDragging ? " queue-row-dragging" : ""}${isDropTarget ? " queue-row-drop-target" : ""}`}
                     style={{ position: "relative" }}
-                    draggable={!!onReorder}
+                    draggable={!!onReorder || !!onPromoteToQueue}
                     onDragStart={() => { setDragUri(item.song.spotifyUri); dragIndexRef.current = ri; }}
                     onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropIndex(ri); }}
-                    onDrop={e => { e.preventDefault(); if (dragUri && dragIndexRef.current !== ri) onReorder?.(dragUri, ri); setDragUri(null); setDropIndex(null); }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      if (dragUri && dragIndexRef.current !== ri) {
+                        if (isBgUri(dragUri)) onPromoteToQueue?.(dragUri, i);
+                        else onReorder?.(dragUri, ri);
+                      }
+                      setDragUri(null); setDropIndex(null);
+                    }}
                     onDragEnd={() => { setDragUri(null); setDropIndex(null); }}
                   >
                     {onReorder && (
@@ -386,8 +396,15 @@ export const QueuePanel: React.FC<Props> = ({
           {/* Background playlist items */}
           {bgItems.length > 0 && (
             <div className="queue-section">
-              <div className="queue-section-label-sp">
-                A continuación de: <span className="queue-section-playlist-name">{activePlaylistName ?? "Tu lista"}</span>
+              <div className="queue-section-header">
+                <span className="queue-section-label-sp">
+                  A continuación de: <span className="queue-section-playlist-name">{activePlaylistName ?? "Tu lista"}</span>
+                </span>
+                {onShuffleBackground && (
+                  <button className="queue-clear-btn" onClick={onShuffleBackground} title="Aleatorizar lista de fondo">
+                    Aleatorizar
+                  </button>
+                )}
               </div>
                {bgItems.map((item, i) => {
                 const song: SongRef = {
@@ -405,10 +422,17 @@ export const QueuePanel: React.FC<Props> = ({
                     key={item.song.spotifyUri}
                     className={`queue-item-row queue-item-bg${isDragging ? " queue-row-dragging" : ""}${isDropTarget ? " queue-row-drop-target" : ""}`}
                     style={{ position: "relative" }}
-                    draggable={!!onReorder}
+                    draggable={!!onReorder || !!onPromoteToQueue}
                     onDragStart={() => { setDragUri(item.song.spotifyUri); dragIndexRef.current = ri; }}
                     onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropIndex(ri); }}
-                    onDrop={e => { e.preventDefault(); if (dragUri && dragIndexRef.current !== ri) onReorder?.(dragUri, ri); setDragUri(null); setDropIndex(null); }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      if (dragUri && dragIndexRef.current !== ri) {
+                        // Only allow bg-to-bg reorder; ignore queue→bg drops
+                        if (isBgUri(dragUri)) onReorder?.(dragUri, ri);
+                      }
+                      setDragUri(null); setDropIndex(null);
+                    }}
                     onDragEnd={() => { setDragUri(null); setDropIndex(null); }}
                   >
                     {onReorder && (
@@ -453,8 +477,10 @@ export const QueuePanel: React.FC<Props> = ({
                       <ContextMenu
                         song={song}
                         isQueue={false}
+                        isBackground
                         anchorEl={menuAnchor.el}
                         onClose={() => setMenuAnchor(null)}
+                        onPromoteToQueue={onPromoteToQueue ? uri => onPromoteToQueue(uri) : undefined}
                       />
                     )}
                   </div>
