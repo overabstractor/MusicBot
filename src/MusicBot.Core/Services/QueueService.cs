@@ -260,14 +260,46 @@ public class QueueService : IQueueService
         lock (_lock)
         {
             var fromIndex = _upcoming.FindIndex(i => i.Song.SpotifyUri == spotifyUri);
+            if (fromIndex >= 0)
+            {
+                toIndex = Math.Clamp(toIndex, 0, _upcoming.Count - 1);
+                if (fromIndex == toIndex) return true;
+
+                var item = _upcoming[fromIndex];
+                _upcoming.RemoveAt(fromIndex);
+                _upcoming.Insert(toIndex, item);
+                EmitUpdate();
+                return true;
+            }
+
+            if (_backgroundPlaylist.Count == 0) return false;
+
+            var hiddenUris = new HashSet<string>(_upcoming.Select(i => i.Song.SpotifyUri));
+            if (_currentItem != null) hiddenUris.Add(_currentItem.Song.SpotifyUri);
+
+            var visiblePlaylist = new List<Song>();
+            var hiddenPlaylist = new List<Song>();
+            for (var i = 0; i < _backgroundPlaylist.Count; i++)
+            {
+                var song = _backgroundPlaylist[(_playlistIndex + i) % _backgroundPlaylist.Count];
+                if (hiddenUris.Contains(song.SpotifyUri))
+                    hiddenPlaylist.Add(song);
+                else
+                    visiblePlaylist.Add(song);
+            }
+
+            fromIndex = visiblePlaylist.FindIndex(s => s.SpotifyUri == spotifyUri);
             if (fromIndex < 0) return false;
 
-            toIndex = Math.Clamp(toIndex, 0, _upcoming.Count - 1);
-            if (fromIndex == toIndex) return true;
+            var playlistToIndex = Math.Clamp(toIndex - _upcoming.Count, 0, visiblePlaylist.Count - 1);
+            if (fromIndex == playlistToIndex) return true;
 
-            var item = _upcoming[fromIndex];
-            _upcoming.RemoveAt(fromIndex);
-            _upcoming.Insert(toIndex, item);
+            var moved = visiblePlaylist[fromIndex];
+            visiblePlaylist.RemoveAt(fromIndex);
+            visiblePlaylist.Insert(playlistToIndex, moved);
+
+            _backgroundPlaylist = visiblePlaylist.Concat(hiddenPlaylist).ToList();
+            _playlistIndex = 0;
             EmitUpdate();
             return true;
         }
