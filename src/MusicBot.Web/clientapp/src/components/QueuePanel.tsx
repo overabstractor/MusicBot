@@ -201,6 +201,7 @@ export const QueuePanel: React.FC<Props> = ({
   const nowSong   = nowPlaying?.spotifyTrack ?? nowPlaying?.item?.song ?? null;
   const userItems = items.filter(i => !i.isPlaylistItem);
   const bgItems   = items.filter(i =>  i.isPlaylistItem);
+  const realIndex = (uri: string) => items.findIndex(it => it.song.spotifyUri === uri);
 
   const handleClearUserQueue = async () => {
     const ok = await confirm({ title: "¿Limpiar la cola?", message: "Se eliminarán todas las canciones en espera. Esta acción no se puede deshacer.", confirmText: "Limpiar", danger: true });
@@ -305,16 +306,17 @@ export const QueuePanel: React.FC<Props> = ({
                   durationMs: item.song.durationMs,
                 };
                 const isDragging   = dragUri === item.song.spotifyUri;
-                const isDropTarget = dropIndex === i && dragUri !== item.song.spotifyUri;
+                const ri = realIndex(item.song.spotifyUri);
+                const isDropTarget = dropIndex === ri && dragUri !== item.song.spotifyUri;
                 return (
                   <div
                     key={item.song.spotifyUri}
                     className={`queue-item-row${isDragging ? " queue-row-dragging" : ""}${isDropTarget ? " queue-row-drop-target" : ""}`}
                     style={{ position: "relative" }}
                     draggable={!!onReorder}
-                    onDragStart={() => { setDragUri(item.song.spotifyUri); dragIndexRef.current = i; }}
-                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropIndex(i); }}
-                    onDrop={e => { e.preventDefault(); if (dragUri && dragIndexRef.current !== i) onReorder?.(dragUri, i); setDragUri(null); setDropIndex(null); }}
+                    onDragStart={() => { setDragUri(item.song.spotifyUri); dragIndexRef.current = ri; }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropIndex(ri); }}
+                    onDrop={e => { e.preventDefault(); if (dragUri && dragIndexRef.current !== ri) onReorder?.(dragUri, ri); setDragUri(null); setDropIndex(null); }}
                     onDragEnd={() => { setDragUri(null); setDropIndex(null); }}
                   >
                     {onReorder && (
@@ -355,6 +357,16 @@ export const QueuePanel: React.FC<Props> = ({
                         title="Más opciones"
                       ><MoreHorizontal size={15} /></button>
                     </div>
+                    {item.song.isDownloaded && (
+                      <span className="qi-dl-ready" title="Descargada">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                      </span>
+                    )}
+                    {!item.song.isDownloaded && !downloadStates[item.song.spotifyUri] && (
+                      <span className="qi-dl-pending" title="Pendiente de descarga">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+                      </span>
+                    )}
                     {menuAnchor?.uri === item.song.spotifyUri && (
                       <ContextMenu
                         song={song}
@@ -377,7 +389,7 @@ export const QueuePanel: React.FC<Props> = ({
               <div className="queue-section-label-sp">
                 A continuación de: <span className="queue-section-playlist-name">{activePlaylistName ?? "Tu lista"}</span>
               </div>
-              {bgItems.map((item, i) => {
+               {bgItems.map((item, i) => {
                 const song: SongRef = {
                   spotifyUri: item.song.spotifyUri,
                   title:      item.song.title,
@@ -385,8 +397,25 @@ export const QueuePanel: React.FC<Props> = ({
                   coverUrl:   item.song.coverUrl,
                   durationMs: item.song.durationMs,
                 };
+                const isDragging   = dragUri === item.song.spotifyUri;
+                const ri = realIndex(item.song.spotifyUri);
+                const isDropTarget = dropIndex === ri && dragUri !== item.song.spotifyUri;
                 return (
-                  <div key={item.song.spotifyUri} className="queue-item-row queue-item-bg">
+                  <div
+                    key={item.song.spotifyUri}
+                    className={`queue-item-row queue-item-bg${isDragging ? " queue-row-dragging" : ""}${isDropTarget ? " queue-row-drop-target" : ""}`}
+                    style={{ position: "relative" }}
+                    draggable={!!onReorder}
+                    onDragStart={() => { setDragUri(item.song.spotifyUri); dragIndexRef.current = ri; }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropIndex(ri); }}
+                    onDrop={e => { e.preventDefault(); if (dragUri && dragIndexRef.current !== ri) onReorder?.(dragUri, ri); setDragUri(null); setDropIndex(null); }}
+                    onDragEnd={() => { setDragUri(null); setDropIndex(null); }}
+                  >
+                    {onReorder && (
+                      <span className="queue-drag-handle" title="Arrastrar para reordenar">
+                        <GripVertical size={14} />
+                      </span>
+                    )}
                     <span className="qi-pos">{i + 1}</span>
                     {item.song.coverUrl
                       ? <img src={item.song.coverUrl} alt="" className="qi-cover" />
@@ -410,6 +439,16 @@ export const QueuePanel: React.FC<Props> = ({
                         onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === item.song.spotifyUri ? null : { uri: item.song.spotifyUri, el: e.currentTarget }); }}
                       ><MoreHorizontal size={15} /></button>
                     </div>
+                    {item.song.isDownloaded && (
+                      <span className="qi-dl-ready" title="Descargada">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                      </span>
+                    )}
+                    {!item.song.isDownloaded && !downloadStates[item.song.spotifyUri] && (
+                      <span className="qi-dl-pending" title="Pendiente de descarga">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+                      </span>
+                    )}
                     {menuAnchor?.uri === item.song.spotifyUri && (
                       <ContextMenu
                         song={song}

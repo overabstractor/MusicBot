@@ -13,6 +13,8 @@ public class Song
     /// <summary>Absolute path to the locally cached audio file. Null until downloaded.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string? LocalFilePath { get; set; }
+    /// <summary>Whether the audio file is cached locally. JSON-serialized for the frontend.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("isDownloaded")]
     public bool IsDownloaded => LocalFilePath != null;
 
     // ── Playlist search result metadata (only populated for IsPlaylist=true results) ──
