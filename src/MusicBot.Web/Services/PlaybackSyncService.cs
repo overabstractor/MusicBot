@@ -147,6 +147,15 @@ public class PlaybackSyncService : BackgroundService
             _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
             await _library.DeleteByTrackIdAsync(current.Song.SpotifyUri);
         }
+
+        // Pre-warm the next two songs after skip to avoid gap
+        var upcoming = services.Queue.GetUpcoming();
+        var next = upcoming.FirstOrDefault();
+        if (next != null)
+            _ = Task.Run(() => PrewarmDownloadAsync(next.Song));
+        var nextNext = upcoming.ElementAtOrDefault(1);
+        if (nextNext != null)
+            _ = Task.Run(() => PrewarmDownloadAsync(nextNext.Song));
     }
 
     /// <summary>
@@ -217,11 +226,11 @@ public class PlaybackSyncService : BackgroundService
         {
             services.Queue.UpdateProgress(state.PositionMs, state.IsPlaying);
 
-            // 30 s remaining: warn the next requester and pre-warm the next song's download
+            // 60 s remaining: warn the next requester and pre-warm the next two songs' downloads
             if (state.IsPlaying && state.DurationMs > 0)
             {
                 var remaining = state.DurationMs - state.PositionMs;
-                if (remaining <= 30_000)
+                if (remaining <= 60_000)
                 {
                     var upcoming = services.Queue.GetUpcoming();
                     var next = upcoming.FirstOrDefault();
@@ -229,6 +238,11 @@ public class PlaybackSyncService : BackgroundService
                     {
                         _presence.IssueWarningForNext(next.RequestedBy);
                         _ = Task.Run(() => PrewarmDownloadAsync(next.Song));
+
+                        // Also pre-warm the song after next to build a buffer
+                        var nextNext = upcoming.ElementAtOrDefault(1);
+                        if (nextNext != null)
+                            _ = Task.Run(() => PrewarmDownloadAsync(nextNext.Song));
                     }
                     else
                     {
@@ -404,7 +418,7 @@ public class PlaybackSyncService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Pre-warm download failed for \"{Title}\" — will retry at track end", song.Title);
+            _logger.LogWarning(ex, "Pre-warm download failed for \"{Title}\" — will retry at track end", song.Title);
         }
     }
 

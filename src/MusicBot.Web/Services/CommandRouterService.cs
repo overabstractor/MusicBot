@@ -189,7 +189,21 @@ public class CommandRouterService
         if (song.LocalFilePath == null)
             _downloader.StartDownload(song);
 
-        // 7. If nothing is playing, advance and start immediately
+        // 7. If something is already playing, pre-warm the next songs in queue
+        //    so they download while the current track is playing
+        if (services.Queue.GetCurrentItem() != null)
+        {
+            var upcoming = services.Queue.GetUpcoming();
+            // Pre-warm the next two songs after the one we just added
+            for (int i = 0; i < Math.Min(2, upcoming.Count); i++)
+            {
+                var nextSong = upcoming[i].Song;
+                if (nextSong.LocalFilePath == null)
+                    _ = Task.Run(() => PrewarmNextAsync(nextSong));
+            }
+        }
+
+        // 8. If nothing is playing, advance and start immediately
         if (services.Queue.GetCurrentItem() == null)
         {
             services.Queue.Advance();
@@ -382,6 +396,22 @@ public class CommandRouterService
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>Starts a background download for the next song in queue (fire-and-forget).</summary>
+    private async Task PrewarmNextAsync(Song song)
+    {
+        if (song.LocalFilePath != null && File.Exists(song.LocalFilePath)
+            && new FileInfo(song.LocalFilePath).Length > 100_000)
+            return;
+        try
+        {
+            await _downloader.GetOrStartDownloadAsync(song);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Queue pre-warm download failed for \"{Title}\"", song.Title);
+        }
+    }
 
     private Task BroadcastErrorAsync(string message)
         => _hub.Clients.Group($"user:{LocalUser.Id}").SendAsync("queue:error", new { message });
