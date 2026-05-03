@@ -1336,6 +1336,18 @@ a:hover { text-decoration: underline; }
 }
 .queue-item-row:hover .qi-dl-pending { opacity: 0.6; }
 
+.qi-error-badge {
+  color: #ef4444;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0.8;
+  transition: opacity 0.1s;
+}
+.queue-item-row:hover .qi-error-badge { opacity: 1; }
+.queue-item-bg .qi-error-badge { opacity: 0.55; }
+.queue-item-bg:hover .qi-error-badge { opacity: 0.8; }
+
 .qi-actions {
   display: flex;
   gap: 4px;

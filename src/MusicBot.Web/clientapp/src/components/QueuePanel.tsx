@@ -367,16 +367,19 @@ export const QueuePanel: React.FC<Props> = ({
                         title="Más opciones"
                       ><MoreHorizontal size={15} /></button>
                     </div>
-                    {item.song.isDownloaded && (
+                    {item.downloadError ? (
+                      <span className="qi-error-badge" title={item.downloadError}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
+                      </span>
+                    ) : item.song.isDownloaded ? (
                       <span className="qi-dl-ready" title="Descargada">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                       </span>
-                    )}
-                    {!item.song.isDownloaded && !downloadStates[item.song.spotifyUri] && (
+                    ) : !downloadStates[item.song.spotifyUri] ? (
                       <span className="qi-dl-pending" title="Pendiente de descarga">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
                       </span>
-                    )}
+                    ) : null}
                     {menuAnchor?.uri === item.song.spotifyUri && (
                       <ContextMenu
                         song={song}
@@ -463,16 +466,19 @@ export const QueuePanel: React.FC<Props> = ({
                         onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === item.song.spotifyUri ? null : { uri: item.song.spotifyUri, el: e.currentTarget }); }}
                       ><MoreHorizontal size={15} /></button>
                     </div>
-                    {item.song.isDownloaded && (
+                    {item.downloadError ? (
+                      <span className="qi-error-badge" title={item.downloadError}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
+                      </span>
+                    ) : item.song.isDownloaded ? (
                       <span className="qi-dl-ready" title="Descargada">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                       </span>
-                    )}
-                    {!item.song.isDownloaded && !downloadStates[item.song.spotifyUri] && (
+                    ) : !downloadStates[item.song.spotifyUri] ? (
                       <span className="qi-dl-pending" title="Pendiente de descarga">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
                       </span>
-                    )}
+                    ) : null}
                     {menuAnchor?.uri === item.song.spotifyUri && (
                       <ContextMenu
                         song={song}

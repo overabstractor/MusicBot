@@ -610,6 +610,32 @@ public class QueueService : IQueueService
         }
     }
 
+    public bool MarkDownloadError(string spotifyUri, string? error)
+    {
+        bool found = false;
+        lock (_lock)
+        {
+            var item = _upcoming.Find(i => i.Song.SpotifyUri == spotifyUri);
+            if (item != null) { item.DownloadError = error; found = true; }
+            else if (_currentItem?.Song.SpotifyUri == spotifyUri) { _currentItem.DownloadError = error; found = true; }
+        }
+        if (found) EmitUpdate();
+        return found;
+    }
+
+    public bool UpdateSongForAlternative(string oldUri, Song newSong)
+    {
+        bool found = false;
+        lock (_lock)
+        {
+            var item = _upcoming.Find(i => i.Song.SpotifyUri == oldUri);
+            if (item != null) { item.Song = newSong; item.DownloadError = null; found = true; }
+            else if (_currentItem?.Song.SpotifyUri == oldUri) { _currentItem.Song = newSong; _currentItem.DownloadError = null; found = true; }
+        }
+        if (found) EmitUpdate();
+        return found;
+    }
+
     private void EmitUpdate()
     {
         OnQueueUpdated?.Invoke(GetState());

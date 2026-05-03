@@ -102,6 +102,27 @@ public class PlaybackSyncService : BackgroundService
             _activeDownloads.TryRemove(trackId, out _);
             _ = _hub.Clients.Group($"user:{LocalUser.Id}")
                     .SendAsync("download:error", new { spotifyUri = trackId, error });
+
+            if (!IsUnrecoverableDownloadError(error)) return;
+
+            var svc = _userContext.GetOrCreate(LocalUser.Id);
+
+            // Current track failures are handled in StartCurrentTrackAsync; skip here
+            if (svc.Queue.GetCurrentItem()?.Song.SpotifyUri == trackId) return;
+
+            var item = svc.Queue.GetUpcoming().FirstOrDefault(i => i.Song.SpotifyUri == trackId);
+            if (item == null) return;
+
+            if (item.IsPlaylistItem)
+            {
+                // Background items are auto-managed — remove silently
+                svc.Queue.RemoveByUri(trackId);
+                return;
+            }
+
+            // User-requested: search for alternative asynchronously
+            _ = Task.Run(async () =>
+                await TryApplyAlternativeOrMarkFailedAsync(svc, trackId, item.Song.Title, item.Song.Artist));
         };
 
         _userContext.OnUserCreated += SubscribeToUser;
@@ -191,6 +212,46 @@ public class PlaybackSyncService : BackgroundService
             await StartCurrentTrackAsync(services);
             return;
         }
+        catch (Exception ex) when (IsUnrecoverableDownloadError(ex))
+        {
+            var origUri    = current.Song.SpotifyUri;
+            var origTitle  = current.Song.Title;
+            var origArtist = current.Song.Artist;
+            _logger.LogWarning("Song unavailable: \"{Title}\" — searching for alternative", origTitle);
+            _downloader.InvalidateCachedDownload(origUri);
+
+            bool altFound = false;
+            try
+            {
+                var alt = await _downloader.SearchBestMatchAsync($"{origTitle} {origArtist}".Trim());
+                if (alt != null && alt.SpotifyUri != origUri)
+                {
+                    _logger.LogInformation("Alternative found for \"{Title}\": {NewUri}", origTitle, alt.SpotifyUri);
+                    services.Queue.UpdateSongForAlternative(origUri, alt);
+                    // current.Song is now alt (same object reference as _currentItem.Song)
+                    await EnsureLocalFileAsync(current.Song);
+                    await services.Player.PlayAsync(current.Song.LocalFilePath!);
+                    _ = Task.Run(() => _kickVote.StartVoteAsync(current.Song));
+                    if (current.Platform != "web")
+                        _ = Task.Run(() => _presence.StartSongCheckAsync(current.RequestedBy));
+                    altFound = true;
+                }
+            }
+            catch (Exception altEx)
+            {
+                _logger.LogWarning(altEx, "Alternative also failed for \"{Title}\"", origTitle);
+                _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
+            }
+
+            if (!altFound)
+            {
+                services.Queue.Skip();
+                _ = _hub.Clients.Group($"user:{LocalUser.Id}")
+                        .SendAsync("queue:download-failed", new { title = origTitle, artist = origArtist, reason = "No disponible" });
+                await StartCurrentTrackAsync(services);
+            }
+            return;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Playback failed for \"{Title}\" — removing from queue", current.Song.Title);
@@ -277,19 +338,50 @@ public class PlaybackSyncService : BackgroundService
                         }
                         catch (Exception dlEx)
                         {
-                            _logger.LogError(dlEx, "Playback failed for \"{Title}\" during auto-advance — skipping", next.Song.Title);
+                            _logger.LogError(dlEx, "Playback failed for \"{Title}\" during auto-advance", next.Song.Title);
                             _downloader.InvalidateCachedDownload(next.Song.SpotifyUri);
-                            if (next.Song.LocalFilePath != null && File.Exists(next.Song.LocalFilePath))
+
+                            bool altFound = false;
+                            string failedTitle  = next.Song.Title;
+                            string failedArtist = next.Song.Artist;
+                            string failedUri    = next.Song.SpotifyUri;
+
+                            if (IsUnrecoverableDownloadError(dlEx))
                             {
-                                try { File.Delete(next.Song.LocalFilePath); }
-                                catch (Exception fex) { _logger.LogWarning(fex, "Could not delete failed-download file {Path}", next.Song.LocalFilePath); }
-                                await _library.DeleteByTrackIdAsync(next.Song.SpotifyUri);
+                                try
+                                {
+                                    var alt = await _downloader.SearchBestMatchAsync($"{failedTitle} {failedArtist}".Trim());
+                                    if (alt != null && alt.SpotifyUri != failedUri)
+                                    {
+                                        _logger.LogInformation("Alternative found for \"{Title}\": {NewUri}", failedTitle, alt.SpotifyUri);
+                                        services.Queue.UpdateSongForAlternative(failedUri, alt);
+                                        // next.Song is now alt (same QueueItem reference)
+                                        await EnsureLocalFileAsync(next.Song);
+                                        altFound = true;
+                                    }
+                                }
+                                catch (Exception altEx)
+                                {
+                                    _logger.LogWarning(altEx, "Alternative also failed for \"{Title}\"", failedTitle);
+                                    _downloader.InvalidateCachedDownload(next.Song.SpotifyUri);
+                                }
                             }
-                            services.Queue.Skip();
-                            _ = _hub.Clients.Group($"user:{LocalUser.Id}")
-                                    .SendAsync("queue:download-failed", new { title = next.Song.Title, artist = next.Song.Artist, reason = dlEx.Message });
-                            await StartCurrentTrackAsync(services);
-                            return;
+
+                            if (!altFound)
+                            {
+                                if (next.Song.LocalFilePath != null && File.Exists(next.Song.LocalFilePath))
+                                {
+                                    try { File.Delete(next.Song.LocalFilePath); }
+                                    catch (Exception fex) { _logger.LogWarning(fex, "Could not delete failed-download file {Path}", next.Song.LocalFilePath); }
+                                    await _library.DeleteByTrackIdAsync(next.Song.SpotifyUri);
+                                }
+                                services.Queue.Skip();
+                                _ = _hub.Clients.Group($"user:{LocalUser.Id}")
+                                        .SendAsync("queue:download-failed", new { title = failedTitle, artist = failedArtist, reason = dlEx.Message });
+                                await StartCurrentTrackAsync(services);
+                                return;
+                            }
+                            // altFound: fall through to PlayAsync below
                         }
                         if (!_queueSettings.SaveDownloads && current?.Song.LocalFilePath != null)
                         {
@@ -385,20 +477,49 @@ public class PlaybackSyncService : BackgroundService
         return true;
     }
 
-    private static bool IsUnrecoverableDownloadError(Exception ex)
-    {
-        var msg = ex.Message;
-        return msg.Contains("Private video")
-            || msg.Contains("Video unavailable")
-            || msg.Contains("This video is not available")
-            || msg.Contains("has been removed")
-            || msg.Contains("account associated with this video has been terminated");
-    }
+    private static bool IsUnrecoverableDownloadError(string msg) =>
+        msg.Contains("Private video")
+        || msg.Contains("Video unavailable")
+        || msg.Contains("This video is not available")
+        || msg.Contains("has been removed")
+        || msg.Contains("account associated with this video has been terminated");
+
+    private static bool IsUnrecoverableDownloadError(Exception ex) => IsUnrecoverableDownloadError(ex.Message);
 
     private static bool IsRateLimitError(Exception ex)
     {
         var msg = ex.Message;
         return msg.Contains("429") || msg.Contains("Too Many Requests");
+    }
+
+    /// <summary>
+    /// For an upcoming user-requested item whose download failed permanently:
+    /// searches for an alternative video and updates the queue item.
+    /// If no alternative is found, marks the item as failed so the UI can show it.
+    /// </summary>
+    private async Task TryApplyAlternativeOrMarkFailedAsync(
+        UserServices services, string failedUri, string title, string artist)
+    {
+        try
+        {
+            var alt = await _downloader.SearchBestMatchAsync($"{title} {artist}".Trim());
+            if (alt != null && alt.SpotifyUri != failedUri && services.Queue.UpdateSongForAlternative(failedUri, alt))
+            {
+                _logger.LogInformation(
+                    "Found alternative for unavailable \"{Title}\": {NewUri}", title, alt.SpotifyUri);
+                _downloader.StartDownload(alt);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Alternative search failed for \"{Title}\"", title);
+        }
+
+        // No alternative — mark the item so the frontend shows the error badge
+        services.Queue.MarkDownloadError(failedUri, "No disponible");
+        _ = _hub.Clients.Group($"user:{LocalUser.Id}")
+                .SendAsync("queue:download-failed", new { title, artist, reason = "No disponible" });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

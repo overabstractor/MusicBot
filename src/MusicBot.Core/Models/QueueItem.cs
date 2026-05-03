@@ -9,4 +9,6 @@ public class QueueItem
     public long AddedAt { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     /// <summary>True when this item was auto-promoted from the background playlist (not user-requested).</summary>
     public bool IsPlaylistItem { get; set; }
+    /// <summary>Set when the song cannot be downloaded and no alternative was found. Null when healthy.</summary>
+    public string? DownloadError { get; set; }
 }

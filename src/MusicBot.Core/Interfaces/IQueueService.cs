@@ -42,6 +42,10 @@ public interface IQueueService
     List<Song> GetNextDownloadCandidates(int count);
     /// <summary>Removes all user-requested (non-playlist) items from the upcoming queue.</summary>
     void ClearUserQueue();
+    /// <summary>Marks or clears a download error on a queued item by URI. Returns false if not found.</summary>
+    bool MarkDownloadError(string spotifyUri, string? error);
+    /// <summary>Replaces the song on a queued item (by old URI) for alternative-version fallback. Clears DownloadError. Returns false if not found.</summary>
+    bool UpdateSongForAlternative(string oldUri, Song newSong);
 
     event Action<QueueState>? OnQueueUpdated;
     event Action<NowPlayingState>? OnNowPlayingUpdated;

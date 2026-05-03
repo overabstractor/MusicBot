@@ -782,8 +782,27 @@ public class YtDlpDownloaderService
             }
 
             if (!result!.Success)
-                throw new InvalidOperationException(
-                    $"yt-dlp failed for \"{song.Title}\": {string.Join("; ", result.ErrorOutput)}");
+            {
+                // Content ID / availability blocks: retry with android_vr client, which uses a
+                // different API path not covered by most "blocked on this website/application" rules.
+                if (IsUnrecoverableOutputError(string.Join(" ", result.ErrorOutput)))
+                {
+                    _logger.LogWarning(
+                        "Retrying \"{Title}\" with android_vr client to bypass Content ID block", song.Title);
+
+                    var altOptions = new OptionSet { Output = outputPath, NoPlaylist = true };
+                    altOptions.AddCustomOption<string>("--extractor-args", "youtube:player_client=android_vr");
+
+                    result = await _ytdl.RunAudioDownload(url, audioFormat, progress: progress, overrideOptions: altOptions);
+
+                    if (result.Success)
+                        _logger.LogInformation("android_vr bypass succeeded for \"{Title}\"", song.Title);
+                }
+
+                if (!result!.Success)
+                    throw new InvalidOperationException(
+                        $"yt-dlp failed for \"{song.Title}\": {string.Join("; ", result.ErrorOutput)}");
+            }
 
             var filePath = File.Exists(outputPath) ? outputPath : result.Data ?? outputPath;
 

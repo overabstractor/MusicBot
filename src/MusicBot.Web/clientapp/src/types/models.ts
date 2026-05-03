@@ -20,6 +20,7 @@ export interface QueueItem {
   platform: string;
   addedAt: number;
   isPlaylistItem?: boolean;
+  downloadError?: string | null;
 }
 
 export interface NowPlayingState {
