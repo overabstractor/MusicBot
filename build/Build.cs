@@ -51,15 +51,10 @@ class Build : NukeBuild
     Target RestoreNpm => _ => _
         .Executes(() => Npm("install"));
 
-    /// Compila el cliente React con Vite y copia el resultado a wwwroot.
+    /// Compila el cliente React con Vite. Vite ya escribe directo a wwwroot (outDir: ../wwwroot, emptyOutDir: true).
     Target BuildClient => _ => _
         .DependsOn(RestoreNpm)
-        .Executes(() =>
-        {
-            Npm("run build");
-            WwwRootDir.DeleteDirectory();
-            (ClientAppDir / "build").Copy(WwwRootDir, ExistsPolicy.MergeAndOverwrite);
-        });
+        .Executes(() => Npm("run build"));
 
     /// Compila la solución .NET completa.
     Target Compile => _ => _
