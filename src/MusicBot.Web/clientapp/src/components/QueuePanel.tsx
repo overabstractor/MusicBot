@@ -69,9 +69,9 @@ const DevicesView: React.FC = () => {
   const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
-    api.getAudioDevices().then(list => {
+    api.getAudioDevices().then(({ activeDeviceId, devices: list }) => {
       setDevices(list);
-      setActiveId(list.find(d => d.isDefault)?.id ?? null);
+      setActiveId(activeDeviceId);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);

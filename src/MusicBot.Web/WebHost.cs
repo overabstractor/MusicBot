@@ -10,6 +10,7 @@ using MusicBot.Services.Downloader;
 using MusicBot.Services.Library;
 using MusicBot.Services.Metadata;
 using MusicBot.Services.Platforms;
+using MusicBot.Services.Player;
 using MusicBot.Services.Spotify;
 using Scalar.AspNetCore;
 
@@ -80,6 +81,7 @@ public static class WebHost
         builder.Services.AddSingleton<KickAuthService>();
         builder.Services.AddSingleton<TikTokAuthService>();
         builder.Services.AddHostedService<PlatformAutoConnectService>();
+        builder.Services.AddHostedService<AudioDeviceRestoreService>();
         builder.Services.AddSingleton<IntegrationStatusTracker>();
         builder.Services.AddSingleton<QueueSettingsService>();
         builder.Services.AddSingleton<BannedSongService>();
@@ -146,6 +148,8 @@ public static class WebHost
             try { db.Database.ExecuteSqlRaw("ALTER TABLE PersistedQueueItems ADD COLUMN IsPlaylistItem INTEGER NOT NULL DEFAULT 0"); }
             catch { /* column already exists */ }
             try { db.Database.ExecuteSqlRaw("ALTER TABLE PlaylistLibraries ADD COLUMN SortOrder INTEGER NULL"); }
+            catch { /* column already exists */ }
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN AudioDeviceId TEXT NULL"); }
             catch { /* column already exists */ }
 
             if (!db.Users.Any())

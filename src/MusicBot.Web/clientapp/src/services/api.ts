@@ -71,7 +71,7 @@ export const api = {
     request<void>("/api/player/seek", { method: "POST", body: JSON.stringify({ positionMs }) }),
 
   getAudioDevices: () =>
-    request<{ id: string; name: string; isDefault: boolean }[]>("/api/player/devices"),
+    request<{ activeDeviceId: string | null; devices: { id: string; name: string; isDefault: boolean }[] }>("/api/player/devices"),
 
   setAudioDevice: (deviceId: string | null) =>
     request<void>("/api/player/device", { method: "POST", body: JSON.stringify({ deviceId }) }),

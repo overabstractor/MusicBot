@@ -63,11 +63,10 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
   // Load devices once on mount
   useEffect(() => {
     api.getAudioDevices()
-      .then(list => {
+      .then(({ activeDeviceId, devices: list }) => {
         setDevices(list);
         setDevicesLoaded(true);
-        const def = list.find(d => d.isDefault);
-        setActiveDevice(def?.id ?? null);
+        setActiveDevice(activeDeviceId);
       })
       .catch(err => console.warn("Could not load audio devices:", err));
   }, []);
