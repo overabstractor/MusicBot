@@ -9,6 +9,8 @@ import {
   PlaylistLibrary,
   PlaylistLibrarySong,
   PlaylistMembership,
+  FeatureRequest,
+  SupportTicket,
 } from "../types/models";
 import type { TickerMessage } from "../hooks/useSignalR";
 
@@ -305,6 +307,9 @@ export const api = {
   reorderPins: (ids: number[]) =>
     request<void>("/api/playlists/pins/reorder", { method: "PUT", body: JSON.stringify({ ids }) }),
 
+  reorderPlaylists: (ids: number[]) =>
+    request<void>("/api/playlists/reorder", { method: "PUT", body: JSON.stringify({ ids }) }),
+
   reorderPlaylistSong: (playlistId: number, spotifyUri: string, toIndex: number) =>
     request<void>(`/api/playlists/${playlistId}/songs/reorder`, {
       method: "PUT",
@@ -320,4 +325,28 @@ export const api = {
   openLogDir:    () => request<void>("/api/app/open-log-dir", { method: "POST" }),
   getVersion:    () => request<{ version: string }>("/api/app/version"),
   updateYtDlp:   () => request<{ version: string; message: string }>("/api/app/yt-dlp/update", { method: "POST" }),
+
+  // Community – Feature Requests
+  // Note: API uses integer IDs; LocalCommunityService converts to/from string.
+  getFeatureRequests: () => request<FeatureRequest[]>("/api/community/features"),
+  createFeatureRequest: (title: string, description: string) =>
+    request<FeatureRequest>("/api/community/features", {
+      method: "POST",
+      body: JSON.stringify({ title, description }),
+    }),
+  voteFeature: (id: number) =>
+    request<{ votes: number; hasVoted: boolean }>(`/api/community/features/${id}/vote`, { method: "POST" }),
+  deleteFeatureRequest: (id: number) =>
+    request<void>(`/api/community/features/${id}`, { method: "DELETE" }),
+
+  // Support Tickets
+  getSupportTickets: () => request<SupportTicket[]>("/api/support/tickets"),
+  createSupportTicket: (title: string, description: string, category: string) =>
+    request<SupportTicket>("/api/support/tickets", {
+      method: "POST",
+      body: JSON.stringify({ title, description, category }),
+    }),
+  deleteSupportTicket: (id: number) =>
+    request<void>(`/api/support/tickets/${id}`, { method: "DELETE" }),
+
 };

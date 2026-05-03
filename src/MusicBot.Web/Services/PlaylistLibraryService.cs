@@ -28,8 +28,8 @@ public class PlaylistLibraryService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
         return await db.PlaylistLibraries
-            .OrderBy(p => p.IsPinned ? 0 : 1)
-            .ThenBy(p => p.IsPinned ? p.PinOrder : 0)
+            .OrderBy(p => p.IsSystem ? 0 : 1)
+            .ThenBy(p => p.SortOrder.HasValue ? p.SortOrder!.Value : int.MaxValue)
             .ThenBy(p => p.CreatedAt)
             .ToListAsync();
     }
@@ -94,6 +94,29 @@ public class PlaylistLibraryService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
         return await db.PlaylistLibrarySongs.CountAsync(s => s.PlaylistId == playlistId);
+    }
+
+    public async Task<long> GetTotalDurationMsAsync(int playlistId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
+        return await db.PlaylistLibrarySongs
+            .Where(s => s.PlaylistId == playlistId)
+            .SumAsync(s => (long)s.DurationMs);
+    }
+
+    /// <summary>Assigns sequential SortOrder to non-system playlists in the given id order.</summary>
+    public async Task ReorderPlaylistsAsync(List<int> ids)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
+        var playlists = await db.PlaylistLibraries.Where(p => ids.Contains(p.Id) && !p.IsSystem).ToListAsync();
+        for (int i = 0; i < ids.Count; i++)
+        {
+            var pl = playlists.FirstOrDefault(p => p.Id == ids[i]);
+            if (pl != null) pl.SortOrder = i;
+        }
+        await db.SaveChangesAsync();
     }
 
     /// <summary>Returns the first <paramref name="max"/> distinct non-empty cover URLs for a playlist.</summary>

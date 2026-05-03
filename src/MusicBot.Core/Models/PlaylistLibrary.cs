@@ -13,7 +13,10 @@ public class PlaylistLibrary
     /// <summary>Whether this playlist is pinned to the top of the sidebar.</summary>
     public bool     IsPinned  { get; set; }
     /// <summary>Display order among pinned playlists (lower = higher).</summary>
-    public int      PinOrder  { get; set; }
+    public int      PinOrder   { get; set; }
+
+    /// <summary>User-defined display order in the library grid (null = order by CreatedAt).</summary>
+    public int?     SortOrder  { get; set; }
 
     public List<PlaylistLibrarySong> Songs { get; set; } = new();
 }

@@ -1,15 +1,27 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Sun, Moon, Power, FileText, Wrench, Music2, FolderOpen } from "lucide-react";
+import { Sun, Moon, Power, FileText, Wrench, Music2, FolderOpen, Bot, Users, Coffee, LifeBuoy } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
 import { MainBrowser } from "../components/MainBrowser";
 import { QueuePanel } from "../components/QueuePanel";
 import { PlayerBar } from "../components/PlayerBar";
 import { StatusBar } from "../components/StatusBar";
 import { QueueToolsModal } from "../components/QueueToolsModal";
+import { ComunidadPanel } from "../components/ComunidadPanel";
+import { DonacionesPanel } from "../components/DonacionesPanel";
+import { SoportePanel } from "../components/SoportePanel";
 import { useSignalR } from "../hooks/useSignalR";
 import { useLikedSongs } from "../hooks/useLikedSongs";
 import { useConfirm } from "../hooks/useConfirm";
 import { api } from "../services/api";
+
+type AppSection = "bot" | "comunidad" | "donaciones" | "soporte";
+
+const SECTIONS: { id: AppSection; label: string; icon: React.ReactNode }[] = [
+  { id: "bot",       label: "Manager",    icon: <Bot size={13} />      },
+  { id: "comunidad", label: "Comunidad",  icon: <Users size={13} />    },
+  { id: "soporte",   label: "Soporte",    icon: <LifeBuoy size={13} /> },
+  { id: "donaciones",label: "Donaciones", icon: <Coffee size={13} />   },
+];
 
 const OVERLAY_TOKEN = "local";
 
@@ -51,6 +63,7 @@ export const Dashboard: React.FC = () => {
   }, [playlistUpdateCount]);
 
   const [appVersion,       setAppVersion]       = useState<string | null>(null);
+  const [section,          setSection]          = useState<AppSection>("bot");
   const [selectedPlaylist, setSelectedPlaylist] = useState<number | null>(null);
   const [libRefreshKey,    setLibRefreshKey]    = useState(0);
   const [queueToolsOpen,   setQueueToolsOpen]   = useState(false);
@@ -133,10 +146,24 @@ export const Dashboard: React.FC = () => {
 
       {/* ── Header ──────────────────────────────────────────── */}
       <header className="app-header">
-        <div className="header-brand">
-          <span className="header-logo"><Music2 size={20} /></span>
-          <span className="header-title">MusicBot</span>
-          {appVersion && <span className="header-version">v{appVersion}</span>}
+        <div className="header-left">
+          <div className="header-brand" onClick={() => setSection("bot")} title="Manager">
+            <span className="header-logo"><Music2 size={20} /></span>
+            <span className="header-title">MusicBot</span>
+            {appVersion && <span className="header-version">v{appVersion}</span>}
+          </div>
+
+          <nav className="header-section-nav">
+            {SECTIONS.map(s => (
+              <button
+                key={s.id}
+                className={`header-section-btn${section === s.id ? " active" : ""}`}
+                onClick={() => setSection(s.id)}
+              >
+                {s.icon} {s.label}
+              </button>
+            ))}
+          </nav>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -203,26 +230,31 @@ export const Dashboard: React.FC = () => {
       {/* ── Body: 2 columns ─────────────────────────────────── */}
       <div className="spotify-body">
 
-        {/* Center: Main browser */}
-        <MainBrowser
-          selectedPlaylistId={selectedPlaylist}
-          onSelectPlaylist={id => setSelectedPlaylist(id)}
-          onClearSelection={() => setSelectedPlaylist(null)}
-          onPlaylistsChanged={() => setLibRefreshKey(k => k + 1)}
-          nowPlayingUri={nowPlayingUri}
-          nowPlaying={nowPlaying}
-          queueUpdateCount={queueUpdateCount}
-          playlistsRefreshKey={libRefreshKey}
-          likedUris={likedUris}
-          onToggleLike={toggleLike}
-          settings={queueSettings}
-          tiktokEvents={integrationEvents.filter(e => e.source === "tiktok")}
-          twitchEvents={integrationEvents.filter(e => e.source === "twitch")}
-          kickEvents={integrationEvents.filter(e => e.source === "kick")}
-          authUpdatedAt={authUpdatedAt}
-          tickerMessages={tickerMessages}
-          overlayToken={OVERLAY_TOKEN}
-        />
+        {/* Center: section-dependent content */}
+        {section === "bot" && (
+          <MainBrowser
+            selectedPlaylistId={selectedPlaylist}
+            onSelectPlaylist={id => setSelectedPlaylist(id)}
+            onClearSelection={() => setSelectedPlaylist(null)}
+            onPlaylistsChanged={() => setLibRefreshKey(k => k + 1)}
+            nowPlayingUri={nowPlayingUri}
+            nowPlaying={nowPlaying}
+            queueUpdateCount={queueUpdateCount}
+            playlistsRefreshKey={libRefreshKey}
+            likedUris={likedUris}
+            onToggleLike={toggleLike}
+            settings={queueSettings}
+            tiktokEvents={integrationEvents.filter(e => e.source === "tiktok")}
+            twitchEvents={integrationEvents.filter(e => e.source === "twitch")}
+            kickEvents={integrationEvents.filter(e => e.source === "kick")}
+            authUpdatedAt={authUpdatedAt}
+            tickerMessages={tickerMessages}
+            overlayToken={OVERLAY_TOKEN}
+          />
+        )}
+        {section === "comunidad"  && <div className="section-panel"><ComunidadPanel /></div>}
+        {section === "donaciones" && <div className="section-panel"><DonacionesPanel /></div>}
+        {section === "soporte"    && <div className="section-panel"><SoportePanel /></div>}
 
         {/* Right: Queue / Now Playing / Devices */}
         <QueuePanel

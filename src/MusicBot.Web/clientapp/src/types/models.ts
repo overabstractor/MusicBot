@@ -135,8 +135,10 @@ export interface PlaylistLibrary {
   isSystem?: boolean;
   isPinned?: boolean;
   pinOrder?: number;
+  sortOrder?: number;
   createdAt: string;
   songCount: number;
+  totalDurationMs?: number;
   coverUrls?: string[];
 }
 
@@ -158,4 +160,46 @@ export interface PlaylistLibrarySong {
   coverUrl: string;
   durationMs: number;
   position: number;
+}
+
+export type UserRole = "admin" | "editor" | "support";
+
+export interface RoleEntry {
+  uid: string;
+  role: UserRole;
+  email?: string;
+  displayName?: string;
+}
+
+export interface FeatureRequest {
+  id: string;
+  title: string;
+  description: string;
+  votes: number;
+  status: 'open' | 'planned' | 'in-progress' | 'done' | 'rejected';
+  createdAt: string;
+  hasVoted: boolean;
+}
+
+export interface TicketReply {
+  id: string;
+  authorUid: string;
+  authorName: string | null;
+  text: string;
+  createdAt: string;
+  isStaff: boolean;
+}
+
+export interface SupportTicket {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  status: 'open' | 'in-progress' | 'resolved' | 'closed';
+  createdAt: string;
+  updatedAt?: string;
+  userId?: string;
+  userDisplayName?: string;
+  userEmail?: string;
+  replies?: TicketReply[];
 }

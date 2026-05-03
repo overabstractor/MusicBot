@@ -15,6 +15,9 @@ public class MusicBotDbContext : DbContext
     public DbSet<AutoQueueSong>      AutoQueueSongs      => Set<AutoQueueSong>();
     public DbSet<PlaylistLibrary>    PlaylistLibraries   => Set<PlaylistLibrary>();
     public DbSet<PlaylistLibrarySong> PlaylistLibrarySongs => Set<PlaylistLibrarySong>();
+    public DbSet<FeatureRequest> FeatureRequests => Set<FeatureRequest>();
+    public DbSet<FeatureVote>    FeatureVotes    => Set<FeatureVote>();
+    public DbSet<SupportTicket>  SupportTickets  => Set<SupportTicket>();
 
     public MusicBotDbContext(DbContextOptions<MusicBotDbContext> options) : base(options) { }
 
@@ -87,6 +90,25 @@ public class MusicBotDbContext : DbContext
              .WithMany(p => p.Songs)
              .HasForeignKey(s => s.PlaylistId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FeatureRequest>(e =>
+        {
+            e.HasKey(f => f.Id);
+            e.Property(f => f.Status).HasDefaultValue("open");
+        });
+
+        modelBuilder.Entity<FeatureVote>(e =>
+        {
+            e.HasKey(v => v.Id);
+            e.HasIndex(v => new { v.FeatureRequestId, v.UserId }).IsUnique();
+        });
+
+        modelBuilder.Entity<SupportTicket>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.HasIndex(t => t.CreatedAt);
+            e.Property(t => t.Status).HasDefaultValue("open");
         });
     }
 }

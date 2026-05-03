@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as signalR from "@microsoft/signalr";
 import { NowPlayingState, SpotifyQueueState, QueueItem, QueueState } from "../types/models";
+import { resolveGoogleAuth } from "../services/community/googleAuthBus";
 
 const HUB_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/hub/overlay`
@@ -174,7 +175,8 @@ export function useSignalR(overlayToken: string | null) {
       }, 12000);
     });
 
-    conn.on("auth:updated", () => setAuthUpdatedAt(n => n + 1));
+    conn.on("auth:updated",       () => setAuthUpdatedAt(n => n + 1));
+    conn.on("auth:google-token",  (d: { idToken: string }) => resolveGoogleAuth(d.idToken));
 
     conn.on("integration:event", (p: Omit<IntegrationEvent, "id" | "timestamp">) => {
       setIntegrationEvents(prev =>

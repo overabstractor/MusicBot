@@ -6,6 +6,8 @@ interface Env {
   TWITCH_CLIENT_SECRET: string;
   KICK_CLIENT_ID: string;
   KICK_CLIENT_SECRET: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
 }
 
 interface TokenBody {
@@ -55,6 +57,7 @@ export default {
       case "/token/spotify": return handleSpotify(body, env);
       case "/token/twitch":  return handleTwitch(body, env);
       case "/token/kick":    return handleKick(body, env);
+      case "/token/google":  return handleGoogle(body, env);
       default: return jsonResponse({ error: "Not found" }, 404);
     }
   },
@@ -108,6 +111,25 @@ async function handleKick(body: TokenBody, env: Env): Promise<Response> {
   if (body.code_verifier) params.set("code_verifier", body.code_verifier);
 
   const res = await fetch("https://id.kick.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params,
+  });
+  return forwardResponse(res);
+}
+
+async function handleGoogle(body: TokenBody, env: Env): Promise<Response> {
+  const params = new URLSearchParams({
+    grant_type:    body.grant_type,
+    client_id:     env.GOOGLE_CLIENT_ID,
+    client_secret: env.GOOGLE_CLIENT_SECRET,
+  });
+  if (body.code)          params.set("code", body.code);
+  if (body.redirect_uri)  params.set("redirect_uri", body.redirect_uri);
+  if (body.refresh_token) params.set("refresh_token", body.refresh_token);
+  if (body.code_verifier) params.set("code_verifier", body.code_verifier);
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params,

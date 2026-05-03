@@ -13,7 +13,11 @@ namespace MusicBot.Desktop;
 /// </summary>
 public partial class MainWindow : Window
 {
+#if DEBUG
+    private const string DashboardUrl = "http://localhost:5173";
+#else
     private const string DashboardUrl = "http://localhost:3050";
+#endif
 
     public MainWindow()
     {
@@ -56,10 +60,12 @@ public partial class MainWindow : Window
             WebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
 #endif
 
+#if !DEBUG
             // Clear HTTP disk cache on every startup so updated assets are always fetched fresh.
             await WebView.CoreWebView2.Profile.ClearBrowsingDataAsync(
                 CoreWebView2BrowsingDataKinds.DiskCache |
                 CoreWebView2BrowsingDataKinds.CacheStorage);
+#endif
 
             // Remove the loading overlay once the first page finishes loading
             WebView.CoreWebView2.NavigationCompleted += (_, _) =>
@@ -76,6 +82,26 @@ public partial class MainWindow : Window
                 "MusicBot — Error de WebView2",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    /// <summary>
+    /// Clears the HTTP disk cache and reloads the dashboard. Safe to call from any thread.
+    /// </summary>
+    public void Reload()
+    {
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            if (WebView.CoreWebView2 == null) return;
+            LoadingOverlay.Visibility = Visibility.Visible;
+#if DEBUG
+            await Task.CompletedTask;
+#else
+            await WebView.CoreWebView2.Profile.ClearBrowsingDataAsync(
+                CoreWebView2BrowsingDataKinds.DiskCache |
+                CoreWebView2BrowsingDataKinds.CacheStorage);
+#endif
+            WebView.CoreWebView2.Navigate(DashboardUrl);
+        });
     }
 
     /// <summary>

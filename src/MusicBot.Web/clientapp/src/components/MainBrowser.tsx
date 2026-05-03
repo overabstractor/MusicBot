@@ -22,14 +22,22 @@ import { NowPlayingState } from "../types/models";
 
 type BrowserTab = "home" | "settings" | "platforms" | "overlays" | "ticker" | "commands" | "autocola";
 
+function formatPlaylistDuration(ms: number): string {
+  const totalMin = Math.round(ms / 60000);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
 const BROWSER_TABS: { id: BrowserTab; label: string; icon: React.ReactNode }[] = [
-  { id: "home",      label: "Mi librería", icon: <Library size={13} />        },
-  { id: "autocola",  label: "Auto-cola",   icon: <Heart size={13} />          },
-  { id: "platforms", label: "Plataformas", icon: <Zap size={13} />            },
-  { id: "overlays",  label: "Overlays",    icon: <Monitor size={13} />        },
-  { id: "ticker",    label: "Mensajes",    icon: <MessageSquare size={13} />  },
-  { id: "commands",  label: "Comandos",    icon: <Terminal size={13} />       },
-  { id: "settings",  label: "Ajustes",     icon: <Settings size={13} />       },
+  { id: "home",      label: "Mi librería", icon: <Library size={13} />       },
+  { id: "autocola",  label: "Auto-cola",   icon: <Heart size={13} />         },
+  { id: "platforms", label: "Plataformas", icon: <Zap size={13} />           },
+  { id: "overlays",  label: "Overlays",    icon: <Monitor size={13} />       },
+  { id: "ticker",    label: "Mensajes",    icon: <MessageSquare size={13} /> },
+  { id: "commands",  label: "Comandos",    icon: <Terminal size={13} />      },
+  { id: "settings",  label: "Ajustes",     icon: <Settings size={13} />      },
 ];
 
 interface Props {
@@ -112,6 +120,11 @@ export const MainBrowser: React.FC<Props> = ({
   const [dragSongUri,  setDragSongUri]  = useState<string | null>(null);
   const [dropSongIdx,  setDropSongIdx]  = useState<number | null>(null);
   const dragSongIdxRef = useRef<number>(-1);
+
+  // ── Playlist grid drag-and-drop reorder ───────────────────────────────────
+  const [dragPlaylistId, setDragPlaylistId] = useState<number | null>(null);
+  const [dropPlaylistId, setDropPlaylistId] = useState<number | null>(null);
+  const dragPlaylistIdxRef = useRef<number>(-1);
 
   // ── Context menus ──────────────────────────────────────────────────────────
   const [menuAnchor,     setMenuAnchor]     = useState<{ uri: string; el: HTMLElement } | null>(null);
@@ -403,6 +416,35 @@ export const MainBrowser: React.FC<Props> = ({
     }
   };
 
+  // ── Playlist grid reorder ─────────────────────────────────────────────────
+  const handleReorderPlaylist = async (fromId: number, toId: number) => {
+    if (fromId === toId) return;
+    setPlaylists(prev => {
+      const next = [...prev];
+      const fromIdx = next.findIndex(p => p.id === fromId);
+      const toIdx   = next.findIndex(p => p.id === toId);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
+    try {
+      const ids = playlists
+        .filter(p => !p.isSystem)
+        .map(p => p.id);
+      // Apply the same splice to get the new order
+      const fromIdx = ids.indexOf(fromId);
+      const toIdx   = ids.indexOf(toId);
+      if (fromIdx >= 0 && toIdx >= 0) {
+        const [moved] = ids.splice(fromIdx, 1);
+        ids.splice(toIdx, 0, moved);
+      }
+      await api.reorderPlaylists(ids);
+    } catch {
+      await loadHome();
+    }
+  };
+
   // ── Import ─────────────────────────────────────────────────────────────────
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -569,6 +611,7 @@ export const MainBrowser: React.FC<Props> = ({
           </button>
         )}
         <div className="browser-search-wrap" ref={searchWrapRef}>
+
           <form className="browser-search-form" onSubmit={e => e.preventDefault()}>
             {searching
               ? <span className="browser-search-spinner" />
@@ -707,6 +750,26 @@ export const MainBrowser: React.FC<Props> = ({
             );
           })()}
         </div>
+
+        {/* ── Library action buttons (home view only) ──── */}
+        {isOnHome && (
+          <div className="browser-lib-actions">
+            <button
+              className="browser-lib-btn-import"
+              title="Importar lista de YouTube"
+              onClick={() => { setShowLibImport(true); setLibImportMsg(null); }}
+            >
+              <Download size={14} /> Importar
+            </button>
+            <button
+              className="browser-lib-btn-create"
+              title="Crear lista nueva"
+              onClick={() => setShowLibCreate(true)}
+            >
+              <Plus size={15} /> Nueva lista
+            </button>
+          </div>
+        )}
       </div>}
 
       {/* ── Action flash ────────────────────────────────────── */}
@@ -717,65 +780,64 @@ export const MainBrowser: React.FC<Props> = ({
       {/* ══ HOME / LIBRARY VIEW ══ */}
       {browserTab === "home" && view === "home" && (
         <div className="browser-content">
-          {/* Library toolbar */}
-          <div className="browser-lib-toolbar">
-            <button
-              className="lib-sidebar-create-btn"
-              title="Importar lista de YouTube"
-              onClick={() => { setShowLibImport(true); setLibImportMsg(null); }}
-            >
-              <Download size={15} />
-            </button>
-            <button
-              className="lib-sidebar-create-btn"
-              title="Crear lista"
-              onClick={() => setShowLibCreate(true)}
-            >
-              <Plus size={16} />
-            </button>
-          </div>
-
           {!loadingHome && playlists.length > 0 && (
             <section className="browser-section">
               <div className="browser-playlist-grid">
-                {playlists.map(p => (
-                  <div
-                    key={p.id}
-                    className={`browser-playlist-card${p.isActive ? " active" : ""}`}
-                    onClick={() => onSelectPlaylist(p.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={e => e.key === "Enter" && onSelectPlaylist(p.id)}
-                  >
-                    <div className="browser-playlist-card-cover">
-                      <PlaylistCover coverUrls={p.coverUrls} iconSize={28} className="browser-pl-card-cover-inner" />
-                      <button
-                        className="browser-playlist-play-btn"
-                        title={p.isActive ? "Ya en reproducción" : "Reproducir lista"}
-                        onClick={async e => {
-                          e.stopPropagation();
-                          try {
-                            await api.activatePlaylist(p.id);
-                            flash(`▶ Reproduciendo "${p.name}"`);
-                            onPlaylistsChanged();
-                            loadHome();
-                          } catch (err: unknown) {
-                            flash(err instanceof Error ? err.message : "Error", true);
-                          }
-                        }}
-                      >
-                        <Play size={20} fill="currentColor" />
-                      </button>
+                {playlists.map((p, i) => {
+                  const isDragging   = dragPlaylistId === p.id;
+                  const isDropTarget = dropPlaylistId === p.id && dragPlaylistId !== p.id;
+                  const draggable    = !p.isSystem;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`browser-playlist-card${p.isActive ? " active" : ""}${isDragging ? " queue-row-dragging" : ""}${isDropTarget ? " queue-row-drop-target" : ""}`}
+                      draggable={draggable}
+                      onDragStart={draggable ? () => { setDragPlaylistId(p.id); dragPlaylistIdxRef.current = i; } : undefined}
+                      onDragOver={draggable ? e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropPlaylistId(p.id); } : undefined}
+                      onDrop={draggable ? e => {
+                        e.preventDefault();
+                        if (dragPlaylistId && dragPlaylistId !== p.id) handleReorderPlaylist(dragPlaylistId, p.id);
+                        setDragPlaylistId(null); setDropPlaylistId(null);
+                      } : undefined}
+                      onDragEnd={draggable ? () => { setDragPlaylistId(null); setDropPlaylistId(null); } : undefined}
+                      onClick={() => onSelectPlaylist(p.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => e.key === "Enter" && onSelectPlaylist(p.id)}
+                    >
+                      <div className="browser-playlist-card-cover">
+                        <PlaylistCover coverUrls={p.coverUrls} iconSize={28} className="browser-pl-card-cover-inner" />
+                        <button
+                          className="browser-playlist-play-btn"
+                          title={p.isActive ? "Ya en reproducción" : "Reproducir lista"}
+                          onClick={async e => {
+                            e.stopPropagation();
+                            try {
+                              await api.activatePlaylist(p.id);
+                              flash(`▶ Reproduciendo "${p.name}"`);
+                              onPlaylistsChanged();
+                              loadHome();
+                            } catch (err: unknown) {
+                              flash(err instanceof Error ? err.message : "Error", true);
+                            }
+                          }}
+                        >
+                          <Play size={20} fill="currentColor" />
+                        </button>
+                      </div>
+                      <div className="browser-playlist-card-info">
+                        <span className="browser-playlist-card-name">{p.name}</span>
+                        <span className="browser-playlist-card-meta">
+                          {p.isActive && <span className="lib-active-badge">Activa · </span>}
+                          {p.songCount} canciones
+                          {p.totalDurationMs != null && p.totalDurationMs > 0 && (
+                            <> · {formatPlaylistDuration(p.totalDurationMs)}</>
+                          )}
+                        </span>
+                      </div>
                     </div>
-                    <div className="browser-playlist-card-info">
-                      <span className="browser-playlist-card-name">{p.name}</span>
-                      <span className="browser-playlist-card-meta">
-                        {p.isActive && <span className="lib-active-badge">Activa · </span>}
-                        {p.songCount} canciones
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}

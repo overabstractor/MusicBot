@@ -145,6 +145,8 @@ public static class WebHost
             catch { /* column already exists */ }
             try { db.Database.ExecuteSqlRaw("ALTER TABLE PersistedQueueItems ADD COLUMN IsPlaylistItem INTEGER NOT NULL DEFAULT 0"); }
             catch { /* column already exists */ }
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE PlaylistLibraries ADD COLUMN SortOrder INTEGER NULL"); }
+            catch { /* column already exists */ }
 
             if (!db.Users.Any())
             {

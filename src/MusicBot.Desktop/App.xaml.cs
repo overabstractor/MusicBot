@@ -352,8 +352,9 @@ public partial class App : SysWin.Application
             ForeColor = Color.FromArgb(140, 100, 240),
         });
         menu.Items.Add(new ToolStripSeparator());
-        AddMenuItem(menu, "🌐  Abrir dashboard", () => ShowMainWindow());
-        AddMenuItem(menu, "📋  Ver logs",          () => ShowLogs());
+        AddMenuItem(menu, "🌐  Abrir dashboard",    () => ShowMainWindow());
+        AddMenuItem(menu, "🔄  Recargar interfaz", () => _mainWindow?.Reload());
+        AddMenuItem(menu, "📋  Ver logs",           () => ShowLogs());
         menu.Items.Add(new ToolStripSeparator());
         AddMenuItem(menu, "✕  Salir",               () => ExitApp());
 

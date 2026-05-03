@@ -48,9 +48,10 @@ public class PlaylistController : ControllerBase
         var result = new List<object>();
         foreach (var p in all)
         {
-            var count     = await _playlists.GetSongCountAsync(p.Id);
-            var coverUrls = await _playlists.GetCoverUrlsAsync(p.Id, 4);
-            result.Add(new { p.Id, p.Name, p.IsActive, p.IsSystem, p.IsPinned, p.PinOrder, p.CreatedAt, SongCount = count, CoverUrls = coverUrls });
+            var count       = await _playlists.GetSongCountAsync(p.Id);
+            var coverUrls   = await _playlists.GetCoverUrlsAsync(p.Id, 4);
+            var totalDurMs  = await _playlists.GetTotalDurationMsAsync(p.Id);
+            result.Add(new { p.Id, p.Name, p.IsActive, p.IsSystem, p.IsPinned, p.PinOrder, p.SortOrder, p.CreatedAt, SongCount = count, CoverUrls = coverUrls, TotalDurationMs = totalDurMs });
         }
         return Ok(result);
     }
@@ -115,6 +116,17 @@ public class PlaylistController : ControllerBase
         await _playlists.SetPinnedAsync(id, !playlist.IsPinned);
         await BroadcastStatusAsync();
         return Ok(new { isPinned = !playlist.IsPinned });
+    }
+
+    [HttpPut("reorder")]
+    public async Task<IActionResult> ReorderPlaylists([FromBody] PinReorderRequest req)
+    {
+        if (req.Ids == null || req.Ids.Count == 0)
+            return BadRequest(new { error = "ids requeridos" });
+
+        await _playlists.ReorderPlaylistsAsync(req.Ids);
+        await BroadcastStatusAsync();
+        return NoContent();
     }
 
     [HttpPut("pins/reorder")]
