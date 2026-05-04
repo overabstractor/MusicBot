@@ -591,58 +591,6 @@ body {
   50%       { opacity: 0.45; }
 }
 
-/* ═══════════════════════════════════════════════
-   TICKER / ROTATING MESSAGES
-   ═══════════════════════════════════════════════ */
-
-.ticker-bar {
-  position: relative; z-index: 2;
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 18px;
-  border-top: 1px solid var(--ov-border);
-  background: var(--ov-bg2);
-  flex-shrink: 0;
-  min-height: 52px;
-  animation: fadeIn 0.4s ease;
-}
-
-.ticker-bar.hidden { display: none; }
-
-.ticker-icon {
-  font-size: 14px; flex-shrink: 0;
-  color: var(--ov-accent);
-  opacity: 0.8;
-}
-
-.ticker-body {
-  flex: 1; min-width: 0;
-  animation: tickerFadeIn 0.5s ease;
-}
-
-.ticker-text {
-  font-size: 13px; font-weight: 500;
-  color: var(--ov-text);
-  line-height: 1.4;
-}
-
-.ticker-img {
-  height: 36px; max-width: 120px;
-  border-radius: 6px; object-fit: contain;
-  flex-shrink: 0;
-}
-
-.ticker-img.hidden { display: none; }
-
-@keyframes tickerFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
 /* ── Download banner (shown above queue for active downloads) ── */
 .ov-dl-banner {
   padding: 8px 14px 6px;

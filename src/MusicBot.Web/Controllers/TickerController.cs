@@ -37,4 +37,5 @@ public class TickerController : ControllerBase
     {
         return _ticker.Delete(id) ? NoContent() : NotFound();
     }
+
 }

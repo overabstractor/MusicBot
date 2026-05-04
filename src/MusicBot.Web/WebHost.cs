@@ -92,8 +92,10 @@ public static class WebHost
         builder.Services.AddSingleton<AutoQueueService>();
         builder.Services.AddSingleton<PlaylistLibraryService>();
         builder.Services.AddSingleton<ChatResponseService>();
+        builder.Services.AddSingleton<ChatActivityTracker>();
         builder.Services.AddSingleton<PresenceCheckService>();
         builder.Services.AddSingleton<TickerMessageService>();
+        builder.Services.AddHostedService<TickerChatService>();
 
         builder.Services.AddSignalR()
             .AddJsonProtocol(o =>
@@ -105,8 +107,10 @@ public static class WebHost
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(WebHost).Assembly)
             .AddJsonOptions(o =>
-                o.JsonSerializerOptions.PropertyNamingPolicy =
-                    System.Text.Json.JsonNamingPolicy.CamelCase);
+            {
+                o.JsonSerializerOptions.PropertyNamingPolicy        = System.Text.Json.JsonNamingPolicy.CamelCase;
+                o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+            });
 
         // ── OpenAPI ──────────────────────────────────────────────────────────
         builder.Services.AddOpenApi("v1", o =>

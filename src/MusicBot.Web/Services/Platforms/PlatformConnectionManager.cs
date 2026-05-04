@@ -34,6 +34,7 @@ public class PlatformConnectionManager
     private readonly IHubContext<OverlayHub> _hub;
     private readonly IntegrationStatusTracker _tracker;
     private readonly ChatResponseService _chat;
+    private readonly ChatActivityTracker _activity;
     private readonly TikTokRoomResolver _roomResolver;
     private readonly KickAuthService _kickAuth;
     private readonly IHttpClientFactory _httpFactory;
@@ -50,6 +51,7 @@ public class PlatformConnectionManager
         IHubContext<OverlayHub> hub,
         IntegrationStatusTracker tracker,
         ChatResponseService chat,
+        ChatActivityTracker activity,
         TikTokRoomResolver roomResolver,
         KickAuthService kickAuth,
         IHttpClientFactory httpFactory,
@@ -61,6 +63,7 @@ public class PlatformConnectionManager
         _hub          = hub;
         _tracker      = tracker;
         _chat         = chat;
+        _activity     = activity;
         _roomResolver = roomResolver;
         _kickAuth     = kickAuth;
         _httpFactory  = httpFactory;
@@ -251,6 +254,7 @@ public class PlatformConnectionManager
         client.OnConnected += (_, _) =>
         {
             _logger.LogInformation("TikTok connected to @{User}", config.Username);
+            _activity.SetIgnored(config.Username, true);
             SetStatus(key, ConnectionStatus.Connected);
 
             if (canSendChat || AppEvents.HasTikTokWebViewSender)
@@ -268,6 +272,7 @@ public class PlatformConnectionManager
         client.OnDisconnected += (_, _) =>
         {
             _logger.LogWarning("TikTok disconnected from @{User}", config.Username);
+            _activity.SetIgnored(config.Username, false);
             _chat.RegisterSender("tiktok", null);
             SetStatus(key, ConnectionStatus.Disconnected);
         };
@@ -293,6 +298,7 @@ public class PlatformConnectionManager
             var message  = e.Message?.Trim();
             if (string.IsNullOrEmpty(message)) return;
 
+            _activity.RecordMessage(username);
             _logger.LogDebug("TikTok chat @{User}: {Message}", username, message);
 
             if (message[0] is not ('!' or '.' or '/')) return;
@@ -376,6 +382,8 @@ public class PlatformConnectionManager
         client.OnConnected += async (_, _) =>
         {
             SetStatus(key, ConnectionStatus.Connected);
+            _activity.SetIgnored(config.Channel,      true);
+            _activity.SetIgnored(config.BotUsername,  true);
             _activeTwitchClient = client;
             _activeTwitchChannel = config.Channel;
             _chat.RegisterSender("twitch", async msg =>
@@ -393,6 +401,8 @@ public class PlatformConnectionManager
 
         client.OnDisconnected += async (_, _) =>
         {
+            _activity.SetIgnored(config.Channel,     false);
+            _activity.SetIgnored(config.BotUsername, false);
             _activeTwitchClient = null;
             _activeTwitchChannel = null;
             _chat.RegisterSender("twitch", null);
@@ -403,7 +413,9 @@ public class PlatformConnectionManager
         client.OnMessageReceived += async (_, e) =>
         {
             var msg = e.ChatMessage.Message?.Trim();
-            if (!string.IsNullOrEmpty(msg) && msg[0] is ('!' or '.' or '/'))
+            if (string.IsNullOrEmpty(msg)) return;
+            _activity.RecordMessage(e.ChatMessage.Username);
+            if (msg[0] is ('!' or '.' or '/'))
                 await RouteCommand(userId, e.ChatMessage.Username, msg, "twitch");
         };
 
@@ -429,12 +441,16 @@ public class PlatformConnectionManager
         client.OnMessageReceived += msg =>
         {
             var content = msg.Content?.Trim();
-            if (!string.IsNullOrEmpty(content) && content[0] is ('!' or '.' or '/'))
-                _ = RouteCommand(userId, msg.Sender?.Username ?? "viewer", content, "kick");
+            if (string.IsNullOrEmpty(content)) return;
+            var sender = msg.Sender?.Username ?? "viewer";
+            _activity.RecordMessage(sender);
+            if (content[0] is ('!' or '.' or '/'))
+                _ = RouteCommand(userId, sender, content, "kick");
         };
 
         _logger.LogInformation("Kick connecting to channel {Channel}", config.Channel);
         await client.ConnectToChatroomAsync(config.Channel);
+        _activity.SetIgnored(config.Channel, true);
         SetStatus(key, ConnectionStatus.Connected);
         _logger.LogInformation("Kick connected to channel {Channel}", config.Channel);
 
@@ -451,6 +467,7 @@ public class PlatformConnectionManager
         }
         finally
         {
+            _activity.SetIgnored(config.Channel, false);
             _chat.RegisterSender("kick", null);
             await client.DisconnectAsync();
         }

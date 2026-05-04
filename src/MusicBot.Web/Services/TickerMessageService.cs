@@ -47,7 +47,8 @@ public class TickerMessageService
         {
             var idx = _messages.FindIndex(m => m.Id == id);
             if (idx < 0) return false;
-            updated.Id = id;
+            updated.Id    = id;
+            updated.Order = _messages[idx].Order; // preserve position
             _messages[idx] = updated;
             Save();
         }

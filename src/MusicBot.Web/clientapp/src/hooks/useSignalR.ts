@@ -41,8 +41,9 @@ export interface QueueSettings {
 export interface TickerMessage {
   id: string;
   text: string;
-  imageUrl?: string;
-  durationSec: number;
+  intervalMinutes: number;
+  minChatMessages: number;
+  platforms: string[];
   enabled: boolean;
   order: number;
 }
