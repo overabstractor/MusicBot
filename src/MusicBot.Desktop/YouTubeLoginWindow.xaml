@@ -1,0 +1,32 @@
+<Window x:Class="MusicBot.Desktop.YouTubeLoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="MusicBot — Iniciar sesión en YouTube"
+        Width="520" Height="720"
+        MinWidth="400" MinHeight="520"
+        WindowStartupLocation="CenterScreen"
+        Background="#0D1117">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#161B22" Padding="16,10">
+            <StackPanel>
+                <TextBlock Text="Iniciar sesión en YouTube"
+                           FontSize="15" FontWeight="SemiBold"
+                           Foreground="#E6EDF3"/>
+                <TextBlock x:Name="StatusText"
+                           Text="Cargando Google…"
+                           FontSize="12"
+                           Foreground="#8B949E"
+                           TextWrapping="Wrap"
+                           Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <wv2:WebView2 x:Name="WebView" Grid.Row="1"/>
+    </Grid>
+</Window>

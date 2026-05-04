@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 using MusicBot.Core.Interfaces;
 using MusicBot.Core.Models;
+using MusicBot.Services.Platforms;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Metadata;
 using YoutubeDLSharp.Options;
@@ -21,6 +22,7 @@ public class YtDlpDownloaderService
     private readonly ILocalLibraryService _library;
     private readonly MusicLibrarySettings _settings;
     private readonly QueueSettingsService _queueSettings;
+    private readonly YouTubeAuthService _youtubeAuth;
     private readonly ILogger<YtDlpDownloaderService> _logger;
     private readonly YoutubeDL _ytdl;
 
@@ -43,11 +45,13 @@ public class YtDlpDownloaderService
         ILocalLibraryService library,
         IOptions<MusicLibrarySettings> settings,
         QueueSettingsService queueSettings,
+        YouTubeAuthService youtubeAuth,
         ILogger<YtDlpDownloaderService> logger)
     {
         _library       = library;
         _settings      = settings.Value;
         _queueSettings = queueSettings;
+        _youtubeAuth   = youtubeAuth;
         _logger        = logger;
 
         Directory.CreateDirectory(_settings.LibraryPath);
@@ -698,7 +702,8 @@ public class YtDlpDownloaderService
         || combined.Contains("Private video")
         || combined.Contains("This video is not available")
         || combined.Contains("has been removed")
-        || combined.Contains("account associated with this video has been terminated");
+        || combined.Contains("account associated with this video has been terminated")
+        || combined.Contains("Sign in to confirm");  // bot detection — requires cookies, retrying never helps
 
     private async Task<string> DownloadCoreAsync(Song song)
     {
@@ -754,6 +759,15 @@ public class YtDlpDownloaderService
             // Use tv_embedded client — avoids JS challenge requirements and bot-detection 429s
             overrideOptions.AddCustomOption<string>("--extractor-args", "youtube:player_client=tv_embedded,web_embedded");
 
+            // YouTube cookies for bot-detection bypass (opt-in via Settings).
+            // When enabled and the cookies.txt exists, yt-dlp authenticates as the user.
+            if (_youtubeAuth.IsEnabled
+                && !string.IsNullOrWhiteSpace(_youtubeAuth.CookiesFilePath)
+                && File.Exists(_youtubeAuth.CookiesFilePath))
+            {
+                overrideOptions.Cookies = _youtubeAuth.CookiesFilePath;
+            }
+
             var audioFormat = _settings.UseNativeAudioFormat
                 ? AudioConversionFormat.M4a   // no ffmpeg needed; Windows MF plays M4A natively
                 : AudioConversionFormat.Mp3;  // requires ffmpeg
@@ -790,6 +804,9 @@ public class YtDlpDownloaderService
                     _logger.LogWarning(
                         "Retrying \"{Title}\" with android_vr client to bypass Content ID block", song.Title);
 
+                    // android_vr does NOT support cookies — yt-dlp logs
+                    // "Skipping client 'android_vr' since it does not support cookies" and then
+                    // fails to find any audio format. Always invoke this fallback cookieless.
                     var altOptions = new OptionSet { Output = outputPath, NoPlaylist = true };
                     altOptions.AddCustomOption<string>("--extractor-args", "youtube:player_client=android_vr");
 

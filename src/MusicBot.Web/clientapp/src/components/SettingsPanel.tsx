@@ -16,6 +16,9 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
   const [spotifyConnected, setSpotifyConnected] = useState<boolean | null>(null);
   const [spotifyBusy,      setSpotifyBusy]      = useState(false);
 
+  const [ytAuth, setYtAuth] = useState<{ enabled: boolean; authenticated: boolean; account: string | null; savedAt: string | null } | null>(null);
+  const [ytBusy, setYtBusy] = useState(false);
+
   const [relayStatus, setRelayStatus] = useState<{ configured: boolean; reachable: boolean; error: string | null } | null>(null);
   const [relayChecking, setRelayChecking] = useState(false);
 
@@ -49,10 +52,81 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
   // Sync if settings change via SignalR from another client
   useEffect(() => { setForm(settings); }, [settings]);
 
+  const refreshYtAuth = useCallback(() => {
+    api.getYouTubeAuthStatus()
+      .then(r => setYtAuth({ enabled: r.enabled, authenticated: r.authenticated, account: r.account, savedAt: r.savedAt }))
+      .catch(() => setYtAuth({ enabled: false, authenticated: false, account: null, savedAt: null }));
+  }, []);
+
   useEffect(() => {
     api.getSpotifyStatus().then(r => setSpotifyConnected(r.authenticated)).catch(() => setSpotifyConnected(false));
+    refreshYtAuth();
     checkRelay();
-  }, [checkRelay]);
+  }, [checkRelay, refreshYtAuth]);
+
+  const handleYouTubeConnect = async () => {
+    const ok = await confirm({
+      title:       "Usa una cuenta desechable",
+      message: (
+        <>
+          Vas a iniciar sesión con una cuenta de Google. Las cookies se guardarán en disco y cualquier
+          proceso con acceso al archivo podrá impersonar esa cuenta. YouTube también puede banearla por
+          uso de yt-dlp.
+          <br/><br/>
+          Usa una cuenta nueva creada solo para esto,{" "}
+          <strong style={{
+            background:   "#fde047",
+            color:        "#1a1a1a",
+            padding:      "2px 6px",
+            borderRadius: 4,
+            fontWeight:   800,
+          }}>
+            NUNCA tu cuenta personal
+          </strong>.
+        </>
+      ),
+      confirmText: "Entiendo el riesgo, continuar",
+      danger:      true,
+    });
+    if (!ok) return;
+    setYtBusy(true);
+    try {
+      await api.startYouTubeLogin();
+      // Poll until cookies are captured
+      const poll = setInterval(async () => {
+        const r = await api.getYouTubeAuthStatus().catch(() => null);
+        if (r?.authenticated) {
+          setYtAuth({ enabled: r.enabled, authenticated: true, account: r.account, savedAt: r.savedAt });
+          clearInterval(poll);
+          setYtBusy(false);
+        } else if (r?.cancelled) {
+          clearInterval(poll);
+          setYtBusy(false);
+        }
+      }, 1500);
+      setTimeout(() => { clearInterval(poll); setYtBusy(false); }, 180_000);
+    } catch { setYtBusy(false); }
+  };
+
+  const handleYouTubeDisconnect = async () => {
+    const ok = await confirm({ title: "¿Desconectar YouTube?", message: "Se eliminarán las cookies guardadas. Las descargas que requieran autenticación volverán a fallar con 'Sign in to confirm you're not a bot'.", confirmText: "Desconectar", danger: true });
+    if (!ok) return;
+    setYtBusy(true);
+    try {
+      await api.disconnectYouTubeAuth();
+      refreshYtAuth();
+    } finally { setYtBusy(false); }
+  };
+
+  const handleYouTubeToggle = async () => {
+    if (!ytAuth) return;
+    setYtBusy(true);
+    try {
+      if (ytAuth.enabled) await api.disableYouTubeAuth();
+      else                 await api.enableYouTubeAuth();
+      refreshYtAuth();
+    } finally { setYtBusy(false); }
+  };
 
   const handleSpotifyConnect = async () => {
     setSpotifyBusy(true);
@@ -221,6 +295,57 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
         </div>
         <p className="settings-hint">
           Si el import de playlists devuelve error 403, desconecta y vuelve a conectar para renovar los permisos.
+        </p>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">YouTube (cookies para descargas)</div>
+
+        <label className="settings-row settings-row-toggle">
+          <span className="settings-label">Usar cookies de YouTube en yt-dlp</span>
+          <div
+            className={`settings-toggle${ytAuth?.enabled ? " on" : ""}`}
+            onClick={() => !ytBusy && handleYouTubeToggle()}
+          >
+            <div className="settings-toggle-thumb" />
+          </div>
+        </label>
+        <p className="settings-hint">
+          Cuando está activo y tienes una sesión conectada, yt-dlp usa tus cookies para evitar el bloqueo
+          <em> "Sign in to confirm you're not a bot"</em> y errores HTTP 429. Las cookies se guardan localmente en
+          <code> %LOCALAPPDATA%/MusicBot/youtube_cookies.txt</code> y nunca se envían a ningún servidor externo.
+        </p>
+
+        <div className="settings-row">
+          <span className="settings-label">Estado de conexión</span>
+          <span style={{ fontWeight: 600, color:
+              ytAuth === null                ? "var(--color-muted, #888)"
+            : ytAuth.authenticated           ? "var(--color-success, #1db954)"
+            : ytAuth.enabled                 ? "var(--color-danger, #e05252)"
+            :                                  "var(--color-muted, #888)" }}>
+            {ytAuth === null
+              ? "Comprobando…"
+              : ytAuth.authenticated
+                ? `Conectado${ytAuth.account ? ` (${ytAuth.account})` : ""}`
+                : ytAuth.enabled
+                  ? "Sin sesión — conecta para activar"
+                  : "Desactivado"}
+          </span>
+        </div>
+
+        <div className="settings-row" style={{ gap: 8 }}>
+          {ytAuth?.authenticated
+            ? <button className="btn btn-sm btn-danger" onClick={handleYouTubeDisconnect} disabled={ytBusy}>
+                {ytBusy ? "Procesando…" : "Desconectar YouTube"}
+              </button>
+            : <button className="btn btn-sm btn-primary" onClick={handleYouTubeConnect} disabled={ytBusy}>
+                {ytBusy ? "Esperando login…" : "Conectar YouTube"}
+              </button>
+          }
+        </div>
+        <p className="settings-hint">
+          Inicia sesión una vez con tu cuenta de Google en la ventana embebida. La sesión se restaura automáticamente al iniciar la app.
+          Si las cookies expiran (~6 meses), vuelve a conectar.
         </p>
       </div>
 

@@ -19,15 +19,17 @@ public class AuthController : ControllerBase
     private readonly TwitchAuthService _twitchAuth;
     private readonly KickAuthService _kickAuth;
     private readonly TikTokAuthService _tiktokAuth;
+    private readonly YouTubeAuthService _youtubeAuth;
     private readonly IHubContext<OverlayHub> _hub;
 
-    public AuthController(MusicBotDbContext db, UserContextManager userContext, TwitchAuthService twitchAuth, KickAuthService kickAuth, TikTokAuthService tiktokAuth, IHubContext<OverlayHub> hub)
+    public AuthController(MusicBotDbContext db, UserContextManager userContext, TwitchAuthService twitchAuth, KickAuthService kickAuth, TikTokAuthService tiktokAuth, YouTubeAuthService youtubeAuth, IHubContext<OverlayHub> hub)
     {
         _db          = db;
         _userContext = userContext;
         _twitchAuth  = twitchAuth;
         _kickAuth    = kickAuth;
         _tiktokAuth  = tiktokAuth;
+        _youtubeAuth = youtubeAuth;
         _hub         = hub;
     }
 
@@ -218,6 +220,60 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> TikTokDisconnect()
     {
         await _tiktokAuth.DisconnectAsync();
+        return NoContent();
+    }
+
+    // ── YouTube cookie login (yt-dlp bot detection bypass) ────────────────────
+
+    /// <summary>
+    /// Opens the in-app YouTube/Google login window (WebView2). After login the Desktop
+    /// layer captures cookies and writes them to a Netscape cookies.txt that yt-dlp uses.
+    /// </summary>
+    [HttpPost("youtube/start")]
+    [ProducesResponseType(200)]
+    public IActionResult YouTubeStartLogin()
+    {
+        _youtubeAuth.ResetCancelledFlag();
+        AppEvents.RequestYouTubeLogin();
+        return Ok(new { message = "YouTube login window opening…" });
+    }
+
+    /// <summary>Get YouTube auth state — toggle on/off + connection status.</summary>
+    [HttpGet("youtube/status")]
+    [ProducesResponseType(200)]
+    public IActionResult YouTubeStatus() => Ok(new
+    {
+        enabled       = _youtubeAuth.IsEnabled,
+        authenticated = _youtubeAuth.IsConnected,
+        account       = _youtubeAuth.AccountLabel,
+        savedAt       = _youtubeAuth.SavedAt == default ? (DateTimeOffset?)null : _youtubeAuth.SavedAt,
+        cancelled     = _youtubeAuth.LoginCancelled,
+    });
+
+    /// <summary>Enable the use of YouTube cookies in yt-dlp.</summary>
+    [HttpPost("youtube/enable")]
+    [ProducesResponseType(204)]
+    public async Task<IActionResult> YouTubeEnable()
+    {
+        await _youtubeAuth.EnableAsync();
+        return NoContent();
+    }
+
+    /// <summary>Disable the use of YouTube cookies (cookies file is preserved on disk).</summary>
+    [HttpPost("youtube/disable")]
+    [ProducesResponseType(204)]
+    public async Task<IActionResult> YouTubeDisable()
+    {
+        await _youtubeAuth.DisableAsync();
+        return NoContent();
+    }
+
+    /// <summary>Disconnect YouTube — deletes the cookies file and clears the WebView2 session.</summary>
+    [HttpDelete("youtube")]
+    [ProducesResponseType(204)]
+    public async Task<IActionResult> YouTubeDisconnect()
+    {
+        await _youtubeAuth.DisconnectAsync();
         return NoContent();
     }
 

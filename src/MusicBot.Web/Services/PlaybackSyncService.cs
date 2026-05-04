@@ -206,7 +206,7 @@ public class PlaybackSyncService : BackgroundService
             // because the queue may have already advanced during that time.
             _logger.LogWarning("Skipping \"{Title}\" after rate-limit retries exhausted", current.Song.Title);
             _downloader.InvalidateCachedDownload(current.Song.SpotifyUri);
-            services.Queue.RemoveByUri(current.Song.SpotifyUri);
+            services.Queue.Skip();
             _ = _hub.Clients.Group($"user:{LocalUser.Id}")
                     .SendAsync("queue:download-failed", new { title = current.Song.Title, artist = current.Song.Artist, reason = ex.Message });
             await StartCurrentTrackAsync(services);

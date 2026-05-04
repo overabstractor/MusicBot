@@ -32,8 +32,9 @@ public partial class App : SysWin.Application
     private NotifyIcon         _tray        = null!;
     private MainWindow?        _mainWindow;
     private LogViewerWindow?   _logViewer;
-    private TikTokLoginWindow? _tiktokLogin;
-    private MediaKeyHook?      _mediaKeys;
+    private TikTokLoginWindow?  _tiktokLogin;
+    private YouTubeLoginWindow? _youtubeLogin;
+    private MediaKeyHook?       _mediaKeys;
     private bool               _trayHintShown;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -50,6 +51,8 @@ public partial class App : SysWin.Application
         MusicBot.AppEvents.OnOpenLogDirRequested           += () => Dispatcher.Invoke(OpenLogDir);
         MusicBot.AppEvents.OnTikTokLoginRequested          += () => Dispatcher.Invoke(ShowTikTokLogin);
         MusicBot.AppEvents.OnTikTokSessionRestoreRequested += () => Dispatcher.Invoke(RestoreTikTokSession);
+        MusicBot.AppEvents.OnYouTubeLoginRequested          += () => Dispatcher.Invoke(ShowYouTubeLogin);
+        MusicBot.AppEvents.OnYouTubeSessionRestoreRequested += () => Dispatcher.Invoke(RestoreYouTubeSession);
         MusicBot.AppEvents.OnPlatformAuthForgotten         += ForgetPlatformSessionAsync;
         MusicBot.AppEvents.OnShutdownRequested             += () => Dispatcher.Invoke(ExitApp);
         MusicBot.AppEvents.OnUpdateReady                   += v  => Dispatcher.Invoke(() =>
@@ -66,6 +69,8 @@ public partial class App : SysWin.Application
         // Trigger TikTok session restore AFTER subscribing to events (avoids race condition
         // where TikTokAuthService fires the event before the WPF subscriber is registered).
         _ = Host.Services.GetRequiredService<MusicBot.Services.Platforms.TikTokAuthService>()
+                         .InitAsync();
+        _ = Host.Services.GetRequiredService<MusicBot.Services.Platforms.YouTubeAuthService>()
                          .InitAsync();
 
         // Auto-open log viewer if configured
@@ -137,6 +142,40 @@ public partial class App : SysWin.Application
         _tiktokLogin.RestoreSession();
     }
 
+    private void RestoreYouTubeSession()
+    {
+        if (_youtubeLogin != null && _youtubeLogin.IsLoaded) return;
+
+        _youtubeLogin = new YouTubeLoginWindow
+        {
+            Owner         = _mainWindow,
+            WindowState   = SysWin.WindowState.Minimized,
+            ShowInTaskbar = false,
+        };
+        _youtubeLogin.Show();
+        _youtubeLogin.Hide();
+        _youtubeLogin.RestoreSession();
+    }
+
+    private void ShowYouTubeLogin()
+    {
+        if (_youtubeLogin != null && _youtubeLogin.IsLoaded)
+        {
+            _youtubeLogin.ResetAndShowLogin();
+            _youtubeLogin.ShowInTaskbar = true;
+            _youtubeLogin.WindowState   = SysWin.WindowState.Normal;
+            _youtubeLogin.Width         = 520;
+            _youtubeLogin.Height        = 720;
+            _youtubeLogin.Show();
+            _youtubeLogin.Activate();
+            return;
+        }
+
+        _youtubeLogin = new YouTubeLoginWindow { Owner = _mainWindow };
+        _youtubeLogin.Show();
+        _youtubeLogin.Activate();
+    }
+
     private void ShowTikTokLogin()
     {
         if (_tiktokLogin != null && _tiktokLogin.IsLoaded)
@@ -182,6 +221,22 @@ public partial class App : SysWin.Application
                             _tiktokLogin.Hide();
                         }
                         await _tiktokLogin.LogoutAsync();
+                        break;
+
+                    case "youtube":
+                        if (_youtubeLogin == null || !_youtubeLogin.IsLoaded)
+                        {
+                            _youtubeLogin = new YouTubeLoginWindow
+                            {
+                                Owner         = _mainWindow,
+                                WindowState   = SysWin.WindowState.Minimized,
+                                ShowInTaskbar = false,
+                            };
+                            _youtubeLogin.SuppressAutoNavigation();
+                            _youtubeLogin.Show();
+                            _youtubeLogin.Hide();
+                        }
+                        await _youtubeLogin.LogoutAsync();
                         break;
 
                     case "twitch":

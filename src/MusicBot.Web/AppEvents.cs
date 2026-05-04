@@ -87,10 +87,42 @@ public static class AppEvents
         => _tiktokWebcastFetcher?.Invoke(roomId) ?? Task.FromResult<(byte[], string)>((Array.Empty<byte>(), ""));
     public static bool HasTikTokWebcastFetcher => _tiktokWebcastFetcher != null;
 
+    // ── YouTube cookie login (for yt-dlp bot detection bypass) ────────────────
+
+    /// <summary>
+    /// Raised when the user wants to log in to YouTube/Google.
+    /// The Desktop layer opens a WebView2 window, captures session cookies,
+    /// writes them to a Netscape-format cookies.txt file, and posts the path
+    /// back to <see cref="OnYouTubeCookiesCaptured"/>.
+    /// </summary>
+    public static event Action? OnYouTubeLoginRequested;
+    public static void RequestYouTubeLogin() => OnYouTubeLoginRequested?.Invoke();
+
+    /// <summary>Raised when the YouTube login window is closed before completing login.</summary>
+    public static event Action? OnYouTubeLoginCancelled;
+    public static void NotifyYouTubeLoginCancelled() => OnYouTubeLoginCancelled?.Invoke();
+
+    /// <summary>
+    /// Raised on startup when the YouTube cookies feature is enabled and a saved session exists.
+    /// The Desktop layer silently restores the WebView2 session in the background and rewrites
+    /// the cookies.txt file with fresh values.
+    /// </summary>
+    public static event Action? OnYouTubeSessionRestoreRequested;
+    public static void RequestYouTubeSessionRestore() => OnYouTubeSessionRestoreRequested?.Invoke();
+
+    /// <summary>
+    /// Raised by the Desktop layer after writing fresh YouTube cookies to disk.
+    /// cookiesFilePath: absolute path to the Netscape-format cookies.txt file.
+    /// accountLabel: Google account email/name when detectable, else null.
+    /// </summary>
+    public static event Action<string, string?>? OnYouTubeCookiesCaptured;
+    public static void NotifyYouTubeCookiesCaptured(string cookiesFilePath, string? accountLabel)
+        => OnYouTubeCookiesCaptured?.Invoke(cookiesFilePath, accountLabel);
+
     /// <summary>
     /// Raised when the user forgets a platform account.
     /// The Desktop layer must clear any WebView2 session cookies for that platform.
-    /// platform: "tiktok" | "twitch" | "kick"
+    /// platform: "tiktok" | "twitch" | "kick" | "youtube"
     /// </summary>
     public static event Func<string, Task>? OnPlatformAuthForgotten;
     public static Task NotifyPlatformAuthForgotten(string platform)
