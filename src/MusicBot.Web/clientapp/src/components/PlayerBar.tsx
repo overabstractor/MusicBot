@@ -43,6 +43,7 @@ export const PlayerBar: React.FC<Props> = ({
   const [volume,        setVolume]        = useState(1.0);
   const volumeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => { api.getVolume().then(({ volume: v }) => setVolume(v)).catch(() => {}); }, []);
   useEffect(() => { if (!isSeeking) setLocalProgress(state?.progressMs ?? 0); }, [state?.progressMs, isSeeking]);
   useEffect(() => {
     if (!state?.isPlaying || isSeeking) return;

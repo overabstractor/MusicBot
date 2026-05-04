@@ -64,6 +64,9 @@ export const api = {
   pause:  () => request<void>("/api/pause",  { method: "POST" }),
   resume: () => request<void>("/api/resume", { method: "POST" }),
 
+  getVolume: () =>
+    request<{ volume: number }>("/api/player/volume"),
+
   setVolume: (volume: number) =>
     request<void>("/api/player/volume", { method: "POST", body: JSON.stringify({ volume }) }),
 
@@ -215,10 +218,10 @@ export const api = {
   // Platforms
   getPlatforms: () => request<PlatformState[]>("/api/platforms"),
 
-  saveTikTok: (username: string, autoConnect: boolean) =>
+  saveTikTok: (username: string, autoConnect: boolean, giftInterruptThreshold: number = 100) =>
     request<void>("/api/platforms/tiktok", {
       method: "PUT",
-      body: JSON.stringify({ username, autoConnect }),
+      body: JSON.stringify({ username, autoConnect, giftInterruptThreshold }),
     }),
 
   saveTwitch: (channel: string, botUsername: string, autoConnect: boolean) =>
@@ -231,6 +234,13 @@ export const api = {
   startTikTokLogin:   () => request<{ message: string }>("/api/auth/tiktok/start", { method: "POST" }),
   getTikTokAuthStatus: () => request<{ authenticated: boolean; username: string | null; cancelled: boolean }>("/api/auth/tiktok/status"),
   disconnectTikTokAuth: () => request<void>("/api/auth/tiktok", { method: "DELETE" }),
+
+  // YouTube in-app login (cookies for yt-dlp bot detection bypass)
+  startYouTubeLogin:    () => request<{ message: string }>("/api/auth/youtube/start", { method: "POST" }),
+  getYouTubeAuthStatus: () => request<{ enabled: boolean; authenticated: boolean; account: string | null; savedAt: string | null; cancelled: boolean }>("/api/auth/youtube/status"),
+  enableYouTubeAuth:    () => request<void>("/api/auth/youtube/enable",  { method: "POST" }),
+  disableYouTubeAuth:   () => request<void>("/api/auth/youtube/disable", { method: "POST" }),
+  disconnectYouTubeAuth: () => request<void>("/api/auth/youtube", { method: "DELETE" }),
 
   // Open a URL in the user's default system browser (for OAuth flows)
   openInBrowser: (url: string) =>

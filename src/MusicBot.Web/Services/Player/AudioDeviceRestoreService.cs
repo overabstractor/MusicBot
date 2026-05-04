@@ -21,8 +21,11 @@ public class AudioDeviceRestoreService : IHostedService
         using var scope = _scopeFactory.CreateScope();
         var db   = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
         var user = await db.Users.FindAsync([LocalUser.Id], cancellationToken);
+        var player = _userContext.GetOrCreate(LocalUser.Id).Player;
         if (user?.AudioDeviceId != null)
-            await _userContext.GetOrCreate(LocalUser.Id).Player.SetDeviceAsync(user.AudioDeviceId);
+            await player.SetDeviceAsync(user.AudioDeviceId);
+        if (user?.AudioVolume is float vol)
+            player.SetVolume(vol);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

@@ -19,12 +19,26 @@ public class PlayerController : ControllerBase
         _db          = db;
     }
 
-    /// <summary>Set playback volume (0.0 – 1.0)</summary>
+    /// <summary>Get current playback volume (0.0 – 1.0).</summary>
+    [HttpGet("volume")]
+    public IActionResult GetVolume()
+    {
+        var volume = _userContext.GetOrCreate(LocalUser.Id).Player.Volume;
+        return Ok(new { volume });
+    }
+
+    /// <summary>Set playback volume (0.0 – 1.0) and persist the choice.</summary>
     [HttpPost("volume")]
     [ProducesResponseType(204)]
-    public IActionResult SetVolume([FromBody] VolumeRequest request)
+    public async Task<IActionResult> SetVolume([FromBody] VolumeRequest request)
     {
         _userContext.GetOrCreate(LocalUser.Id).Player.SetVolume(request.Volume);
+        var user = await _db.Users.FindAsync(LocalUser.Id);
+        if (user != null)
+        {
+            user.AudioVolume = request.Volume;
+            await _db.SaveChangesAsync();
+        }
         return NoContent();
     }
 

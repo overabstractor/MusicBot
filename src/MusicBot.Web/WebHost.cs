@@ -80,6 +80,7 @@ public static class WebHost
         builder.Services.AddSingleton<TwitchAuthService>();
         builder.Services.AddSingleton<KickAuthService>();
         builder.Services.AddSingleton<TikTokAuthService>();
+        builder.Services.AddSingleton<YouTubeAuthService>();
         builder.Services.AddHostedService<PlatformAutoConnectService>();
         builder.Services.AddHostedService<AudioDeviceRestoreService>();
         builder.Services.AddSingleton<IntegrationStatusTracker>();
@@ -150,6 +151,8 @@ public static class WebHost
             try { db.Database.ExecuteSqlRaw("ALTER TABLE PlaylistLibraries ADD COLUMN SortOrder INTEGER NULL"); }
             catch { /* column already exists */ }
             try { db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN AudioDeviceId TEXT NULL"); }
+            catch { /* column already exists */ }
+            try { db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN AudioVolume REAL NULL"); }
             catch { /* column already exists */ }
 
             if (!db.Users.Any())

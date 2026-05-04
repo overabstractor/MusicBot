@@ -10,6 +10,7 @@ public class AppUser
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public string OverlayToken { get; set; } = Guid.NewGuid().ToString("N");
     public string? AudioDeviceId { get; set; }
+    public float?  AudioVolume   { get; set; }
 
     public List<UserApiKey> ApiKeys { get; set; } = new();
     public SpotifyToken? SpotifyToken { get; set; }

@@ -60,6 +60,11 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
     api.seek(ms).catch(() => {});
   }, []);
 
+  // Load persisted volume once on mount
+  useEffect(() => {
+    api.getVolume().then(({ volume: v }) => setVolume(v)).catch(() => {});
+  }, []);
+
   // Load devices once on mount
   useEffect(() => {
     api.getAudioDevices()
