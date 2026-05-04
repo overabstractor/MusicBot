@@ -36,6 +36,7 @@ public partial class App : SysWin.Application
     private YouTubeLoginWindow? _youtubeLogin;
     private MediaKeyHook?       _mediaKeys;
     private bool               _trayHintShown;
+    private bool               _isExiting;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ public partial class App : SysWin.Application
             _mainWindow = new MainWindow();
             _mainWindow.Closing += (_, ev) =>
             {
+                if (_isExiting) return;
                 ev.Cancel = true;
                 _mainWindow.Hide();
                 if (!_trayHintShown)
@@ -121,9 +123,10 @@ public partial class App : SysWin.Application
 
     private static void OpenLogDir()
     {
-        var dir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
-        if (!System.IO.Directory.Exists(dir))
-            System.IO.Directory.CreateDirectory(dir);
+        var dir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "MusicBot", "logs");
+        System.IO.Directory.CreateDirectory(dir);
         System.Diagnostics.Process.Start("explorer.exe", dir);
     }
 
@@ -277,6 +280,11 @@ public partial class App : SysWin.Application
         catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: error stopping playback"); }
 
         _tiktokLogin?.ForceClose();
+        _youtubeLogin?.Close();
+
+        // Allow mainWindow.Closing to proceed (handler normally cancels it)
+        _isExiting = true;
+        _mainWindow?.Close();
 
         CleanupOldLogs();
         int filesDeleted = await CleanupOrphanedMusicFilesAsync();
@@ -290,6 +298,11 @@ public partial class App : SysWin.Application
         try   { await Host.StopAsync(cts.Token); }
         catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: error stopping host"); }
 
+        // Kill any WebView2 renderer processes that outlived their host windows.
+        // These can prevent Velopack from deleting the app directory during updates.
+        foreach (var proc in System.Diagnostics.Process.GetProcessesByName("msedgewebview2"))
+            try { proc.Kill(entireProcessTree: true); } catch { }
+
         Shutdown();
     }
 
@@ -298,7 +311,9 @@ public partial class App : SysWin.Application
     {
         try
         {
-            var logsDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+            var logsDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "MusicBot", "logs");
             if (!Directory.Exists(logsDir)) return;
             var cutoff  = DateTime.UtcNow.AddDays(-7);
             int deleted = 0;

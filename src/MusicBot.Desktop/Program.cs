@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -70,9 +71,21 @@ public static class Program
             .AddEnvironmentVariables()
             .Build();
 
+        // Logs go to %AppData%\MusicBot\logs\ so they survive Velopack updates
+        // and don't block the installer from removing the app directory.
+        var logDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "MusicBot", "logs");
+        Directory.CreateDirectory(logDir);
+
         Log.Logger = new LoggerConfiguration()
             .ReadFrom.Configuration(config)
             .Enrich.FromLogContext()
+            .WriteTo.File(
+                Path.Combine(logDir, "musicbot-.log"),
+                rollingInterval: Serilog.RollingInterval.Day,
+                retainedFileCountLimit: 30,
+                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}")
             .WriteTo.Sink(new LogSink())   // feeds the WPF log viewer in real time
             .CreateLogger();
 
