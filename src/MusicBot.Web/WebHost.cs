@@ -40,10 +40,13 @@ public static class WebHost
         var dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "MusicBot");
+        var toolsDir = Path.Combine(dataDir, "tools");
         Directory.CreateDirectory(dataDir);
+        Directory.CreateDirectory(toolsDir);
         builder.Configuration["DataDirectory"] = dataDir;
         builder.Configuration["ConnectionStrings:DefaultConnection"] =
             $"Data Source={Path.Combine(dataDir, "musicbot.db")}";
+        builder.Configuration["MusicLibrary:ToolsDirectory"] = toolsDir;
 
         // ── Configuration ────────────────────────────────────────────────────
         builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("Spotify"));

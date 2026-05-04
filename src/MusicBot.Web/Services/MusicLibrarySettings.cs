@@ -6,6 +6,10 @@ public class MusicLibrarySettings
     public string LibraryPath { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "MusicBot", "music-library");
+    /// <summary>Directory where yt-dlp/ffmpeg/deno binaries are stored. Set by WebHost to %AppData%\MusicBot\tools\ so they survive Velopack updates.</summary>
+    public string ToolsDirectory { get; set; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "MusicBot", "tools");
     /// <summary>Path to the yt-dlp executable. Must be in PATH or provide full path.</summary>
     public string YtDlpPath { get; set; } = "yt-dlp";
     /// <summary>Path to the ffmpeg executable. Must be in PATH or provide full path.</summary>

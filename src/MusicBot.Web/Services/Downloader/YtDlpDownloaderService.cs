@@ -76,7 +76,7 @@ public class YtDlpDownloaderService
     /// </summary>
     public async Task EnsureDenoAsync()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "deno.exe");
+        var path = Path.Combine(_settings.ToolsDirectory, "deno.exe");
 
         if (File.Exists(path))
         {
@@ -85,10 +85,10 @@ public class YtDlpDownloaderService
         }
 
         _logger.LogInformation("Deno no encontrado — descargando automáticamente en '{Dir}'...",
-            AppContext.BaseDirectory);
+            _settings.ToolsDirectory);
         try
         {
-            await YoutubeDLSharp.Utils.DownloadDeno(AppContext.BaseDirectory);
+            await YoutubeDLSharp.Utils.DownloadDeno(_settings.ToolsDirectory);
             _logger.LogInformation("Deno descargado correctamente en '{Path}'", path);
         }
         catch (Exception ex)
@@ -116,11 +116,11 @@ public class YtDlpDownloaderService
         }
 
         _logger.LogInformation("ffmpeg no encontrado — descargando automáticamente en '{Dir}'...",
-            AppContext.BaseDirectory);
+            _settings.ToolsDirectory);
 
         try
         {
-            await YoutubeDLSharp.Utils.DownloadFFmpeg(AppContext.BaseDirectory);
+            await YoutubeDLSharp.Utils.DownloadFFmpeg(_settings.ToolsDirectory);
             _ytdl.FFmpegPath = path;
             _logger.LogInformation("ffmpeg descargado correctamente en '{Path}'", path);
         }
@@ -138,9 +138,9 @@ public class YtDlpDownloaderService
     /// 3. Configured name if on PATH
     /// 4. Falls back to BaseDirectory/ffmpeg.exe (download target)
     /// </summary>
-    private static string ResolveFfmpegPath(string configured)
+    private string ResolveFfmpegPath(string configured)
     {
-        var appDirExe = Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
+        var appDirExe = Path.Combine(_settings.ToolsDirectory, "ffmpeg.exe");
         if (File.Exists(appDirExe)) return appDirExe;
         if (Path.IsPathRooted(configured) && File.Exists(configured)) return configured;
         if (IsOnPath(configured)) return configured;
@@ -180,11 +180,11 @@ public class YtDlpDownloaderService
         }
 
         _logger.LogInformation("yt-dlp no encontrado — descargando automáticamente en '{Dir}'...",
-            AppContext.BaseDirectory);
+            _settings.ToolsDirectory);
 
         try
         {
-            await YoutubeDLSharp.Utils.DownloadYtDlp(AppContext.BaseDirectory);
+            await YoutubeDLSharp.Utils.DownloadYtDlp(_settings.ToolsDirectory);
             _ytdl.YoutubeDLPath = path;
             _logger.LogInformation("yt-dlp descargado correctamente en '{Path}'", path);
         }
@@ -201,12 +201,12 @@ public class YtDlpDownloaderService
     /// </summary>
     public async Task<string> UpdateYtDlpAsync()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "yt-dlp.exe");
+        var path = Path.Combine(_settings.ToolsDirectory, "yt-dlp.exe");
 
         _logger.LogInformation("Actualizando yt-dlp…");
         try
         {
-            await YoutubeDLSharp.Utils.DownloadYtDlp(AppContext.BaseDirectory);
+            await YoutubeDLSharp.Utils.DownloadYtDlp(_settings.ToolsDirectory);
             _ytdl.YoutubeDLPath = path;
 
             // Read the version from the new binary
@@ -247,18 +247,18 @@ public class YtDlpDownloaderService
 
     /// <summary>
     /// Resolves the effective yt-dlp path:
-    /// 1. Next to the executable (preferred — works after auto-download)
+    /// 1. Tools directory (%AppData%\MusicBot\tools\ — survives Velopack updates)
     /// 2. Configured path if absolute and exists
     /// 3. Configured name if on PATH
-    /// 4. Falls back to BaseDirectory/yt-dlp.exe (download target)
+    /// 4. Falls back to ToolsDirectory/yt-dlp.exe (download target)
     /// </summary>
-    private static string ResolveYtDlpPath(string configured)
+    private string ResolveYtDlpPath(string configured)
     {
-        var appDirExe = Path.Combine(AppContext.BaseDirectory, "yt-dlp.exe");
-        if (File.Exists(appDirExe)) return appDirExe;
+        var toolsDirExe = Path.Combine(_settings.ToolsDirectory, "yt-dlp.exe");
+        if (File.Exists(toolsDirExe)) return toolsDirExe;
         if (Path.IsPathRooted(configured) && File.Exists(configured)) return configured;
         if (IsOnPath(configured)) return configured;
-        return appDirExe; // download target
+        return toolsDirExe; // download target
     }
 
     private static bool IsOnPath(string name)
