@@ -332,7 +332,7 @@ public class YtDlpDownloaderService
     /// e.g. music.youtube.com/playlist?list=X  →  youtube.com/playlist?list=X
     ///      music.youtube.com/watch?v=X&amp;list=Y →  youtube.com/playlist?list=Y
     /// </summary>
-    private static string NormalizeYouTubeUrl(string url)
+    internal static string NormalizeYouTubeUrl(string url)
     {
         if (!url.Contains("music.youtube.com", StringComparison.OrdinalIgnoreCase))
             return url;
@@ -363,7 +363,7 @@ public class YtDlpDownloaderService
 
         var psi = new ProcessStartInfo
         {
-            FileName               = _settings.YtDlpPath,
+            FileName               = _ytdl.YoutubeDLPath,
             RedirectStandardOutput = true,
             RedirectStandardError  = true,
             UseShellExecute        = false,
@@ -558,7 +558,7 @@ public class YtDlpDownloaderService
 
         var psi = new ProcessStartInfo
         {
-            FileName               = _settings.YtDlpPath,
+            FileName               = _ytdl.YoutubeDLPath,
             RedirectStandardOutput = true,
             RedirectStandardError  = true,
             UseShellExecute        = false,
@@ -663,7 +663,7 @@ public class YtDlpDownloaderService
     /// Returns true for playlist entries that are known to be unavailable at import time,
     /// based on the availability field or YouTube's placeholder titles for private/deleted videos.
     /// </summary>
-    private static bool IsUnavailablePlaylistEntry(string title, string availability)
+    internal static bool IsUnavailablePlaylistEntry(string title, string availability)
     {
         // yt-dlp availability values that indicate the video cannot be played
         if (availability is "private" or "premium_only" or "subscriber_only" or "needs_auth")
@@ -674,7 +674,7 @@ public class YtDlpDownloaderService
         return t is "private video" or "deleted video";
     }
 
-    private static (string title, string artist) SplitVideoTitle(string videoTitle, string channelName)
+    internal static (string title, string artist) SplitVideoTitle(string videoTitle, string channelName)
     {
         var idx = videoTitle.IndexOf(" - ", StringComparison.Ordinal);
         if (idx > 0)

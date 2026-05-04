@@ -62,9 +62,15 @@ class Build : NukeBuild
         .Executes(() =>
             DotNet($"build {Solution} --configuration {Configuration}"));
 
+    /// Ejecuta los tests unitarios. Bloquea la publicación si alguno falla.
+    Target Test => _ => _
+        .DependsOn(Compile)
+        .Executes(() =>
+            DotNet("test src/MusicBot.Tests/MusicBot.Tests.csproj --no-build --configuration Release --logger trx"));
+
     /// Publica MusicBot.Desktop listo para distribución.
     Target Publish => _ => _
-        .DependsOn(BuildClient)
+        .DependsOn(Test)
         .Executes(() =>
             DotNet($"publish {DesktopProject} " +
                    $"--configuration {Configuration} " +

@@ -416,7 +416,7 @@ public class CommandRouterService
     private Task BroadcastErrorAsync(string message)
         => _hub.Clients.Group($"user:{LocalUser.Id}").SendAsync("queue:error", new { message });
 
-    private static bool TryExtractYouTubeVideoId(string query, out string videoId)
+    internal static bool TryExtractYouTubeVideoId(string query, out string videoId)
     {
         videoId = string.Empty;
         if (!Uri.TryCreate(query.Trim(), UriKind.Absolute, out var uri)) return false;
@@ -453,7 +453,7 @@ public class CommandRouterService
     /// Returns true when two song titles are similar enough that iTunes/Spotify metadata
     /// can be used to enrich the YouTube result's cover art.
     /// </summary>
-    private static bool IsTitleSimilar(string ytTitle, string metaTitle)
+    internal static bool IsTitleSimilar(string ytTitle, string metaTitle)
     {
         if (string.IsNullOrEmpty(ytTitle) || string.IsNullOrEmpty(metaTitle)) return false;
         var a = ytTitle.ToLowerInvariant().Trim();
@@ -461,7 +461,7 @@ public class CommandRouterService
         return a == b || a.Contains(b) || b.Contains(a);
     }
 
-    private static bool TryExtractSpotifyTrackId(string query, out string trackId)
+    internal static bool TryExtractSpotifyTrackId(string query, out string trackId)
     {
         trackId = string.Empty;
         if (!Uri.TryCreate(query.Trim(), UriKind.Absolute, out var uri)) return false;
