@@ -35,6 +35,15 @@ public static class Program
     {
         VelopackApp.Build().Run();
 
+        // Si fuimos invocados como hook de Velopack (--velopack-install,
+        // --velopack-updated, etc.) salir aquí. Algunas versiones de Velopack
+        // no llaman Environment.Exit() después de procesar el hook, lo que dejaba
+        // el proceso siguiendo con todo el startup completo (Kestrel, WPF, chequeo
+        // de WebView2). En contexto de installer eso bloqueaba el hook hasta el
+        // timeout y rompía la instalación con "install hook failed".
+        if (args.Length > 0 && IsVelopackHookArg(args[0]))
+            return;
+
         // ── Single instance guard ─────────────────────────────────────────────
         _instanceMutex = new Mutex(initiallyOwned: true, @"Global\MusicBot.SingleInstance", out bool createdNew);
         if (!createdNew)
@@ -139,6 +148,17 @@ public static class Program
             _instanceMutex?.ReleaseMutex();
             _instanceMutex?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Detecta cualquier argumento usado por Velopack para invocar la app como hook
+    /// del ciclo de vida de instalación: --velopack-* (versiones nuevas), --veloapp-*
+    /// y --squirrel-* (compatibilidad histórica).
+    /// </summary>
+    private static bool IsVelopackHookArg(string arg)
+    {
+        var a = arg.ToLowerInvariant();
+        return a.StartsWith("--velopack-") || a.StartsWith("--veloapp-") || a.StartsWith("--squirrel-");
     }
 
     private static string FormatVersion(NuGet.Versioning.SemanticVersion v)
