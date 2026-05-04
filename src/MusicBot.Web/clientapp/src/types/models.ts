@@ -83,6 +83,7 @@ export interface SpotifyQueueState {
 
 export interface TikTokConfig {
   username: string;
+  giftInterruptThreshold: number;
 }
 
 export interface TwitchConfig {

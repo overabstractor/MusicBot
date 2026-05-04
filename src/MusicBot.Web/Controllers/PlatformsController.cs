@@ -67,7 +67,7 @@ public class PlatformsController : ControllerBase
     public async Task<IActionResult> SaveTikTok([FromBody] SaveTikTokRequest req)
     {
         await UpsertConfig("tiktok",
-            JsonSerializer.Serialize(new { username = req.Username }),
+            JsonSerializer.Serialize(new { username = req.Username, giftInterruptThreshold = req.GiftInterruptThreshold }),
             req.AutoConnect);
 
         _manager.SetUserSlug(LocalUser.Id, LocalUser.Slug);
@@ -131,7 +131,8 @@ public class PlatformsController : ControllerBase
                     username,
                     _tiktokSettings.SigningServerUrl,
                     _tiktokSettings.SigningServerApiKey,
-                    CookieString: cookieStr));
+                    CookieString: cookieStr,
+                    GiftInterruptThreshold: c?.GiftInterruptThreshold ?? 100));
                 break;
             }
             case "twitch":
@@ -228,7 +229,7 @@ public class PlatformsController : ControllerBase
         await _db.SaveChangesAsync();
     }
 
-    private sealed class TikTokJson { public string? Username { get; set; } }
+    private sealed class TikTokJson { public string? Username { get; set; } public int GiftInterruptThreshold { get; set; } = 100; }
     private sealed class TwitchJson { public string? Channel { get; set; } public string? BotUsername { get; set; } public string? OAuthToken { get; set; } }
     private sealed class KickJson   { public string? Channel { get; set; } }
 }
@@ -246,8 +247,9 @@ public class PlatformStateDto
 
 public class SaveTikTokRequest
 {
-    public string Username    { get; set; } = string.Empty;
-    public bool   AutoConnect { get; set; }
+    public string Username               { get; set; } = string.Empty;
+    public bool   AutoConnect            { get; set; }
+    public int    GiftInterruptThreshold { get; set; } = 100;
 }
 
 public class SaveTwitchRequest

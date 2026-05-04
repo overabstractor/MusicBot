@@ -87,7 +87,8 @@ public class PlatformAutoConnectService : IHostedService
                                 c.Username,
                                 _tiktokSettings.SigningServerUrl,
                                 _tiktokSettings.SigningServerApiKey,
-                                CookieString: cookieStr));
+                                CookieString: cookieStr,
+                                GiftInterruptThreshold: c.GiftInterruptThreshold));
                             _logger.LogInformation("Auto-connect: TikTok @{User}", c.Username);
                             break;
                         }
@@ -140,7 +141,7 @@ public class PlatformAutoConnectService : IHostedService
         }
     }
 
-    private sealed class TikTokJson { public string? Username { get; set; } }
+    private sealed class TikTokJson { public string? Username { get; set; } public int GiftInterruptThreshold { get; set; } = 100; }
     private sealed class TwitchJson { public string? Channel { get; set; } public string? BotUsername { get; set; } }
     private sealed class KickJson   { public string? Channel { get; set; } }
 }

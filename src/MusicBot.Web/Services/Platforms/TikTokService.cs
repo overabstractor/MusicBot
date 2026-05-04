@@ -227,19 +227,15 @@ public class TikTokService : BackgroundService
             if (coins >= 100)
             {
                 var ok = services.Queue.InterruptForUser(username);
-                if (!ok)
-                {
-                    result = CommandResult.Fail($"@{username} no tiene canciones en la cola");
-                }
-                else
-                {
-                    await _sync.StartCurrentTrackAsync(services);
-                    result = CommandResult.Ok($"@{username} interrumpió con {coins} monedas!");
-                }
+                if (!ok) return;
+
+                await _sync.StartCurrentTrackAsync(services);
+                result = CommandResult.Ok($"@{username} interrumpió con {coins} monedas!");
             }
             else
             {
-                for (int i = 0; i < coins; i++)
+                if (!services.Queue.Bump(username)) return;
+                for (int i = 1; i < coins; i++)
                     if (!services.Queue.Bump(username)) break;
                 result = CommandResult.Ok($"@{username} subió su canción {coins} posición(es)");
             }

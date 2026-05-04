@@ -14,7 +14,7 @@ namespace MusicBot.Services.Platforms;
 
 public class PlatformConnectionManager
 {
-    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null);
+    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100);
     public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken);
     public record KickPlatformConfig(string Channel);
 
@@ -278,7 +278,7 @@ public class PlatformConnectionManager
                 tiktokRoomId = e.RoomId.ToString();
             HandleTikTokChat(userId, e);
         };
-        client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, e);
+        client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, config.GiftInterruptThreshold, e);
 
         _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
             config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
@@ -304,7 +304,7 @@ public class PlatformConnectionManager
         }
     }
 
-    private async void HandleTikTokGift(Guid userId, GiftMessage e)
+    private async void HandleTikTokGift(Guid userId, int interruptThreshold, GiftMessage e)
     {
         try
         {
@@ -323,20 +323,18 @@ public class PlatformConnectionManager
             if (services == null) return;
 
             CommandResult result;
-            if (coins >= 100)
+            if (coins >= interruptThreshold)
             {
                 var ok = services.Queue.InterruptForUser(username);
-                if (!ok)
-                    result = CommandResult.Fail($"@{username} no tiene canciones en la cola");
-                else
-                {
-                    await _sync.StartCurrentTrackAsync(services);
-                    result = CommandResult.Ok($"@{username} interrumpió con {coins} monedas!");
-                }
+                if (!ok) return;
+
+                await _sync.StartCurrentTrackAsync(services);
+                result = CommandResult.Ok($"@{username} interrumpió con {coins} monedas!");
             }
             else
             {
-                for (int i = 0; i < coins; i++)
+                if (!services.Queue.Bump(username)) return;
+                for (int i = 1; i < coins; i++)
                     if (!services.Queue.Bump(username)) break;
                 result = CommandResult.Ok($"@{username} subió su canción {coins} posición(es)");
             }
