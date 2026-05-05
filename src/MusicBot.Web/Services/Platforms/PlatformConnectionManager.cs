@@ -36,6 +36,7 @@ public class PlatformConnectionManager
     private readonly ChatResponseService _chat;
     private readonly ChatActivityTracker _activity;
     private readonly TikTokRoomResolver _roomResolver;
+    private readonly TikTokAuthService _tikTokAuth;
     private readonly KickAuthService _kickAuth;
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<PlatformConnectionManager> _logger;
@@ -43,6 +44,10 @@ public class PlatformConnectionManager
     // Active Twitch client for sending messages
     private TwitchClient? _activeTwitchClient;
     private string? _activeTwitchChannel;
+
+    // Rate-limit guard: TikTok shadowbans bots that send messages too fast.
+    // Tracks the last send attempt; each send waits a random 1-3s before proceeding.
+    private DateTimeOffset _lastTikTokChatSent = DateTimeOffset.MinValue;
 
     public PlatformConnectionManager(
         CommandRouterService router,
@@ -53,6 +58,7 @@ public class PlatformConnectionManager
         ChatResponseService chat,
         ChatActivityTracker activity,
         TikTokRoomResolver roomResolver,
+        TikTokAuthService tikTokAuth,
         KickAuthService kickAuth,
         IHttpClientFactory httpFactory,
         ILogger<PlatformConnectionManager> logger)
@@ -65,6 +71,7 @@ public class PlatformConnectionManager
         _chat         = chat;
         _activity     = activity;
         _roomResolver = roomResolver;
+        _tikTokAuth   = tikTokAuth;
         _kickAuth     = kickAuth;
         _httpFactory  = httpFactory;
         _logger       = logger;
@@ -216,78 +223,99 @@ public class PlatformConnectionManager
         var key = Key(userId, "tiktok");
         var hasSign = !string.IsNullOrWhiteSpace(config.SigningServerUrl);
 
-        // ── Wait for the streamer to go live ──────────────────────────────────
-        // Polls every 60 s instead of throwing and letting RunWithReconnect retry with
-        // short backoff — avoids hammering the signing server and keeps status "Connecting".
-        const int LiveCheckSec = 60;
-        string? roomId = null;
         while (!ct.IsCancellationRequested)
         {
-            roomId = await _roomResolver.ResolveRoomIdAsync(config.Username, ct);
-            if (roomId != null) break;
+            // ── Wait for the streamer to go live ──────────────────────────────
+            // Polls every 60 s to avoid hammering the signing server.
+            // Stays in "Connecting" status so the UI never shows the Connect button.
+            const int LiveCheckSec = 60;
+            string? roomId = null;
+            while (!ct.IsCancellationRequested)
+            {
+                roomId = await _roomResolver.ResolveRoomIdAsync(config.Username, ct);
+                if (roomId != null) break;
 
-            _logger.LogInformation("TikTok @{User} no está en vivo — verificando en {Sec}s",
-                config.Username, LiveCheckSec);
-            SetStatus(key, ConnectionStatus.Connecting,
-                $"@{config.Username} no está en vivo — verificando en {LiveCheckSec}s…");
+                _logger.LogInformation("TikTok @{User} no está en vivo — verificando en {Sec}s",
+                    config.Username, LiveCheckSec);
+                SetStatus(key, ConnectionStatus.Connecting,
+                    $"@{config.Username} no está en vivo — verificando en {LiveCheckSec}s…");
 
-            try { await Task.Delay(TimeSpan.FromSeconds(LiveCheckSec), ct); }
-            catch (OperationCanceledException) { return; }
+                try { await Task.Delay(TimeSpan.FromSeconds(LiveCheckSec), ct); }
+                catch (OperationCanceledException) { return; }
+            }
+
+            if (ct.IsCancellationRequested) return;
+
+            _logger.LogDebug("TikTok room ID: {RoomId}", roomId);
+
+            var client = new TikTokLiveClient(
+                config.Username,
+                roomId: roomId,
+                skipRoomInfo: true,          // skip TikTok's own scraping entirely
+                processInitialData: false,
+                customSigningServer: hasSign ? config.SigningServerUrl : null,
+                signingServerApiKey: hasSign ? config.SigningServerApiKey : null);
+
+            var canSendChat = !string.IsNullOrWhiteSpace(config.CookieString)
+                              || AppEvents.HasTikTokWebViewSender;
+
+            string? tiktokRoomId = null;
+            client.OnConnected += (_, _) =>
+            {
+                _logger.LogInformation("TikTok connected to @{User}", config.Username);
+                _activity.SetIgnored(config.Username, true);
+                SetStatus(key, ConnectionStatus.Connected);
+
+                if (canSendChat || AppEvents.HasTikTokWebViewSender)
+                {
+                    _chat.RegisterSender("tiktok", async msg =>
+                        await SendTikTokChatAsync(config.CookieString, tiktokRoomId, msg));
+                    _logger.LogInformation("TikTok chat sender registered (webview={WebView}, http={Http})",
+                        AppEvents.HasTikTokWebViewSender, !string.IsNullOrWhiteSpace(config.CookieString));
+                }
+                else
+                {
+                    _logger.LogInformation("TikTok chat sending disabled — log in to TikTok from the Platforms panel");
+                }
+            };
+            client.OnDisconnected += (_, _) =>
+            {
+                _logger.LogInformation("TikTok disconnected from @{User}", config.Username);
+                _activity.SetIgnored(config.Username, false);
+                _chat.RegisterSender("tiktok", null);
+                // Keep "Connecting" if stream ended naturally (will poll for next live).
+                // Only switch to "Disconnected" when the user explicitly cancelled.
+                SetStatus(key, ct.IsCancellationRequested
+                    ? ConnectionStatus.Disconnected
+                    : ConnectionStatus.Connecting);
+            };
+            client.OnChatMessage += (_, e) =>
+            {
+                // Capture roomId from first incoming message for sending
+                if (tiktokRoomId == null && e.RoomId > 0)
+                    tiktokRoomId = e.RoomId.ToString();
+                HandleTikTokChat(userId, e);
+            };
+            client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, config.GiftInterruptThreshold, e);
+
+            _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
+                config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
+
+            await client.RunAsync(ct); // throws on error; returns cleanly when stream ends
+
+            // Stream ended naturally — brief cooldown before re-checking live status
+            // to avoid reconnecting to a stale room ID that TikTok hasn't invalidated yet.
+            if (!ct.IsCancellationRequested)
+            {
+                const int EndedCooldownSec = 30;
+                _logger.LogInformation("TikTok @{User} stream ended — checking live again in {Sec}s",
+                    config.Username, EndedCooldownSec);
+                SetStatus(key, ConnectionStatus.Connecting,
+                    $"@{config.Username} terminó el vivo — verificando en {EndedCooldownSec}s…");
+                try { await Task.Delay(TimeSpan.FromSeconds(EndedCooldownSec), ct); }
+                catch (OperationCanceledException) { return; }
+            }
         }
-
-        if (ct.IsCancellationRequested) return;
-
-        _logger.LogDebug("TikTok room ID: {RoomId}", roomId);
-
-        var client = new TikTokLiveClient(
-            config.Username,
-            roomId: roomId,
-            skipRoomInfo: true,          // skip TikTok's own scraping entirely
-            processInitialData: false,
-            customSigningServer: hasSign ? config.SigningServerUrl : null,
-            signingServerApiKey: hasSign ? config.SigningServerApiKey : null);
-
-        var canSendChat = !string.IsNullOrWhiteSpace(config.CookieString)
-                          || AppEvents.HasTikTokWebViewSender;
-
-        string? tiktokRoomId = null;
-        client.OnConnected += (_, _) =>
-        {
-            _logger.LogInformation("TikTok connected to @{User}", config.Username);
-            _activity.SetIgnored(config.Username, true);
-            SetStatus(key, ConnectionStatus.Connected);
-
-            if (canSendChat || AppEvents.HasTikTokWebViewSender)
-            {
-                _chat.RegisterSender("tiktok", async msg =>
-                    await SendTikTokChatAsync(config.CookieString, tiktokRoomId, msg));
-                _logger.LogInformation("TikTok chat sender registered (webview={WebView}, http={Http})",
-                    AppEvents.HasTikTokWebViewSender, !string.IsNullOrWhiteSpace(config.CookieString));
-            }
-            else
-            {
-                _logger.LogInformation("TikTok chat sending disabled — log in to TikTok from the Platforms panel");
-            }
-        };
-        client.OnDisconnected += (_, _) =>
-        {
-            _logger.LogWarning("TikTok disconnected from @{User}", config.Username);
-            _activity.SetIgnored(config.Username, false);
-            _chat.RegisterSender("tiktok", null);
-            SetStatus(key, ConnectionStatus.Disconnected);
-        };
-        client.OnChatMessage += (_, e) =>
-        {
-            // Capture roomId from first incoming message for sending
-            if (tiktokRoomId == null && e.RoomId > 0)
-                tiktokRoomId = e.RoomId.ToString();
-            HandleTikTokChat(userId, e);
-        };
-        client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, config.GiftInterruptThreshold, e);
-
-        _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
-            config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
-        await client.RunAsync(ct);
     }
 
     private async void HandleTikTokChat(Guid userId, Chat e)
@@ -562,6 +590,17 @@ public class PlatformConnectionManager
             return false;
         }
 
+        // Proactive rate limiting: random 1-3s delay between sends to avoid TikTok shadowban.
+        var elapsed = DateTimeOffset.UtcNow - _lastTikTokChatSent;
+        var minDelay = TimeSpan.FromMilliseconds(Random.Shared.Next(1000, 3001));
+        if (elapsed < minDelay)
+        {
+            var wait = minDelay - elapsed;
+            _logger.LogDebug("TikTok send: rate-limit delay {Wait:g}", wait);
+            await Task.Delay(wait);
+        }
+        _lastTikTokChatSent = DateTimeOffset.UtcNow;
+
         // Primary: execute fetch() inside the authenticated WebView2 window.
         // TikTok's own JS SDK then adds X-Bogus, X-Gnarly, tt-ticket-guard-* automatically.
         _logger.LogDebug("TikTok send attempt — webview={WebView} hasCookie={HasCookie}",
@@ -574,6 +613,14 @@ public class PlatformConnectionManager
                 if (ok)
                 {
                     _logger.LogInformation("TikTok chat sent via WebView: {Message}", message);
+                    // Refresh cookies to capture any rotated tokens (e.g. msToken) that
+                    // TikTok's JS SDK updated during the fetch() call.
+                    if (AppEvents.HasTikTokCookieRefresher)
+                    {
+                        var fresh = await AppEvents.RefreshTikTokCookiesViaWebView();
+                        if (!string.IsNullOrWhiteSpace(fresh))
+                            _tikTokAuth.UpdateCookiesFromWebView(fresh);
+                    }
                     return true;
                 }
                 _logger.LogWarning("TikTok WebView send failed — falling back to HTTP");
@@ -643,6 +690,12 @@ public class PlatformConnectionManager
             request.Headers.Add("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
 
+            // Warn if region-specific session cookies are absent — may fail in some markets
+            if (ExtractCookieValue(cookieString, "sessionid_ss") == null)
+                _logger.LogDebug("TikTok send: sessionid_ss absent in cookie string — may fail in some regions");
+            if (ExtractCookieValue(cookieString, "sid_guard") == null)
+                _logger.LogDebug("TikTok send: sid_guard absent in cookie string — may fail in some regions");
+
             var csrfToken      = ExtractCookieValue(cookieString, "tt-csrf-token");
             var csrfSessionId  = ExtractCookieValue(cookieString, "csrf_session_id");
             if (!string.IsNullOrWhiteSpace(csrfToken))
@@ -670,6 +723,7 @@ public class PlatformConnectionManager
 
             // TikTok status_code values:
             // 20003 = sessionId expired       → hacer login de nuevo en el panel de Plataformas
+            // 10007 = sesión expirada (alias) → mismo tratamiento que 20003
             // 20001 = X-Bogus signing req.    → la cuenta/región requiere signing server
             // 4003001 = no autenticado        → sessionid incorrecto o expirado
             // 3 = rate limited                → enviando demasiado rápido

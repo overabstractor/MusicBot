@@ -87,6 +87,20 @@ public static class AppEvents
         => _tiktokWebcastFetcher?.Invoke(roomId) ?? Task.FromResult<(byte[], string)>((Array.Empty<byte>(), ""));
     public static bool HasTikTokWebcastFetcher => _tiktokWebcastFetcher != null;
 
+    /// <summary>
+    /// Registered by the Desktop WebView2 window after TikTok login.
+    /// Reads the current cookies from the live WebView2 context and returns them
+    /// as a browser cookie string. Called after a successful chat send to capture
+    /// any rotated tokens (e.g. msToken) that TikTok updates automatically.
+    /// Returns null if the WebView2 session is not available.
+    /// </summary>
+    private static Func<Task<string?>>? _tiktokCookieRefresher;
+    public static void RegisterTikTokCookieRefresher(Func<Task<string?>>? refresher)
+        => _tiktokCookieRefresher = refresher;
+    public static Task<string?> RefreshTikTokCookiesViaWebView()
+        => _tiktokCookieRefresher?.Invoke() ?? Task.FromResult<string?>(null);
+    public static bool HasTikTokCookieRefresher => _tiktokCookieRefresher != null;
+
     // ── YouTube cookie login (for yt-dlp bot detection bypass) ────────────────
 
     /// <summary>
