@@ -15,6 +15,7 @@ namespace MusicBot.Services.Platforms;
 public class TikTokRoomResolver
 {
     private readonly IHttpClientFactory _httpFactory;
+    private readonly TikTokAuthService _tikTokAuth;
     private readonly ILogger<TikTokRoomResolver> _logger;
     private readonly string _ytDlpPath;
 
@@ -29,12 +30,20 @@ public class TikTokRoomResolver
         new(@"roomID[""=:]+\s*[""']?(\d{15,25})",  RegexOptions.Compiled), // roomID=digits
     ];
 
+    // TikTok embeds "status":2 in the page JSON only when the room is actively live.
+    // Offline/ended rooms have status 4. This guards against returning a stale roomId
+    // that TikTok includes in the HTML even when the user is not streaming.
+    private static readonly Regex LiveStatusPattern =
+        new(@"""status""\s*:\s*2\b", RegexOptions.Compiled);
+
     public TikTokRoomResolver(
         IHttpClientFactory httpFactory,
+        TikTokAuthService tikTokAuth,
         IOptions<MusicLibrarySettings> libSettings,
         ILogger<TikTokRoomResolver> logger)
     {
         _httpFactory = httpFactory;
+        _tikTokAuth  = tikTokAuth;
         _logger      = logger;
         _ytDlpPath   = libSettings.Value.YtDlpPath ?? "yt-dlp";
     }
@@ -45,6 +54,16 @@ public class TikTokRoomResolver
     /// </summary>
     public async Task<string?> ResolveRoomIdAsync(string username, CancellationToken ct = default)
     {
+        // Strategy 0: authenticated HTTP call to /api/live/detail/ with session cookies.
+        // More reliable than HTML scraping because it uses TikTok's own API endpoint,
+        // which returns structured JSON instead of embedded script data that can change.
+        var apiRoomId = await TryAuthenticatedApiAsync(username, _tikTokAuth.CookieString, ct);
+        if (apiRoomId != null)
+        {
+            _logger.LogInformation("TikTok room ID for @{User} resolved via authenticated API: {RoomId}", username, apiRoomId);
+            return apiRoomId;
+        }
+
         // Strategy 1: authenticated WebView2 — calls TikTok's webcast API from a real browser
         // context with session cookies, bypassing bot-detection entirely.
         if (AppEvents.HasTikTokRoomIdResolver)
@@ -78,6 +97,79 @@ public class TikTokRoomResolver
         return null;
     }
 
+    /// <summary>
+    /// Strategy 0: Calls TikTok's webcast anchor-info API with session cookies.
+    /// Returns the room ID directly from structured JSON, skipping HTML parsing.
+    /// Requires the user to be authenticated (session cookies stored in TikTokAuthService).
+    /// </summary>
+    private async Task<string?> TryAuthenticatedApiAsync(string username, string? cookieString, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(cookieString)) return null;
+
+        try
+        {
+            var client = _httpFactory.CreateClient();
+
+            // webcast/live/anchorinfo/ accepts a uniqueId query parameter and returns
+            // the room_id in JSON without needing to scrape HTML.
+            var url = $"https://webcast.tiktok.com/webcast/live/anchorinfo/" +
+                      $"?aid=1988&app_name=tiktok_web&device_platform=web_pc" +
+                      $"&from_page=live&host_id={Uri.EscapeDataString("@" + username)}";
+
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+            request.Headers.Add("Accept", "application/json, text/plain, */*");
+            request.Headers.Add("Accept-Language", "en-US,en;q=0.9");
+            request.Headers.Add("Cookie", cookieString);
+            request.Headers.Add("Origin", "https://www.tiktok.com");
+            request.Headers.Add("Referer", "https://www.tiktok.com/");
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(7));
+
+            var response = await client.SendAsync(request, cts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogDebug("TikTok authenticated API: HTTP {Status} for @{User}", (int)response.StatusCode, username);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cts.Token);
+            var doc = JsonDocument.Parse(json);
+
+            // Response shape: { "status_code": 0, "data": { "room_id": "...", "status": 2 } }
+            if (!doc.RootElement.TryGetProperty("data", out var data)) return null;
+
+            // status 2 = live, status 4 = offline
+            if (data.TryGetProperty("status", out var statusProp) && statusProp.GetInt32() != 2)
+            {
+                _logger.LogDebug("TikTok authenticated API: @{User} status={Status} (not live)", username, statusProp.GetInt32());
+                return null;
+            }
+
+            if (data.TryGetProperty("room_id", out var roomIdProp))
+            {
+                var roomId = roomIdProp.ValueKind == JsonValueKind.String
+                    ? roomIdProp.GetString()
+                    : roomIdProp.GetRawText().Trim('"');
+                return string.IsNullOrWhiteSpace(roomId) ? null : roomId;
+            }
+
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("TikTok authenticated API: timeout for @{User}", username);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "TikTok authenticated API failed for @{User}", username);
+            return null;
+        }
+    }
+
     private async Task<string?> TryHttpScrapeAsync(string username, CancellationToken ct)
     {
         try
@@ -101,15 +193,29 @@ public class TikTokRoomResolver
 
             var html = await response.Content.ReadAsStringAsync(ct);
 
+            string? roomId = null;
             foreach (var pattern in RoomIdPatterns)
             {
                 var match = pattern.Match(html);
-                if (match.Success) return match.Groups[1].Value;
+                if (match.Success) { roomId = match.Groups[1].Value; break; }
             }
 
-            _logger.LogDebug("TikTok HTTP scrape: no roomId pattern matched for @{User} (html length={Len})",
-                username, html.Length);
-            return null;
+            if (roomId == null)
+            {
+                _logger.LogDebug("TikTok HTTP scrape: no roomId pattern matched for @{User} (html length={Len})",
+                    username, html.Length);
+                return null;
+            }
+
+            // Confirm the room is live — TikTok includes a roomId in the HTML even for offline
+            // rooms (e.g. profile redirect, cached room data). Only proceed when status=2 is present.
+            if (!LiveStatusPattern.IsMatch(html))
+            {
+                _logger.LogDebug("TikTok HTTP scrape: roomId found but status≠2 for @{User} — not live", username);
+                return null;
+            }
+
+            return roomId;
         }
         catch (Exception ex)
         {
@@ -146,10 +252,18 @@ public class TikTokRoomResolver
 
             // yt-dlp outputs JSON with an "id" field that is the room ID
             var json = JsonDocument.Parse(output);
+
+            // is_live=false means yt-dlp found page data but the stream is offline
+            if (json.RootElement.TryGetProperty("is_live", out var isLiveProp) && !isLiveProp.GetBoolean())
+            {
+                _logger.LogDebug("yt-dlp: is_live=false for TikTok @{User} — not live", username);
+                return null;
+            }
+
             if (json.RootElement.TryGetProperty("id", out var idProp))
                 return idProp.GetString();
 
-            // Also try "room_id" or "webpage_url" containing the room ID
+            // Also try "room_id"
             if (json.RootElement.TryGetProperty("room_id", out var roomProp))
                 return roomProp.GetString();
 

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -59,6 +61,19 @@ public class TikTokAuthService
 
     public void ResetCancelledFlag() => LoginCancelled = false;
 
+    /// <summary>
+    /// Updates the in-memory cookie string with fresh values read from the live WebView2 context.
+    /// Called after a successful chat send to capture rotated tokens (e.g. msToken).
+    /// Does NOT emit SignalR — this is a silent token refresh, not a login event.
+    /// </summary>
+    public void UpdateCookiesFromWebView(string freshCookieString)
+    {
+        if (string.IsNullOrWhiteSpace(freshCookieString)) return;
+        _cookieString = freshCookieString;
+        _savedAt      = DateTimeOffset.UtcNow;
+        _ = SaveToDbAsync(freshCookieString, _username);
+    }
+
     // ── Called by Desktop WebView2 window after login ─────────────────────────
 
     private void OnCookiesCaptured(string cookieString, string? username)
@@ -96,6 +111,30 @@ public class TikTokAuthService
         await AppEvents.NotifyPlatformAuthForgotten("tiktok");
     }
 
+    // ── DPAPI encryption (Windows CurrentUser scope) ──────────────────────────
+
+    private static string Protect(string plaintext)
+    {
+        var bytes     = Encoding.UTF8.GetBytes(plaintext);
+        var encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+        return Convert.ToBase64String(encrypted);
+    }
+
+    private static string? TryUnprotect(string base64)
+    {
+        try
+        {
+            var encrypted = Convert.FromBase64String(base64);
+            var bytes     = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(bytes);
+        }
+        catch
+        {
+            // Not encrypted (legacy plain-text) — return as-is for backward-compatible migration
+            return null;
+        }
+    }
+
     // ── DB persistence ────────────────────────────────────────────────────────
 
     private async Task LoadFromDbAsync()
@@ -109,12 +148,34 @@ public class TikTokAuthService
             if (cfg == null) return;
 
             var doc = JsonDocument.Parse(cfg.ConfigJson);
-            if (doc.RootElement.TryGetProperty("cookieString", out var cs))
-                _cookieString = cs.GetString();
             if (doc.RootElement.TryGetProperty("username", out var un))
                 _username = un.GetString();
             if (doc.RootElement.TryGetProperty("savedAt", out var sa))
                 _savedAt = sa.GetDateTimeOffset();
+
+            if (doc.RootElement.TryGetProperty("cookieString", out var cs))
+            {
+                var raw = cs.GetString();
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    // Attempt DPAPI decrypt. If it fails the value is legacy plain-text —
+                    // accept it for this session and re-encrypt it on next save.
+                    var encrypted = doc.RootElement.TryGetProperty("encrypted", out var enc) && enc.GetBoolean();
+                    if (encrypted)
+                    {
+                        _cookieString = TryUnprotect(raw) ?? raw; // fallback if different machine
+                        if (_cookieString == raw)
+                            _logger.LogWarning("TikTok auth: DPAPI decrypt failed (different machine?), using raw value");
+                    }
+                    else
+                    {
+                        _cookieString = raw;
+                        // Migrate legacy plain-text to encrypted on next save
+                        _logger.LogDebug("TikTok auth: migrating legacy plain-text cookies to DPAPI encryption");
+                        _ = SaveToDbAsync(raw, _username);
+                    }
+                }
+            }
 
             if (!string.IsNullOrWhiteSpace(_cookieString))
             {
@@ -138,7 +199,8 @@ public class TikTokAuthService
 
             var json = JsonSerializer.Serialize(new
             {
-                cookieString,
+                cookieString = Protect(cookieString),
+                encrypted    = true,
                 username,
                 savedAt = DateTimeOffset.UtcNow,
             });

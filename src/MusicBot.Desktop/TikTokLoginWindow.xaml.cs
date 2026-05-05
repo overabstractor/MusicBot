@@ -140,10 +140,11 @@ public partial class TikTokLoginWindow : Window
         // Session found — stop polling and register services
         StopSessionPolling();
 
-        // Session found — register chat sender, room ID resolver, and webcast fetcher
+        // Session found — register chat sender, room ID resolver, webcast fetcher, and cookie refresher
         MusicBot.AppEvents.RegisterTikTokWebViewSender(SendChatViaWebViewAsync);
         MusicBot.AppEvents.RegisterTikTokRoomIdResolver(ResolveRoomIdViaWebViewAsync);
         MusicBot.AppEvents.RegisterTikTokWebcastFetcher(GetWebcastDataViaWebViewAsync);
+        MusicBot.AppEvents.RegisterTikTokCookieRefresher(GetCurrentCookieStringAsync);
 
         if (_silentRestore)
         {
@@ -487,23 +488,26 @@ public partial class TikTokLoginWindow : Window
                 try {
                     const username = {{usernameJson}};
 
-                    // Primary: webcast room/info API — returns roomId for live users
+                    // Primary: webcast room/info API
                     const r = await fetch(
                         'https://webcast.tiktok.com/webcast/room/info/?aid=1988&uniqueId=' + encodeURIComponent(username),
                         { credentials: 'include', headers: { 'Accept': 'application/json' } }
                     );
                     const d = await r.json();
 
-                    // The API can nest roomId in several ways depending on TikTok version
-                    const roomId =
-                        (d?.data?.roomInfo?.roomId) ||
-                        (d?.data?.room_id)          ||
-                        (d?.roomId)                 ||
-                        (d?.data?.id);
+                    // TikTok room status: 2 = live/streaming, 4 = ended/offline.
+                    // Only return the roomId when the API confirms the room is currently live.
+                    const status = d?.data?.roomInfo?.status ?? d?.data?.status ?? d?.data?.room?.status;
+                    if (status === 2) {
+                        const roomId =
+                            (d?.data?.roomInfo?.roomId) ||
+                            (d?.data?.room_id)          ||
+                            (d?.roomId)                 ||
+                            (d?.data?.id);
+                        if (roomId) return String(roomId);
+                    }
 
-                    if (roomId) return String(roomId);
-
-                    // Fallback: scrape the live page and extract roomId from page JSON
+                    // Fallback: scrape the live page — TikTok only embeds roomId when the user is live
                     const page = await fetch(
                         'https://www.tiktok.com/@' + encodeURIComponent(username) + '/live',
                         { credentials: 'include' }
@@ -703,6 +707,36 @@ public partial class TikTokLoginWindow : Window
         }
     }
 
+    /// <summary>
+    /// Returns the current TikTok cookie string by reading live values from the WebView2 context.
+    /// Used to capture rotated tokens (e.g. msToken) that TikTok updates on each request.
+    /// Must be called from any thread — dispatches to UI thread internally.
+    /// </summary>
+    public async Task<string?> GetCurrentCookieStringAsync()
+    {
+        try
+        {
+            if (WebView.CoreWebView2 == null) return null;
+
+            IReadOnlyList<Microsoft.Web.WebView2.Core.CoreWebView2Cookie> cookies = null!;
+            await Dispatcher.InvokeAsync(async () =>
+            {
+                cookies = await WebView.CoreWebView2.CookieManager.GetCookiesAsync("https://www.tiktok.com");
+            }).Task.Unwrap();
+
+            var cookieStr = string.Join("; ", cookies
+                .Where(c => !string.IsNullOrWhiteSpace(c.Value))
+                .Select(c => $"{c.Name}={c.Value}"));
+
+            return string.IsNullOrWhiteSpace(cookieStr) ? null : cookieStr;
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "TikTok WebView: failed to read current cookies for refresh");
+            return null;
+        }
+    }
+
     /// <summary>Permanently close — called on app exit or auth disconnect.</summary>
     public void ForceClose()
     {
@@ -711,6 +745,7 @@ public partial class TikTokLoginWindow : Window
         MusicBot.AppEvents.RegisterTikTokWebViewSender(null);
         MusicBot.AppEvents.RegisterTikTokRoomIdResolver(null);
         MusicBot.AppEvents.RegisterTikTokWebcastFetcher(null);
+        MusicBot.AppEvents.RegisterTikTokCookieRefresher(null);
         Dispatcher.Invoke(Close);
     }
 
@@ -734,6 +769,7 @@ public partial class TikTokLoginWindow : Window
         MusicBot.AppEvents.RegisterTikTokWebViewSender(null);
         MusicBot.AppEvents.RegisterTikTokRoomIdResolver(null);
         MusicBot.AppEvents.RegisterTikTokWebcastFetcher(null);
+        MusicBot.AppEvents.RegisterTikTokCookieRefresher(null);
 
         // Initialize WebView2 if it hasn't been used yet (needs a window handle first)
         if (WebView.CoreWebView2 == null)
