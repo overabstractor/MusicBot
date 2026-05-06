@@ -301,7 +301,39 @@ public class PlatformConnectionManager
             _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
                 config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
 
-            await client.RunAsync(ct); // throws on error; returns cleanly when stream ends
+            // Run the WebSocket client and a live-status watchdog in parallel.
+            // TikTok doesn't always send a disconnect event when a stream ends, so the
+            // watchdog polls every 90 s and cancels the client when the room is no longer live.
+            using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var runTask = client.RunAsync(streamCts.Token);
+            var watchdogTask = Task.Run(async () =>
+            {
+                const int WatchdogSec = 90;
+                try
+                {
+                    while (!streamCts.Token.IsCancellationRequested)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(WatchdogSec), streamCts.Token);
+                        var stillLive = await _roomResolver.ResolveRoomIdAsync(config.Username, streamCts.Token);
+                        if (stillLive == null)
+                        {
+                            _logger.LogInformation(
+                                "TikTok watchdog: @{User} ya no está en vivo — cerrando conexión WebSocket",
+                                config.Username);
+                            streamCts.Cancel();
+                            return;
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { }
+            }, streamCts.Token);
+
+            try { await runTask; }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // Cancelled by the watchdog (stream ended), not by the user — treat as natural end
+            }
+            await watchdogTask; // let it finish cleanly
 
             // Stream ended naturally — brief cooldown before re-checking live status
             // to avoid reconnecting to a stale room ID that TikTok hasn't invalidated yet.
