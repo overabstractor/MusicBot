@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MusicBot.Core.Interfaces;
 using MusicBot.Core.Services;
 using MusicBot.Data;
+using MusicBot.Hubs;
 using MusicBot.Services.Player;
 using MusicBot.Services.Spotify;
 
@@ -16,6 +18,7 @@ public class UserContextManager
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IConfiguration _configuration;
+    private readonly IHubContext<OverlayHub> _hub;
 
     public event Action<Guid, UserServices>? OnUserCreated;
     public event Action<Guid>? OnUserRemoved;
@@ -27,13 +30,15 @@ public class UserContextManager
         IHttpClientFactory httpFactory,
         ILoggerFactory loggerFactory,
         IConfiguration configuration,
-        IOptions<RelaySettings> relay)
+        IOptions<RelaySettings> relay,
+        IHubContext<OverlayHub> hub)
     {
         _scopeFactory  = scopeFactory;
         _httpFactory   = httpFactory;
         _loggerFactory = loggerFactory;
         _configuration = configuration;
         _relay         = relay.Value;
+        _hub           = hub;
     }
 
     public UserServices GetOrCreate(Guid userId)
@@ -59,6 +64,7 @@ public class UserContextManager
                 _httpFactory,
                 _loggerFactory.CreateLogger<SpotifyService>(),
                 _scopeFactory,
+                _hub,
                 id);
 
             var player = new LocalPlayerService(

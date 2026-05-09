@@ -1,11 +1,13 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MusicBot.Core.Interfaces;
 using MusicBot.Core.Models;
 using MusicBot.Data;
+using MusicBot.Hubs;
 
 namespace MusicBot.Services.Spotify;
 
@@ -16,6 +18,7 @@ public class SpotifyService : ISpotifyService
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<SpotifyService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHubContext<OverlayHub> _hub;
     private readonly Guid _userId;
 
     private string? _accessToken;
@@ -42,6 +45,7 @@ public class SpotifyService : ISpotifyService
         IHttpClientFactory httpFactory,
         ILogger<SpotifyService> logger,
         IServiceScopeFactory scopeFactory,
+        IHubContext<OverlayHub> hub,
         Guid userId)
     {
         _settings = settings.Value;
@@ -49,6 +53,7 @@ public class SpotifyService : ISpotifyService
         _httpFactory = httpFactory;
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _hub = hub;
         _userId = userId;
         LoadTokenFromDb();
     }
@@ -355,7 +360,24 @@ public class SpotifyService : ISpotifyService
             throw new InvalidOperationException("Not authenticated with Spotify");
 
         if (DateTimeOffset.UtcNow >= _expiresAt.AddMinutes(-1))
-            await RefreshTokenAsync();
+        {
+            try
+            {
+                await RefreshTokenAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Spotify token refresh failed — user must re-authenticate");
+                _accessToken  = null;
+                _refreshToken = null;
+                await _hub.Clients.Group($"user:{LocalUser.Id}").SendAsync("auth:expired", new
+                {
+                    platform = "spotify",
+                    message  = "El token de Spotify expiró. Ve a Configuración y vuelve a conectar Spotify."
+                });
+                throw new InvalidOperationException("Spotify token refresh failed — re-authentication required", ex);
+            }
+        }
 
         return _accessToken;
     }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using MusicBot.Core.Models;
 using TikTokLiveSharp.Client;
 using TikTokLiveSharp.Events;
@@ -44,10 +45,6 @@ public class PlatformConnectionManager
     // Active Twitch client for sending messages
     private TwitchClient? _activeTwitchClient;
     private string? _activeTwitchChannel;
-
-    // Rate-limit guard: TikTok shadowbans bots that send messages too fast.
-    // Tracks the last send attempt; each send waits a random 1-3s before proceeding.
-    private DateTimeOffset _lastTikTokChatSent = DateTimeOffset.MinValue;
 
     public PlatformConnectionManager(
         CommandRouterService router,
@@ -622,17 +619,6 @@ public class PlatformConnectionManager
             return false;
         }
 
-        // Proactive rate limiting: random 1-3s delay between sends to avoid TikTok shadowban.
-        var elapsed = DateTimeOffset.UtcNow - _lastTikTokChatSent;
-        var minDelay = TimeSpan.FromMilliseconds(Random.Shared.Next(1000, 3001));
-        if (elapsed < minDelay)
-        {
-            var wait = minDelay - elapsed;
-            _logger.LogDebug("TikTok send: rate-limit delay {Wait:g}", wait);
-            await Task.Delay(wait);
-        }
-        _lastTikTokChatSent = DateTimeOffset.UtcNow;
-
         // Primary: execute fetch() inside the authenticated WebView2 window.
         // TikTok's own JS SDK then adds X-Bogus, X-Gnarly, tt-ticket-guard-* automatically.
         _logger.LogDebug("TikTok send attempt — webview={WebView} hasCookie={HasCookie}",
@@ -762,6 +748,26 @@ public class PlatformConnectionManager
             // 403 empty = WAF block           → headers de browser incorrectos o IP bloqueada
             _logger.LogWarning("TikTok chat send failed — status={Status} body={Body}",
                 (int)response.StatusCode, body.Length > 500 ? body[..500] : body);
+
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("status_code", out var sc))
+                {
+                    var code = sc.GetInt32();
+                    if (code is 20003 or 10007 or 4003001)
+                    {
+                        _logger.LogWarning("TikTok auth expired (status_code={Code}) — notifying user", code);
+                        await _hub.Clients.Group($"user:{LocalUser.Id}").SendAsync("auth:expired", new
+                        {
+                            platform = "tiktok",
+                            message  = "Las cookies de TikTok expiraron. Ve a Plataformas y vuelve a iniciar sesión en TikTok."
+                        });
+                    }
+                }
+            }
+            catch { /* body may not be JSON — ignore */ }
+
             return false;
         }
         catch (Exception ex)

@@ -76,6 +76,7 @@ export function useSignalR(overlayToken: string | null) {
   const [playlistUpdateCount, setPlaylistUpdateCount] = useState(0);
   const [downloadStates,     setDownloadStates]     = useState<Record<string, DownloadState>>({});
   const [downloadErrors,     setDownloadErrors]     = useState<Array<{ id: number; title: string; artist: string; reason?: string }>>([]);
+  const [authAlerts,         setAuthAlerts]         = useState<Array<{ id: number; platform: string; message: string }>>([]);
   const [authUpdatedAt,      setAuthUpdatedAt]      = useState(0);
 
   const connect = useCallback(async () => {
@@ -179,6 +180,16 @@ export function useSignalR(overlayToken: string | null) {
     conn.on("auth:updated",       () => setAuthUpdatedAt(n => n + 1));
     conn.on("auth:google-token",  (d: { idToken: string }) => resolveGoogleAuth(d.idToken));
 
+    conn.on("auth:expired", (d: { platform: string; message: string }) => {
+      const id = ++_evId;
+      setAuthAlerts(prev => {
+        // Avoid duplicate alerts for the same platform
+        const alreadyShown = prev.some(a => a.platform === d.platform);
+        if (alreadyShown) return prev;
+        return [...prev, { id, platform: d.platform, message: d.message }];
+      });
+    });
+
     conn.on("integration:event", (p: Omit<IntegrationEvent, "id" | "timestamp">) => {
       setIntegrationEvents(prev =>
         [{ ...p, id: ++_evId, timestamp: new Date() }, ...prev].slice(0, 30)
@@ -234,5 +245,5 @@ export function useSignalR(overlayToken: string | null) {
     };
   }, [connect, overlayToken]);
 
-  return { nowPlaying, spotifyQueue, appQueue, activePlaylistName, connected, tiktokStatus, twitchStatus, kickStatus, integrationEvents, queueSettings, tickerMessages, queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, authUpdatedAt, dismissDownloadError: (id: number) => setDownloadErrors(prev => prev.filter(e => e.id !== id)) };
+  return { nowPlaying, spotifyQueue, appQueue, activePlaylistName, connected, tiktokStatus, twitchStatus, kickStatus, integrationEvents, queueSettings, tickerMessages, queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, authAlerts, authUpdatedAt, dismissDownloadError: (id: number) => setDownloadErrors(prev => prev.filter(e => e.id !== id)), dismissAuthAlert: (id: number) => setAuthAlerts(prev => prev.filter(a => a.id !== id)) };
 }

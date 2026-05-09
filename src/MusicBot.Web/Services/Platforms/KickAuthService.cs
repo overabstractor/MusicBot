@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MusicBot.Data;
+using MusicBot.Hubs;
 
 namespace MusicBot.Services.Platforms;
 
@@ -18,6 +20,7 @@ public class KickAuthService
     private readonly RelaySettings _relay;
     private readonly IHttpClientFactory _httpFactory;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHubContext<OverlayHub> _hub;
     private readonly ILogger<KickAuthService> _logger;
 
     private string? _accessToken;
@@ -38,12 +41,14 @@ public class KickAuthService
         IOptions<RelaySettings> relay,
         IHttpClientFactory httpFactory,
         IServiceScopeFactory scopeFactory,
+        IHubContext<OverlayHub> hub,
         ILogger<KickAuthService> logger)
     {
         _settings     = settings.Value;
         _relay        = relay.Value;
         _httpFactory  = httpFactory;
         _scopeFactory = scopeFactory;
+        _hub          = hub;
         _logger       = logger;
         LoadTokenFromDb();
     }
@@ -103,7 +108,24 @@ public class KickAuthService
             throw new InvalidOperationException("Not authenticated with Kick");
 
         if (DateTimeOffset.UtcNow >= _expiresAt.AddMinutes(-5))
-            await RefreshTokenAsync();
+        {
+            try
+            {
+                await RefreshTokenAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Kick token refresh failed — user must re-authenticate");
+                _accessToken  = null;
+                _refreshToken = null;
+                await _hub.Clients.Group($"user:{LocalUser.Id}").SendAsync("auth:expired", new
+                {
+                    platform = "kick",
+                    message  = "El token de Kick expiró. Ve a Plataformas y vuelve a conectar Kick."
+                });
+                throw new InvalidOperationException("Kick token refresh failed — re-authentication required", ex);
+            }
+        }
 
         return _accessToken;
     }

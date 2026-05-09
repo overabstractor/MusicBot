@@ -1,7 +1,9 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MusicBot.Data;
+using MusicBot.Hubs;
 
 namespace MusicBot.Services.Platforms;
 
@@ -16,6 +18,7 @@ public class TwitchAuthService
     private readonly RelaySettings _relay;
     private readonly IHttpClientFactory _httpFactory;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHubContext<OverlayHub> _hub;
     private readonly ILogger<TwitchAuthService> _logger;
 
     private string? _accessToken;
@@ -33,12 +36,14 @@ public class TwitchAuthService
         IOptions<RelaySettings> relay,
         IHttpClientFactory httpFactory,
         IServiceScopeFactory scopeFactory,
+        IHubContext<OverlayHub> hub,
         ILogger<TwitchAuthService> logger)
     {
         _settings     = settings.Value;
         _relay        = relay.Value;
         _httpFactory  = httpFactory;
         _scopeFactory = scopeFactory;
+        _hub          = hub;
         _logger       = logger;
         LoadTokenFromDb();
     }
@@ -82,7 +87,24 @@ public class TwitchAuthService
             throw new InvalidOperationException("Not authenticated with Twitch");
 
         if (DateTimeOffset.UtcNow >= _expiresAt.AddMinutes(-5))
-            await RefreshTokenAsync();
+        {
+            try
+            {
+                await RefreshTokenAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Twitch token refresh failed — user must re-authenticate");
+                _accessToken  = null;
+                _refreshToken = null;
+                await _hub.Clients.Group($"user:{LocalUser.Id}").SendAsync("auth:expired", new
+                {
+                    platform = "twitch",
+                    message  = "El token de Twitch expiró. Ve a Plataformas y vuelve a conectar Twitch."
+                });
+                throw new InvalidOperationException("Twitch token refresh failed — re-authentication required", ex);
+            }
+        }
 
         return _accessToken;
     }

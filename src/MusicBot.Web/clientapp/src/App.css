@@ -4894,6 +4894,16 @@ a:hover { text-decoration: underline; }
   pointer-events: all;
   padding: 2px 0;
 }
+.auth-alert-toast {
+  background: rgba(20, 15, 5, 0.97);
+  border-color: rgba(251, 191, 36, 0.55);
+  color: #fde68a;
+}
+.auth-alert-toast .download-error-icon { color: #f59e0b; }
+.auth-alert-toast .download-error-text strong { color: #fef3c7; }
+.auth-alert-toast .download-error-reason { color: rgba(253,230,138,0.65); }
+.auth-alert-toast .download-error-close { color: rgba(253,230,138,0.45); }
+.auth-alert-toast .download-error-close:hover { color: #fde68a; }
 
 /* Library temp banner */
 .lib-temp-banner {

@@ -50,7 +50,7 @@ export const Dashboard: React.FC = () => {
     nowPlaying, appQueue, activePlaylistName, connected,
     tiktokStatus, twitchStatus, kickStatus,
     integrationEvents, queueSettings, tickerMessages,
-    queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, authUpdatedAt, dismissDownloadError,
+    queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, authAlerts, authUpdatedAt, dismissDownloadError, dismissAuthAlert,
   } = useSignalR(OVERLAY_TOKEN);
 
   const { theme, toggle: toggleTheme } = useTheme();
@@ -224,6 +224,22 @@ export const Dashboard: React.FC = () => {
               +{downloadErrors.length - 3} más
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Auth expiration alerts ──────────────────────────── */}
+      {authAlerts.length > 0 && (
+        <div className="download-error-stack">
+          {authAlerts.map(a => (
+            <div key={a.id} className="download-error-toast auth-alert-toast">
+              <span className="download-error-icon">🔑</span>
+              <div className="download-error-body">
+                <span className="download-error-text"><strong>{a.platform.charAt(0).toUpperCase() + a.platform.slice(1)}</strong></span>
+                <span className="download-error-reason">{a.message}</span>
+              </div>
+              <button className="download-error-close" onClick={() => dismissAuthAlert(a.id)}>✕</button>
+            </div>
+          ))}
         </div>
       )}
 
