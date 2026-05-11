@@ -334,6 +334,15 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     api.saveTikTok(u, autoConnect, t, be, ie, c, r, tl, au).catch(() => {});
   }, [tiktokAuth, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel, allowedUsers]);
 
+  // Auto-save numeric fields (giftThreshold, coinsPerBump, teamMinLevel) on change with 500ms debounce
+  const skipFirstAutosave = useRef(true);
+  useEffect(() => {
+    if (skipFirstAutosave.current) { skipFirstAutosave.current = false; return; }
+    if (!tiktokAuth?.username) return;
+    const timer = setTimeout(() => save(), 500);
+    return () => clearTimeout(timer);
+  }, [giftThreshold, coinsPerBump, teamMinLevel]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const connect = async () => {
     const channel = tiktokAuth?.username;
     if (!channel) return;
@@ -405,8 +414,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             <div className="role-sub-setting">
               <span className="role-sub-label">Nivel mín. del Team</span>
               <input type="number" className="gift-input" min={1} max={100} value={teamMinLevel}
-                onChange={(e) => setTeamMinLevel(Math.max(1, Number(e.target.value)))}
-                onBlur={() => save({ teamLevel: teamMinLevel })} />
+                onChange={(e) => setTeamMinLevel(Math.max(1, Number(e.target.value)))} />
             </div>
           )}
           {commandRoles.includes("list") && (
@@ -429,8 +437,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
                 <div className="gift-input-group">
                   <span className="gift-input-label">Monedas/posición</span>
                   <input type="number" className="gift-input" min={1} value={coinsPerBump}
-                    onChange={(e) => setCoinsPerBump(Math.max(1, Number(e.target.value)))}
-                    onBlur={() => save()} />
+                    onChange={(e) => setCoinsPerBump(Math.max(1, Number(e.target.value)))} />
                 </div>
               )}
             </div>
@@ -444,8 +451,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
                 <div className="gift-input-group">
                   <span className="gift-input-label">Umbral (monedas)</span>
                   <input type="number" className="gift-input" min={1} value={giftThreshold}
-                    onChange={(e) => setGiftThreshold(Math.max(1, Number(e.target.value)))}
-                    onBlur={() => save()} />
+                    onChange={(e) => setGiftThreshold(Math.max(1, Number(e.target.value)))} />
                 </div>
               )}
             </div>
