@@ -3814,6 +3814,23 @@ a:hover { text-decoration: underline; }
   pointer-events: none;
 }
 
+.role-sub-setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  margin-left: 22px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.role-sub-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ── Platform account row ── */
 
 .platform-account {

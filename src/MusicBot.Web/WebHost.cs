@@ -81,6 +81,7 @@ public static class WebHost
         builder.Services.AddSingleton<TikTokRoomResolver>();
         builder.Services.AddSingleton<PlatformConnectionManager>();
         builder.Services.AddSingleton<TwitchAuthService>();
+        builder.Services.AddSingleton<TwitchFollowerCache>();
         builder.Services.AddSingleton<KickAuthService>();
         builder.Services.AddSingleton<TikTokAuthService>();
         builder.Services.AddSingleton<YouTubeAuthService>();

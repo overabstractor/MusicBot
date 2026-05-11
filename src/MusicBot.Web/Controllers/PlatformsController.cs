@@ -74,6 +74,7 @@ public class PlatformsController : ControllerBase
                 giftInterruptEnabled   = req.GiftInterruptEnabled,
                 coinsPerBump           = req.CoinsPerBump,
                 commandRoles           = req.CommandRoles,
+                teamMinLevel           = req.TeamMinLevel,
             }),
             req.AutoConnect);
 
@@ -143,7 +144,8 @@ public class PlatformsController : ControllerBase
                     GiftBumpEnabled:       c?.GiftBumpEnabled ?? true,
                     GiftInterruptEnabled:  c?.GiftInterruptEnabled ?? true,
                     CoinsPerBump:          c?.CoinsPerBump ?? 1,
-                    CommandRoles:          c?.CommandRoles));
+                    CommandRoles:          c?.CommandRoles,
+                    TeamMinLevel:          c?.TeamMinLevel ?? 1));
                 break;
             }
             case "twitch":
@@ -240,7 +242,7 @@ public class PlatformsController : ControllerBase
         await _db.SaveChangesAsync();
     }
 
-    private sealed class TikTokJson { public string? Username { get; set; } public int GiftInterruptThreshold { get; set; } = 100; public bool GiftBumpEnabled { get; set; } = true; public bool GiftInterruptEnabled { get; set; } = true; public int CoinsPerBump { get; set; } = 1; public string[]? CommandRoles { get; set; } }
+    private sealed class TikTokJson { public string? Username { get; set; } public int GiftInterruptThreshold { get; set; } = 100; public bool GiftBumpEnabled { get; set; } = true; public bool GiftInterruptEnabled { get; set; } = true; public int CoinsPerBump { get; set; } = 1; public string[]? CommandRoles { get; set; } public int TeamMinLevel { get; set; } = 1; }
     private sealed class TwitchJson { public string? Channel { get; set; } public string? BotUsername { get; set; } public string? OAuthToken { get; set; } public string[]? CommandRoles { get; set; } }
     private sealed class KickJson   { public string? Channel { get; set; } public string[]? CommandRoles { get; set; } }
 }
@@ -265,6 +267,7 @@ public class SaveTikTokRequest
     public bool     GiftInterruptEnabled   { get; set; } = true;
     public int      CoinsPerBump           { get; set; } = 1;
     public string[] CommandRoles           { get; set; } = ["all"];
+    public int      TeamMinLevel           { get; set; } = 1;
 }
 
 public class SaveTwitchRequest

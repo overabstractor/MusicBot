@@ -88,6 +88,7 @@ export interface TikTokConfig {
   giftInterruptEnabled: boolean;
   coinsPerBump: number;
   commandRoles: string[];
+  teamMinLevel: number;
 }
 
 export interface TwitchConfig {

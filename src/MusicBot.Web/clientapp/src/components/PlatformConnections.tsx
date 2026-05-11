@@ -55,15 +55,18 @@ const PLATFORM_ROLES: Record<string, { id: string; label: string }[]> = {
     { id: "follower",   label: "Seguidores" },
     { id: "subscriber", label: "Suscriptores" },
     { id: "moderator",  label: "Moderadores" },
+    { id: "teamMember", label: "Team Members" },
   ],
   twitch: [
     { id: "all",        label: "Todos los usuarios" },
+    { id: "follower",   label: "Seguidores" },
     { id: "subscriber", label: "Suscriptores" },
     { id: "vip",        label: "VIPs" },
     { id: "moderator",  label: "Moderadores" },
   ],
   kick: [
     { id: "all",        label: "Todos los usuarios" },
+    { id: "follower",   label: "Seguidores" },
     { id: "subscriber", label: "Suscriptores" },
     { id: "moderator",  label: "Moderadores" },
   ],
@@ -171,6 +174,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   const [giftInterruptEnabled, setGiftInterruptEnabled] = useState(cfg?.giftInterruptEnabled ?? true);
   const [coinsPerBump, setCoinsPerBump]               = useState(cfg?.coinsPerBump ?? 1);
   const [commandRoles, setCommandRoles]               = useState<string[]>(cfg?.commandRoles ?? ["all"]);
+  const [teamMinLevel, setTeamMinLevel]               = useState(cfg?.teamMinLevel ?? 1);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [tiktokAuth, setTiktokAuth] = useState<{ authenticated: boolean; username: string | null } | null>(null);
@@ -195,7 +199,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       if (r.authenticated) {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         setAuthBusy(false);
-        if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles).catch(() => {});
+        if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel).catch(() => {});
         onSaved();
       }
     });
@@ -215,7 +219,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
           stopPoll();
           setAuthBusy(false);
           setTiktokAuth(r);
-          if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles).catch(() => {});
+          if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel).catch(() => {});
           onSaved();
         } else if (r.cancelled) {
           stopPoll();
@@ -235,7 +239,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     onSaved();
   };
 
-  const save = useCallback((patch?: Partial<{ threshold: number; bumpEn: boolean; intEn: boolean; cpb: number; roles: string[] }>) => {
+  const save = useCallback((patch?: Partial<{ threshold: number; bumpEn: boolean; intEn: boolean; cpb: number; roles: string[]; teamLevel: number }>) => {
     const u = tiktokAuth?.username;
     if (!u) return;
     const t  = patch?.threshold ?? giftThreshold;
@@ -243,8 +247,9 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     const ie = patch?.intEn     ?? giftInterruptEnabled;
     const c  = patch?.cpb       ?? coinsPerBump;
     const r  = patch?.roles     ?? commandRoles;
-    api.saveTikTok(u, autoConnect, t, be, ie, c, r).catch(() => {});
-  }, [tiktokAuth, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles]);
+    const tl = patch?.teamLevel ?? teamMinLevel;
+    api.saveTikTok(u, autoConnect, t, be, ie, c, r, tl).catch(() => {});
+  }, [tiktokAuth, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel]);
 
   const connect = async () => {
     const channel = tiktokAuth?.username;
@@ -252,7 +257,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     setConnecting(true);
     setConnectError(null);
     try {
-      await api.saveTikTok(channel, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles);
+      await api.saveTikTok(channel, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel);
       await api.connectPlatform("tiktok");
       onSaved();
     } catch (e) {
@@ -301,7 +306,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             <input type="checkbox" checked={autoConnect}
               onChange={async (e) => {
                 setAutoConnect(e.target.checked);
-                if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles).catch(() => {});
+                if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel).catch(() => {});
               }} />
             Conectar al iniciar la app
           </label>
@@ -313,6 +318,14 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             roles={commandRoles}
             onChange={(r) => { setCommandRoles(r); save({ roles: r }); }}
           />
+          {commandRoles.includes("teamMember") && (
+            <div className="role-sub-setting">
+              <span className="role-sub-label">Nivel mín. del Team</span>
+              <input type="number" className="gift-input" min={1} max={100} value={teamMinLevel}
+                onChange={(e) => setTeamMinLevel(Math.max(1, Number(e.target.value)))}
+                onBlur={() => save({ teamLevel: teamMinLevel })} />
+            </div>
+          )}
         </PlatformSection>
 
         <PlatformSection title="Regalos" full>
