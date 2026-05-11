@@ -15,9 +15,9 @@ namespace MusicBot.Services.Platforms;
 
 public class PlatformConnectionManager
 {
-    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100);
-    public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken);
-    public record KickPlatformConfig(string Channel);
+    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100, bool GiftBumpEnabled = true, bool GiftInterruptEnabled = true, int CoinsPerBump = 1, string[]? CommandRoles = null, int TeamMinLevel = 1, string[]? AllowedUsers = null);
+    public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken, string[]? CommandRoles = null, string[]? AllowedUsers = null);
+    public record KickPlatformConfig(string Channel, string[]? CommandRoles = null, string[]? AllowedUsers = null);
 
     public enum ConnectionStatus { Disconnected, Connecting, Connected, Error }
 
@@ -29,6 +29,17 @@ public class PlatformConnectionManager
     }
 
     private readonly ConcurrentDictionary<string, ConnectionState> _states = new();
+
+    // Live configs — kept in memory so settings changes apply mid-stream
+    // without needing to disconnect/reconnect.
+    private readonly ConcurrentDictionary<Guid, TikTokPlatformConfig> _tikTokConfigs = new();
+    private readonly ConcurrentDictionary<Guid, TwitchPlatformConfig> _twitchConfigs = new();
+    private readonly ConcurrentDictionary<Guid, KickPlatformConfig>   _kickConfigs   = new();
+
+    // Per-(platform,user) cooldown for "no permission" messages to avoid spam
+    private readonly ConcurrentDictionary<string, DateTime> _deniedNotifiedAt = new();
+    private static readonly TimeSpan DeniedCooldown = TimeSpan.FromSeconds(60);
+
     private readonly CommandRouterService _router;
     private readonly UserContextManager _userContext;
     private readonly PlaybackSyncService _sync;
@@ -39,6 +50,7 @@ public class PlatformConnectionManager
     private readonly TikTokRoomResolver _roomResolver;
     private readonly TikTokAuthService _tikTokAuth;
     private readonly KickAuthService _kickAuth;
+    private readonly TwitchFollowerCache _twitchFollowers;
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<PlatformConnectionManager> _logger;
 
@@ -57,21 +69,23 @@ public class PlatformConnectionManager
         TikTokRoomResolver roomResolver,
         TikTokAuthService tikTokAuth,
         KickAuthService kickAuth,
+        TwitchFollowerCache twitchFollowers,
         IHttpClientFactory httpFactory,
         ILogger<PlatformConnectionManager> logger)
     {
-        _router       = router;
-        _userContext  = userContext;
-        _sync         = sync;
-        _hub          = hub;
-        _tracker      = tracker;
-        _chat         = chat;
-        _activity     = activity;
-        _roomResolver = roomResolver;
-        _tikTokAuth   = tikTokAuth;
-        _kickAuth     = kickAuth;
-        _httpFactory  = httpFactory;
-        _logger       = logger;
+        _router          = router;
+        _userContext     = userContext;
+        _sync            = sync;
+        _hub             = hub;
+        _tracker         = tracker;
+        _chat            = chat;
+        _activity        = activity;
+        _roomResolver    = roomResolver;
+        _tikTokAuth      = tikTokAuth;
+        _kickAuth        = kickAuth;
+        _twitchFollowers = twitchFollowers;
+        _httpFactory     = httpFactory;
+        _logger          = logger;
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -83,6 +97,8 @@ public class PlatformConnectionManager
     {
         var key = Key(userId, "tiktok");
         Disconnect(userId, "tiktok");
+
+        _tikTokConfigs[userId] = config;
 
         var cts = new CancellationTokenSource();
         var state = _states.AddOrUpdate(key, _ => new ConnectionState { Cts = cts }, (_, s) => { s.Cts = cts; return s; });
@@ -98,6 +114,8 @@ public class PlatformConnectionManager
         var key = Key(userId, "twitch");
         Disconnect(userId, "twitch");
 
+        _twitchConfigs[userId] = config;
+
         var cts = new CancellationTokenSource();
         var state = _states.AddOrUpdate(key, _ => new ConnectionState { Cts = cts }, (_, s) => { s.Cts = cts; return s; });
         state.Status = ConnectionStatus.Connecting;
@@ -112,6 +130,8 @@ public class PlatformConnectionManager
         var key = Key(userId, "kick");
         Disconnect(userId, "kick");
 
+        _kickConfigs[userId] = config;
+
         var cts = new CancellationTokenSource();
         var state = _states.AddOrUpdate(key, _ => new ConnectionState { Cts = cts }, (_, s) => { s.Cts = cts; return s; });
         state.Status = ConnectionStatus.Connecting;
@@ -119,6 +139,93 @@ public class PlatformConnectionManager
         SetStatus(key, ConnectionStatus.Connecting);
 
         _ = Task.Run(() => RunWithReconnect(key, ct => KickLoop(userId, config, ct), cts.Token));
+    }
+
+    // ── Live config updates (applied mid-stream without reconnecting) ────────
+
+    public void UpdateTikTokSettings(Guid userId,
+        int giftInterruptThreshold, bool giftBumpEnabled, bool giftInterruptEnabled,
+        int coinsPerBump, string[] commandRoles, int teamMinLevel, string[] allowedUsers)
+    {
+        if (!_tikTokConfigs.TryGetValue(userId, out var current))
+        {
+            _logger.LogDebug("UpdateTikTokSettings: no active TikTok connection for user {UserId}", userId);
+            return;
+        }
+        _tikTokConfigs[userId] = current with
+        {
+            GiftInterruptThreshold = giftInterruptThreshold,
+            GiftBumpEnabled        = giftBumpEnabled,
+            GiftInterruptEnabled   = giftInterruptEnabled,
+            CoinsPerBump           = coinsPerBump,
+            CommandRoles           = commandRoles,
+            TeamMinLevel           = teamMinLevel,
+            AllowedUsers           = allowedUsers,
+        };
+        ClearDeniedCooldownsForPlatform("tiktok");
+        _logger.LogInformation("TikTok live config updated: roles=[{Roles}] gifts={Gifts}",
+            string.Join(",", commandRoles),
+            $"bumpEn={giftBumpEnabled},intEn={giftInterruptEnabled},thr={giftInterruptThreshold},cpb={coinsPerBump}");
+    }
+
+    public void UpdateTwitchSettings(Guid userId, string[] commandRoles, string[] allowedUsers)
+    {
+        if (!_twitchConfigs.TryGetValue(userId, out var current))
+        {
+            _logger.LogDebug("UpdateTwitchSettings: no active Twitch connection for user {UserId}", userId);
+            return;
+        }
+        _twitchConfigs[userId] = current with
+        {
+            CommandRoles = commandRoles,
+            AllowedUsers = allowedUsers,
+        };
+        ClearDeniedCooldownsForPlatform("twitch");
+        _logger.LogInformation("Twitch live config updated: roles=[{Roles}]", string.Join(",", commandRoles));
+    }
+
+    public void UpdateKickSettings(Guid userId, string[] commandRoles, string[] allowedUsers)
+    {
+        if (!_kickConfigs.TryGetValue(userId, out var current))
+        {
+            _logger.LogDebug("UpdateKickSettings: no active Kick connection for user {UserId}", userId);
+            return;
+        }
+        _kickConfigs[userId] = current with
+        {
+            CommandRoles = commandRoles,
+            AllowedUsers = allowedUsers,
+        };
+        ClearDeniedCooldownsForPlatform("kick");
+        _logger.LogInformation("Kick live config updated: roles=[{Roles}]", string.Join(",", commandRoles));
+    }
+
+    /// <summary>Clears anti-spam cooldowns so users get fresh feedback after a permission change.</summary>
+    private void ClearDeniedCooldownsForPlatform(string platform)
+    {
+        var prefix = $"{platform}:";
+        foreach (var k in _deniedNotifiedAt.Keys.ToList())
+            if (k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                _deniedNotifiedAt.TryRemove(k, out _);
+    }
+
+    // ── Permission denied feedback (rate-limited per user/platform) ──────────
+
+    private async Task NotifyPermissionDeniedAsync(string platform, string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return;
+        var key = $"{platform}:{username.ToLowerInvariant()}";
+        var now = DateTime.UtcNow;
+        if (_deniedNotifiedAt.TryGetValue(key, out var last) && now - last < DeniedCooldown) return;
+        _deniedNotifiedAt[key] = now;
+        try
+        {
+            await _chat.SendChatMessageAsync(username, "no tienes permiso para usar comandos", platform);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to send permission-denied feedback");
+        }
     }
 
     public void Disconnect(Guid userId, string platform)
@@ -139,19 +246,22 @@ public class PlatformConnectionManager
                 _activeTwitchClient  = null;
                 _activeTwitchChannel = null;
                 _chat.RegisterSender("twitch", null);
+                _twitchConfigs.TryRemove(userId, out _);
                 break;
             case "tiktok":
                 _chat.RegisterSender("tiktok", null);
+                _tikTokConfigs.TryRemove(userId, out _);
                 break;
             case "kick":
                 _chat.RegisterSender("kick", null);
+                _kickConfigs.TryRemove(userId, out _);
                 break;
         }
     }
 
     // ── Reconnect loop ────────────────────────────────────────────────────────
 
-    private static readonly int[] ReconnectDelays = [5, 10, 20, 45, 60];
+    private static readonly int[] ReconnectDelays = [2, 5, 10, 20, 45];
 
     private async Task RunWithReconnect(string key, Func<CancellationToken, Task> run, CancellationToken ct)
     {
@@ -220,16 +330,22 @@ public class PlatformConnectionManager
         var key = Key(userId, "tiktok");
         var hasSign = !string.IsNullOrWhiteSpace(config.SigningServerUrl);
 
+        // ── Tunable timings (kept low for fast recovery from transient drops) ─
+        const int LiveCheckSec       = 20;   // poll for "is live" while waiting for stream
+        const int WatchdogSec        = 45;   // how often watchdog checks live status
+        const int MaxConsecFails     = 3;    // tolerate this many failed checks before disconnect
+        const int MaxSilenceMinutes  = 3;    // force reconnect if WS shows connected but no events
+        const int EndedCooldownSec   = 5;    // cooldown after natural stream end
+        int[] wsRetryDelays          = [1, 2, 5, 10, 20]; // fast local backoff for WS-level errors
+        int wsFailCount = 0;
+
         while (!ct.IsCancellationRequested)
         {
             // ── Wait for the streamer to go live ──────────────────────────────
-            // Polls every 60 s to avoid hammering the signing server.
-            // Stays in "Connecting" status so the UI never shows the Connect button.
-            const int LiveCheckSec = 60;
             string? roomId = null;
             while (!ct.IsCancellationRequested)
             {
-                roomId = await _roomResolver.ResolveRoomIdAsync(config.Username, ct);
+                roomId = await SafeResolveRoomIdAsync(config.Username, ct);
                 if (roomId != null) break;
 
                 _logger.LogInformation("TikTok @{User} no está en vivo — verificando en {Sec}s",
@@ -248,7 +364,7 @@ public class PlatformConnectionManager
             var client = new TikTokLiveClient(
                 config.Username,
                 roomId: roomId,
-                skipRoomInfo: true,          // skip TikTok's own scraping entirely
+                skipRoomInfo: true,
                 processInitialData: false,
                 customSigningServer: hasSign ? config.SigningServerUrl : null,
                 signingServerApiKey: hasSign ? config.SigningServerApiKey : null);
@@ -257,8 +373,14 @@ public class PlatformConnectionManager
                               || AppEvents.HasTikTokWebViewSender;
 
             string? tiktokRoomId = null;
+            var lastEventAt = DateTime.UtcNow;
+            var connectedSuccessfully = false;
+
             client.OnConnected += (_, _) =>
             {
+                connectedSuccessfully = true;
+                wsFailCount = 0; // reset fast-retry backoff once we're actually connected
+                lastEventAt = DateTime.UtcNow;
                 _logger.LogInformation("TikTok connected to @{User}", config.Username);
                 _activity.SetIgnored(config.Username, true);
                 SetStatus(key, ConnectionStatus.Connected);
@@ -280,70 +402,149 @@ public class PlatformConnectionManager
                 _logger.LogInformation("TikTok disconnected from @{User}", config.Username);
                 _activity.SetIgnored(config.Username, false);
                 _chat.RegisterSender("tiktok", null);
-                // Keep "Connecting" if stream ended naturally (will poll for next live).
-                // Only switch to "Disconnected" when the user explicitly cancelled.
                 SetStatus(key, ct.IsCancellationRequested
                     ? ConnectionStatus.Disconnected
                     : ConnectionStatus.Connecting);
             };
             client.OnChatMessage += (_, e) =>
             {
-                // Capture roomId from first incoming message for sending
+                lastEventAt = DateTime.UtcNow;
                 if (tiktokRoomId == null && e.RoomId > 0)
                     tiktokRoomId = e.RoomId.ToString();
                 HandleTikTokChat(userId, e);
             };
-            client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, config.GiftInterruptThreshold, e);
+            client.OnGiftMessage += (_, e) =>
+            {
+                lastEventAt = DateTime.UtcNow;
+                HandleTikTokGift(userId, e);
+            };
 
             _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
                 config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
 
-            // Run the WebSocket client and a live-status watchdog in parallel.
-            // TikTok doesn't always send a disconnect event when a stream ends, so the
-            // watchdog polls every 90 s and cancels the client when the room is no longer live.
+            // Watchdog. Priority order:
+            //   1. Active chat = user is definitively live → skip resolver (which is flaky)
+            //   2. Long silence (>MaxSilenceMinutes) = WS likely dead → force reconnect
+            //   3. Moderate silence + resolver fails N consecutive times = stream ended
             using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var streamEndedByWatchdog = false;
+            const int ChatActiveSec = 120; // 2 min — if events within this window, trust WS
             var runTask = client.RunAsync(streamCts.Token);
             var watchdogTask = Task.Run(async () =>
             {
-                const int WatchdogSec = 90;
+                int consecutiveFails = 0;
                 try
                 {
                     while (!streamCts.Token.IsCancellationRequested)
                     {
                         await Task.Delay(TimeSpan.FromSeconds(WatchdogSec), streamCts.Token);
-                        var stillLive = await _roomResolver.ResolveRoomIdAsync(config.Username, streamCts.Token);
-                        if (stillLive == null)
+
+                        var silenceSec = (DateTime.UtcNow - lastEventAt).TotalSeconds;
+
+                        // 1. Chat is actively flowing → user IS live, regardless of what the
+                        //    HTTP resolver thinks. Skip the check entirely.
+                        if (connectedSuccessfully && silenceSec < ChatActiveSec)
                         {
-                            _logger.LogInformation(
-                                "TikTok watchdog: @{User} ya no está en vivo — cerrando conexión WebSocket",
-                                config.Username);
+                            if (consecutiveFails > 0)
+                                _logger.LogDebug(
+                                    "TikTok watchdog: chat activo ({Sec}s) — reset de fallos del resolver",
+                                    (int)silenceSec);
+                            consecutiveFails = 0;
+                            continue;
+                        }
+
+                        // 2. WS shows connected but completely silent for too long → force reconnect
+                        if (connectedSuccessfully && silenceSec / 60.0 > MaxSilenceMinutes)
+                        {
+                            _logger.LogWarning(
+                                "TikTok @{User} sin eventos por >{Min}min — forzando reconexión",
+                                config.Username, MaxSilenceMinutes);
+                            streamEndedByWatchdog = true;
                             streamCts.Cancel();
                             return;
+                        }
+
+                        // 3. Chat is quiet (between 2 min and MaxSilence). Use resolver as backup
+                        //    to detect natural stream-end. Requires multiple consecutive failures.
+                        var stillLive = await SafeResolveRoomIdAsync(config.Username, streamCts.Token);
+                        if (stillLive == null)
+                        {
+                            consecutiveFails++;
+                            _logger.LogDebug(
+                                "TikTok watchdog: @{User} resolver falló ({N}/{Max}), chat silencioso {Sec}s",
+                                config.Username, consecutiveFails, MaxConsecFails, (int)silenceSec);
+                            if (consecutiveFails >= MaxConsecFails)
+                            {
+                                _logger.LogInformation(
+                                    "TikTok watchdog: @{User} parece haber terminado el live — cerrando",
+                                    config.Username);
+                                streamEndedByWatchdog = true;
+                                streamCts.Cancel();
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            consecutiveFails = 0;
                         }
                     }
                 }
                 catch (OperationCanceledException) { }
             }, streamCts.Token);
 
+            bool wsError = false;
             try { await runTask; }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // Cancelled by the watchdog (stream ended), not by the user — treat as natural end
+                return;
             }
-            await watchdogTask; // let it finish cleanly
-
-            // Stream ended naturally — brief cooldown before re-checking live status
-            // to avoid reconnecting to a stale room ID that TikTok hasn't invalidated yet.
-            if (!ct.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                const int EndedCooldownSec = 30;
-                _logger.LogInformation("TikTok @{User} stream ended — checking live again in {Sec}s",
+                // watchdog cancelled — natural stream end or heartbeat timeout
+            }
+            catch (Exception ex)
+            {
+                // WS-level error → handle locally with fast retry (don't bubble to slow RunWithReconnect)
+                wsError = true;
+                wsFailCount++;
+                var delay = wsRetryDelays[Math.Min(wsFailCount - 1, wsRetryDelays.Length - 1)];
+                _logger.LogWarning(ex,
+                    "TikTok @{User} WS error — reintentando en {Delay}s (intento {N})",
+                    config.Username, delay, wsFailCount);
+                SetStatus(key, ConnectionStatus.Connecting,
+                    $"Error temporal — reintentando en {delay}s…");
+                streamCts.Cancel();
+                try { await Task.Delay(TimeSpan.FromSeconds(delay), ct); }
+                catch (OperationCanceledException) { return; }
+            }
+            try { await watchdogTask; } catch { /* swallow */ }
+
+            // After natural stream-end or watchdog cancel, do brief cooldown then poll again.
+            // After WS error, we already waited — go straight to live check (skip cooldown).
+            if (!wsError && !ct.IsCancellationRequested)
+            {
+                _logger.LogInformation(
+                    streamEndedByWatchdog
+                        ? "TikTok @{User} stream ended — checking live again in {Sec}s"
+                        : "TikTok @{User} disconnected — checking live again in {Sec}s",
                     config.Username, EndedCooldownSec);
                 SetStatus(key, ConnectionStatus.Connecting,
-                    $"@{config.Username} terminó el vivo — verificando en {EndedCooldownSec}s…");
+                    $"@{config.Username} — verificando en {EndedCooldownSec}s…");
                 try { await Task.Delay(TimeSpan.FromSeconds(EndedCooldownSec), ct); }
                 catch (OperationCanceledException) { return; }
             }
+        }
+    }
+
+    /// <summary>ResolveRoomId wrapper that never throws on transient errors — only OCE bubbles up.</summary>
+    private async Task<string?> SafeResolveRoomIdAsync(string username, CancellationToken ct)
+    {
+        try { return await _roomResolver.ResolveRoomIdAsync(username, ct); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "TikTok ResolveRoomId transient failure for @{User}", username);
+            return null;
         }
     }
 
@@ -359,6 +560,12 @@ public class PlatformConnectionManager
             _logger.LogDebug("TikTok chat @{User}: {Message}", username, message);
 
             if (message[0] is not ('!' or '.' or '/')) return;
+            if (!_tikTokConfigs.TryGetValue(userId, out var config)) return;
+            if (e.Sender != null && !IsTikTokRoleAllowed(e.Sender, config.CommandRoles, config.TeamMinLevel, config.AllowedUsers))
+            {
+                await NotifyPermissionDeniedAsync("tiktok", username);
+                return;
+            }
             await RouteCommand(userId, username, message, "tiktok");
         }
         catch (Exception ex)
@@ -367,10 +574,14 @@ public class PlatformConnectionManager
         }
     }
 
-    private async void HandleTikTokGift(Guid userId, int interruptThreshold, GiftMessage e)
+    private async void HandleTikTokGift(Guid userId, GiftMessage e)
     {
         try
         {
+            // Ignore intermediate combo events; only process when the streak ends
+            if (!e.StreakEnd) return;
+            if (!_tikTokConfigs.TryGetValue(userId, out var config)) return;
+
             var username = e.User?.UniqueId ?? "viewer";
             var giftName = e.Gift?.Name ?? "regalo";
             var diamonds = e.Gift?.DiamondCost ?? 0;
@@ -378,6 +589,7 @@ public class PlatformConnectionManager
             var coins    = diamonds * repeat;
 
             if (coins <= 0) return;
+            if (!config.GiftBumpEnabled && !config.GiftInterruptEnabled) return;
 
             var slug = await GetUserSlugAsync(userId);
             if (slug == null) return;
@@ -386,7 +598,7 @@ public class PlatformConnectionManager
             if (services == null) return;
 
             CommandResult result;
-            if (coins >= interruptThreshold)
+            if (coins >= config.GiftInterruptThreshold && config.GiftInterruptEnabled)
             {
                 var ok = services.Queue.InterruptForUser(username);
                 if (!ok) return;
@@ -394,13 +606,15 @@ public class PlatformConnectionManager
                 await _sync.StartCurrentTrackAsync(services);
                 result = CommandResult.Ok($"@{username} interrumpió con {coins} monedas!");
             }
-            else
+            else if (coins < config.GiftInterruptThreshold && config.GiftBumpEnabled)
             {
+                var bumps = Math.Max(1, coins / Math.Max(1, config.CoinsPerBump));
                 if (!services.Queue.Bump(username)) return;
-                for (int i = 1; i < coins; i++)
+                for (int i = 1; i < bumps; i++)
                     if (!services.Queue.Bump(username)) break;
-                result = CommandResult.Ok($"@{username} subió su canción {coins} posición(es)");
+                result = CommandResult.Ok($"@{username} subió su canción {bumps} posición(es)");
             }
+            else return;
 
             await _hub.Clients.Group($"user:{userId}")
                 .SendAsync("integration:event", new
@@ -467,13 +681,23 @@ public class PlatformConnectionManager
             await Task.CompletedTask;
         };
 
+        // Resolve broadcaster_id once at connect time for Helix follower lookups
+        var broadcasterId = await _twitchFollowers.ResolveBroadcasterIdAsync(config.Channel);
+
         client.OnMessageReceived += async (_, e) =>
         {
             var msg = e.ChatMessage.Message?.Trim();
             if (string.IsNullOrEmpty(msg)) return;
             _activity.RecordMessage(e.ChatMessage.Username);
             if (msg[0] is ('!' or '.' or '/'))
-                await RouteCommand(userId, e.ChatMessage.Username, msg, "twitch");
+            {
+                // Read the latest config so settings changes apply mid-stream
+                if (!_twitchConfigs.TryGetValue(userId, out var liveCfg)) return;
+                if (await IsTwitchRoleAllowedAsync(e.ChatMessage, liveCfg.CommandRoles, broadcasterId, liveCfg.AllowedUsers))
+                    await RouteCommand(userId, e.ChatMessage.Username, msg, "twitch");
+                else
+                    await NotifyPermissionDeniedAsync("twitch", e.ChatMessage.Username);
+            }
         };
 
         _logger.LogInformation("Twitch connecting to #{Channel}", config.Channel);
@@ -502,7 +726,14 @@ public class PlatformConnectionManager
             var sender = msg.Sender?.Username ?? "viewer";
             _activity.RecordMessage(sender);
             if (content[0] is ('!' or '.' or '/'))
-                _ = RouteCommand(userId, sender, content, "kick");
+            {
+                // Read the latest config so settings changes apply mid-stream
+                if (!_kickConfigs.TryGetValue(userId, out var liveCfg)) return;
+                if (IsKickRoleAllowed(msg, liveCfg.CommandRoles, liveCfg.AllowedUsers))
+                    _ = RouteCommand(userId, sender, content, "kick");
+                else
+                    _ = NotifyPermissionDeniedAsync("kick", sender);
+            }
         };
 
         _logger.LogInformation("Kick connecting to channel {Channel}", config.Channel);
@@ -531,6 +762,139 @@ public class PlatformConnectionManager
     }
 
     // ── Shared command routing ────────────────────────────────────────────────
+
+    // ── Role helpers ─────────────────────────────────────────────────────────────
+
+    private static bool IsInAllowList(string? username, string[]? allowedUsers)
+        => !string.IsNullOrEmpty(username)
+           && allowedUsers != null
+           && allowedUsers.Any(u => string.Equals(u.TrimStart('@'), username, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Checks if a TikTok user is following the host. TikTok's SDK doesn't always
+    /// populate <c>IsFollower</c> on every chat message, so we also check
+    /// <c>FollowStatus</c> (≥1 = following, 2 = mutual) and <c>Follow_Info.FollowStatus</c>.
+    /// </summary>
+    private static bool IsTikTokFollowing(TikTokLiveSharp.Events.Objects.User sender)
+    {
+        if (sender.IsFollower) return true;
+        if (sender.FollowStatus >= 1) return true;
+        if (sender.Follow_Info?.FollowStatus >= 1) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the user's fan-club (Team Member) level. TikTok has two parallel fields:
+    /// <c>Fans_Club.Data.Level</c> (populated only when status=Active) and
+    /// <c>FansClub_Info.FansLevel</c> (more reliable across event types). Returns max.
+    /// </summary>
+    private static int GetTikTokTeamLevel(TikTokLiveSharp.Events.Objects.User sender)
+    {
+        var dataLvl = sender.Fans_Club?.Data?.Level ?? 0;
+        var infoLvl = (int)(sender.FansClub_Info?.FansLevel ?? 0);
+        return Math.Max(dataLvl, infoLvl);
+    }
+
+    /// <summary>Checks moderator status across both the IsAdmin flag and the UserRole field.</summary>
+    private static bool IsTikTokModerator(TikTokLiveSharp.Events.Objects.User sender)
+    {
+        if (sender.User_Attr?.IsAdmin == true) return true;
+        if (sender.User_Attr?.IsSuperAdmin == true) return true;
+        // UserRole == 3 = moderator in TikTok protocol (1=anchor, 2=fan, 3=mod, ...)
+        if (sender.UserRole == 3) return true;
+        return false;
+    }
+
+    private bool IsTikTokRoleAllowed(TikTokLiveSharp.Events.Objects.User sender, string[]? roles, int teamMinLevel, string[]? allowedUsers)
+    {
+        if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+
+        var listMatch = roles.Contains("list") && IsInAllowList(sender.UniqueId, allowedUsers);
+        if (listMatch) return true;
+
+        if (roles.Contains("moderator") && IsTikTokModerator(sender)) return true;
+        if (roles.Contains("subscriber") && sender.Subscribe_Info?.IsSubscribe == true) return true;
+        if (roles.Contains("follower") && IsTikTokFollowing(sender)) return true;
+        if (roles.Contains("teamMember"))
+        {
+            var lvl = GetTikTokTeamLevel(sender);
+            if (lvl >= Math.Max(1, teamMinLevel)) return true;
+        }
+
+        // Diagnostic logging — shows every signal the SDK provided for this user
+        _logger.LogInformation(
+            "TikTok role DENIED for @{User} | roles=[{Roles}] minTeam={MinTeam} | " +
+            "IsFollower={IsF} FollowStatus={FS} FollowInfoFS={FIFS} | " +
+            "Sub={Sub} | IsAdmin={Adm} IsSuperAdm={Sup} UserRole={UR} | " +
+            "FanData.Lvl={FDL} FanData.Status={FDS} FanInfo.Lvl={FIL} | " +
+            "ListMatch={LM}",
+            sender.UniqueId, string.Join(",", roles ?? []), teamMinLevel,
+            sender.IsFollower, sender.FollowStatus, sender.Follow_Info?.FollowStatus,
+            sender.Subscribe_Info?.IsSubscribe == true,
+            sender.User_Attr?.IsAdmin == true, sender.User_Attr?.IsSuperAdmin == true, sender.UserRole,
+            sender.Fans_Club?.Data?.Level ?? 0,
+            sender.Fans_Club?.Data?.FansClubStatus,
+            sender.FansClub_Info?.FansLevel ?? 0,
+            listMatch);
+        return false;
+    }
+
+    private async Task<bool> IsTwitchRoleAllowedAsync(TwitchLib.Client.Models.ChatMessage msg, string[]? roles, string? broadcasterId, string[]? allowedUsers)
+    {
+        if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+
+        var listMatch = roles.Contains("list") && IsInAllowList(msg.Username, allowedUsers);
+        if (listMatch) return true;
+
+        if (roles.Contains("moderator") && (msg.IsBroadcaster || msg.UserDetail.IsModerator)) return true;
+        if (roles.Contains("subscriber") && msg.UserDetail.IsSubscriber) return true;
+        if (roles.Contains("vip") && msg.UserDetail.IsVip) return true;
+
+        var followerChecked = false;
+        var followerMatch   = false;
+        if (roles.Contains("follower") && !string.IsNullOrEmpty(broadcasterId) && !string.IsNullOrEmpty(msg.UserId))
+        {
+            followerChecked = true;
+            followerMatch = await _twitchFollowers.IsFollowerAsync(broadcasterId, msg.UserId);
+            if (followerMatch) return true;
+        }
+
+        _logger.LogInformation(
+            "Twitch role DENIED for @{User} | roles=[{Roles}] | IsBroadcaster={B} IsMod={M} IsSub={S} IsVip={V} | " +
+            "FollowerChecked={FC} FollowerMatch={FM} | ListMatch={LM} | UserId={Uid} BroadcasterId={Bid}",
+            msg.Username, string.Join(",", roles ?? []),
+            msg.IsBroadcaster, msg.UserDetail.IsModerator, msg.UserDetail.IsSubscriber, msg.UserDetail.IsVip,
+            followerChecked, followerMatch, listMatch,
+            msg.UserId ?? "(empty)", broadcasterId ?? "(unresolved)");
+
+        return false;
+    }
+
+    private bool IsKickRoleAllowed(KickChatSpy.Models.ChatMessage msg, string[]? roles, string[]? allowedUsers)
+    {
+        if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+
+        var listMatch = roles.Contains("list") && IsInAllowList(msg.Sender?.Username, allowedUsers);
+        if (listMatch) return true;
+
+        var badges = msg.Sender?.Identity?.Badges;
+        if (badges != null)
+        {
+            if (roles.Contains("moderator") && badges.Any(b => b.Type is "moderator" or "broadcaster")) return true;
+            if (roles.Contains("subscriber") && badges.Any(b => b.Type is "subscriber" or "founder")) return true;
+            if (roles.Contains("vip")        && badges.Any(b => b.Type == "vip")) return true;
+            if (roles.Contains("og")         && badges.Any(b => b.Type == "og")) return true;
+        }
+
+        var badgeList = badges == null ? "(null)" : string.Join(",", badges.Select(b => b.Type));
+        _logger.LogInformation(
+            "Kick role DENIED for @{User} | roles=[{Roles}] | badges=[{Badges}] | ListMatch={LM}",
+            msg.Sender?.Username, string.Join(",", roles ?? []), badgeList, listMatch);
+
+        // Note: Kick does not expose follower status without webhook infrastructure
+        // (channel.followed event + public endpoint). Follower role intentionally omitted.
+        return false;
+    }
 
     private async Task<CommandResult?> RouteCommand(Guid userId, string username, string message, string platform)
     {

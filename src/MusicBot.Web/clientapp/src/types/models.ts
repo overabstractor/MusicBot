@@ -84,15 +84,25 @@ export interface SpotifyQueueState {
 export interface TikTokConfig {
   username: string;
   giftInterruptThreshold: number;
+  giftBumpEnabled: boolean;
+  giftInterruptEnabled: boolean;
+  coinsPerBump: number;
+  commandRoles: string[];
+  teamMinLevel: number;
+  allowedUsers: string[];
 }
 
 export interface TwitchConfig {
   channel: string;
   botUsername: string;
+  commandRoles: string[];
+  allowedUsers: string[];
 }
 
 export interface KickConfig {
   channel: string;
+  commandRoles: string[];
+  allowedUsers: string[];
 }
 
 export interface LibraryTrack {

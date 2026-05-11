@@ -3745,6 +3745,296 @@ a:hover { text-decoration: underline; }
   accent-color: var(--accent);
 }
 
+/* ── Compact account row + auto-connect ── */
+
+.platform-account-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0;
+}
+
+.platform-auto-label-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.platform-auto-label-inline input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* ── Platform sections (collapsible) ── */
+
+.platform-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+}
+
+.platform-section {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.platform-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+.platform-section-header:hover {
+  background: var(--bg);
+}
+
+.platform-section--open .platform-section-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.platform-section-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 10px;
+}
+
+.platform-section-title {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.platform-section-summary {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platform-section-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Role selector ── */
+
+.role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.role-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.3;
+}
+.role-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.role-item--dim {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.role-sub-setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  margin-left: 22px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.role-sub-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Allowed users editor (chips + input) ── */
+
+.allowed-users {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  margin-left: 22px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.allowed-users-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.allowed-users-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.allowed-user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.allowed-user-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 50%;
+}
+.allowed-user-remove:hover {
+  background: var(--red-dim, rgba(239,68,68,0.15));
+  color: var(--red);
+}
+
+.allowed-users-input {
+  display: flex;
+  gap: 4px;
+}
+.allowed-users-input input {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-input, var(--surface));
+  color: var(--text);
+}
+.allowed-users-input button {
+  padding: 0 10px !important;
+  font-size: 13px !important;
+}
+
+/* ── Platform account row ── */
+
+.platform-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.platform-account-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--green);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.platform-account-forget {
+  margin-left: auto;
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  flex-shrink: 0;
+}
+
+/* ── Gift settings section ── */
+
+.gift-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gift-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gift-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  flex: 1;
+  min-width: 160px;
+}
+.gift-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.gift-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.gift-input-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.gift-input {
+  width: 68px;
+  padding: 3px 6px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-input, var(--bg));
+  color: var(--text);
+  text-align: right;
+}
+
 .platform-note {
   font-size: 11px;
   color: var(--text-dim);

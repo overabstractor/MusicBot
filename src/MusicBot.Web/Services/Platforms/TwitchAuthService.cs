@@ -26,7 +26,7 @@ public class TwitchAuthService
     private string? _botUsername;
     private DateTimeOffset _expiresAt;
 
-    private static readonly string[] Scopes = { "chat:read", "chat:edit" };
+    private static readonly string[] Scopes = { "chat:read", "chat:edit", "moderator:read:followers" };
 
     public bool IsAuthenticated => _accessToken != null;
     public string? BotUsername => _botUsername;
@@ -214,6 +214,68 @@ public class TwitchAuthService
         {
             _logger.LogWarning(ex, "Failed to fetch Twitch username");
             return null;
+        }
+    }
+
+    /// <summary>Resolves a Twitch user_id from a login (channel name). Returns null on failure.</summary>
+    public async Task<string?> GetUserIdByLoginAsync(string login)
+    {
+        try
+        {
+            var token = await GetAccessTokenAsync();
+            var client = _httpFactory.CreateClient();
+            var req = new HttpRequestMessage(HttpMethod.Get, $"https://api.twitch.tv/helix/users?login={Uri.EscapeDataString(login)}");
+            req.Headers.Add("Authorization", $"Bearer {token}");
+            req.Headers.Add("Client-Id", _settings.ClientId);
+            var res = await client.SendAsync(req);
+            res.EnsureSuccessStatusCode();
+            var json = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync());
+            var data = json.RootElement.GetProperty("data");
+            return data.GetArrayLength() > 0 ? data[0].GetProperty("id").GetString() : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to resolve Twitch user_id for login={Login}", login);
+            return null;
+        }
+    }
+
+    /// <summary>Checks if a user (by user_id) follows the given broadcaster.</summary>
+    public async Task<bool> IsFollowerAsync(string broadcasterId, string userId)
+    {
+        try
+        {
+            var token = await GetAccessTokenAsync();
+            var client = _httpFactory.CreateClient();
+            var req = new HttpRequestMessage(HttpMethod.Get,
+                $"https://api.twitch.tv/helix/channels/followers?broadcaster_id={Uri.EscapeDataString(broadcasterId)}&user_id={Uri.EscapeDataString(userId)}");
+            req.Headers.Add("Authorization", $"Bearer {token}");
+            req.Headers.Add("Client-Id", _settings.ClientId);
+            var res = await client.SendAsync(req);
+            if (!res.IsSuccessStatusCode)
+            {
+                if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                    res.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    _logger.LogWarning(
+                        "Twitch follower lookup returned {Code} — el token OAuth probablemente no tiene el scope " +
+                        "'moderator:read:followers'. El usuario debe hacer 'Olvidar cuenta' y reconectar Twitch.",
+                        res.StatusCode);
+                }
+                else
+                {
+                    _logger.LogWarning("Twitch follower lookup returned {Code} for broadcaster={B} user={U}",
+                        res.StatusCode, broadcasterId, userId);
+                }
+                return false;
+            }
+            var json = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync());
+            return json.RootElement.GetProperty("data").GetArrayLength() > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Twitch IsFollowerAsync failed for broadcaster={B} user={U}", broadcasterId, userId);
+            return false;
         }
     }
 
