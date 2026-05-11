@@ -147,7 +147,11 @@ public class PlatformConnectionManager
         int giftInterruptThreshold, bool giftBumpEnabled, bool giftInterruptEnabled,
         int coinsPerBump, string[] commandRoles, int teamMinLevel, string[] allowedUsers)
     {
-        if (!_tikTokConfigs.TryGetValue(userId, out var current)) return;
+        if (!_tikTokConfigs.TryGetValue(userId, out var current))
+        {
+            _logger.LogDebug("UpdateTikTokSettings: no active TikTok connection for user {UserId}", userId);
+            return;
+        }
         _tikTokConfigs[userId] = current with
         {
             GiftInterruptThreshold = giftInterruptThreshold,
@@ -158,29 +162,51 @@ public class PlatformConnectionManager
             TeamMinLevel           = teamMinLevel,
             AllowedUsers           = allowedUsers,
         };
-        _logger.LogInformation("TikTok live config updated for user {UserId}", userId);
+        ClearDeniedCooldownsForPlatform("tiktok");
+        _logger.LogInformation("TikTok live config updated: roles=[{Roles}] gifts={Gifts}",
+            string.Join(",", commandRoles),
+            $"bumpEn={giftBumpEnabled},intEn={giftInterruptEnabled},thr={giftInterruptThreshold},cpb={coinsPerBump}");
     }
 
     public void UpdateTwitchSettings(Guid userId, string[] commandRoles, string[] allowedUsers)
     {
-        if (!_twitchConfigs.TryGetValue(userId, out var current)) return;
+        if (!_twitchConfigs.TryGetValue(userId, out var current))
+        {
+            _logger.LogDebug("UpdateTwitchSettings: no active Twitch connection for user {UserId}", userId);
+            return;
+        }
         _twitchConfigs[userId] = current with
         {
             CommandRoles = commandRoles,
             AllowedUsers = allowedUsers,
         };
-        _logger.LogInformation("Twitch live config updated for user {UserId}", userId);
+        ClearDeniedCooldownsForPlatform("twitch");
+        _logger.LogInformation("Twitch live config updated: roles=[{Roles}]", string.Join(",", commandRoles));
     }
 
     public void UpdateKickSettings(Guid userId, string[] commandRoles, string[] allowedUsers)
     {
-        if (!_kickConfigs.TryGetValue(userId, out var current)) return;
+        if (!_kickConfigs.TryGetValue(userId, out var current))
+        {
+            _logger.LogDebug("UpdateKickSettings: no active Kick connection for user {UserId}", userId);
+            return;
+        }
         _kickConfigs[userId] = current with
         {
             CommandRoles = commandRoles,
             AllowedUsers = allowedUsers,
         };
-        _logger.LogInformation("Kick live config updated for user {UserId}", userId);
+        ClearDeniedCooldownsForPlatform("kick");
+        _logger.LogInformation("Kick live config updated: roles=[{Roles}]", string.Join(",", commandRoles));
+    }
+
+    /// <summary>Clears anti-spam cooldowns so users get fresh feedback after a permission change.</summary>
+    private void ClearDeniedCooldownsForPlatform(string platform)
+    {
+        var prefix = $"{platform}:";
+        foreach (var k in _deniedNotifiedAt.Keys.ToList())
+            if (k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                _deniedNotifiedAt.TryRemove(k, out _);
     }
 
     // ── Permission denied feedback (rate-limited per user/platform) ──────────
@@ -725,18 +751,39 @@ public class PlatformConnectionManager
            && allowedUsers != null
            && allowedUsers.Any(u => string.Equals(u.TrimStart('@'), username, StringComparison.OrdinalIgnoreCase));
 
-    private static bool IsTikTokRoleAllowed(TikTokLiveSharp.Events.Objects.User sender, string[]? roles, int teamMinLevel, string[]? allowedUsers)
+    /// <summary>
+    /// Checks if a TikTok user is following the host. TikTok's SDK doesn't always
+    /// populate <c>IsFollower</c> on every chat message, so we also check
+    /// <c>FollowStatus</c> (≥1 = following, 2 = mutual) and <c>Follow_Info.FollowStatus</c>.
+    /// </summary>
+    private static bool IsTikTokFollowing(TikTokLiveSharp.Events.Objects.User sender)
+    {
+        if (sender.IsFollower) return true;
+        if (sender.FollowStatus >= 1) return true;
+        if (sender.Follow_Info?.FollowStatus >= 1) return true;
+        return false;
+    }
+
+    private bool IsTikTokRoleAllowed(TikTokLiveSharp.Events.Objects.User sender, string[]? roles, int teamMinLevel, string[]? allowedUsers)
     {
         if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
         if (roles.Contains("list") && IsInAllowList(sender.UniqueId, allowedUsers)) return true;
         if (roles.Contains("moderator") && (sender.User_Attr?.IsAdmin == true || sender.User_Attr?.IsSuperAdmin == true)) return true;
         if (roles.Contains("subscriber") && sender.Subscribe_Info?.IsSubscribe == true) return true;
-        if (roles.Contains("follower") && sender.IsFollower) return true;
+        if (roles.Contains("follower") && IsTikTokFollowing(sender)) return true;
         if (roles.Contains("teamMember"))
         {
             var lvl = sender.Fans_Club?.Data?.Level ?? 0;
             if (lvl >= Math.Max(1, teamMinLevel)) return true;
         }
+        // Log for diagnostic purposes (only when denied)
+        _logger.LogDebug(
+            "TikTok role denied for @{User}: roles=[{Roles}] IsFollower={IsF} FollowStatus={FS} Sub={Sub} Mod={Mod} TeamLvl={Lvl}",
+            sender.UniqueId, string.Join(",", roles ?? []),
+            sender.IsFollower, sender.FollowStatus,
+            sender.Subscribe_Info?.IsSubscribe == true,
+            sender.User_Attr?.IsAdmin == true,
+            sender.Fans_Club?.Data?.Level ?? 0);
         return false;
     }
 
