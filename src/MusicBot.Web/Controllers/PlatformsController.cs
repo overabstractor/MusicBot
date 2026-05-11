@@ -80,6 +80,9 @@ public class PlatformsController : ControllerBase
             req.AutoConnect);
 
         _manager.SetUserSlug(LocalUser.Id, LocalUser.Slug);
+        _manager.UpdateTikTokSettings(LocalUser.Id,
+            req.GiftInterruptThreshold, req.GiftBumpEnabled, req.GiftInterruptEnabled,
+            req.CoinsPerBump, req.CommandRoles, req.TeamMinLevel, req.AllowedUsers);
         return NoContent();
     }
 
@@ -92,6 +95,7 @@ public class PlatformsController : ControllerBase
             req.AutoConnect);
 
         _manager.SetUserSlug(LocalUser.Id, LocalUser.Slug);
+        _manager.UpdateTwitchSettings(LocalUser.Id, req.CommandRoles, req.AllowedUsers);
         return NoContent();
     }
 
@@ -104,6 +108,7 @@ public class PlatformsController : ControllerBase
             req.AutoConnect);
 
         _manager.SetUserSlug(LocalUser.Id, LocalUser.Slug);
+        _manager.UpdateKickSettings(LocalUser.Id, req.CommandRoles, req.AllowedUsers);
         return NoContent();
     }
 

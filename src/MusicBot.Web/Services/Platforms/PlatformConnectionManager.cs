@@ -29,6 +29,17 @@ public class PlatformConnectionManager
     }
 
     private readonly ConcurrentDictionary<string, ConnectionState> _states = new();
+
+    // Live configs — kept in memory so settings changes apply mid-stream
+    // without needing to disconnect/reconnect.
+    private readonly ConcurrentDictionary<Guid, TikTokPlatformConfig> _tikTokConfigs = new();
+    private readonly ConcurrentDictionary<Guid, TwitchPlatformConfig> _twitchConfigs = new();
+    private readonly ConcurrentDictionary<Guid, KickPlatformConfig>   _kickConfigs   = new();
+
+    // Per-(platform,user) cooldown for "no permission" messages to avoid spam
+    private readonly ConcurrentDictionary<string, DateTime> _deniedNotifiedAt = new();
+    private static readonly TimeSpan DeniedCooldown = TimeSpan.FromSeconds(60);
+
     private readonly CommandRouterService _router;
     private readonly UserContextManager _userContext;
     private readonly PlaybackSyncService _sync;
@@ -87,6 +98,8 @@ public class PlatformConnectionManager
         var key = Key(userId, "tiktok");
         Disconnect(userId, "tiktok");
 
+        _tikTokConfigs[userId] = config;
+
         var cts = new CancellationTokenSource();
         var state = _states.AddOrUpdate(key, _ => new ConnectionState { Cts = cts }, (_, s) => { s.Cts = cts; return s; });
         state.Status = ConnectionStatus.Connecting;
@@ -100,6 +113,8 @@ public class PlatformConnectionManager
     {
         var key = Key(userId, "twitch");
         Disconnect(userId, "twitch");
+
+        _twitchConfigs[userId] = config;
 
         var cts = new CancellationTokenSource();
         var state = _states.AddOrUpdate(key, _ => new ConnectionState { Cts = cts }, (_, s) => { s.Cts = cts; return s; });
@@ -115,6 +130,8 @@ public class PlatformConnectionManager
         var key = Key(userId, "kick");
         Disconnect(userId, "kick");
 
+        _kickConfigs[userId] = config;
+
         var cts = new CancellationTokenSource();
         var state = _states.AddOrUpdate(key, _ => new ConnectionState { Cts = cts }, (_, s) => { s.Cts = cts; return s; });
         state.Status = ConnectionStatus.Connecting;
@@ -122,6 +139,67 @@ public class PlatformConnectionManager
         SetStatus(key, ConnectionStatus.Connecting);
 
         _ = Task.Run(() => RunWithReconnect(key, ct => KickLoop(userId, config, ct), cts.Token));
+    }
+
+    // ── Live config updates (applied mid-stream without reconnecting) ────────
+
+    public void UpdateTikTokSettings(Guid userId,
+        int giftInterruptThreshold, bool giftBumpEnabled, bool giftInterruptEnabled,
+        int coinsPerBump, string[] commandRoles, int teamMinLevel, string[] allowedUsers)
+    {
+        if (!_tikTokConfigs.TryGetValue(userId, out var current)) return;
+        _tikTokConfigs[userId] = current with
+        {
+            GiftInterruptThreshold = giftInterruptThreshold,
+            GiftBumpEnabled        = giftBumpEnabled,
+            GiftInterruptEnabled   = giftInterruptEnabled,
+            CoinsPerBump           = coinsPerBump,
+            CommandRoles           = commandRoles,
+            TeamMinLevel           = teamMinLevel,
+            AllowedUsers           = allowedUsers,
+        };
+        _logger.LogInformation("TikTok live config updated for user {UserId}", userId);
+    }
+
+    public void UpdateTwitchSettings(Guid userId, string[] commandRoles, string[] allowedUsers)
+    {
+        if (!_twitchConfigs.TryGetValue(userId, out var current)) return;
+        _twitchConfigs[userId] = current with
+        {
+            CommandRoles = commandRoles,
+            AllowedUsers = allowedUsers,
+        };
+        _logger.LogInformation("Twitch live config updated for user {UserId}", userId);
+    }
+
+    public void UpdateKickSettings(Guid userId, string[] commandRoles, string[] allowedUsers)
+    {
+        if (!_kickConfigs.TryGetValue(userId, out var current)) return;
+        _kickConfigs[userId] = current with
+        {
+            CommandRoles = commandRoles,
+            AllowedUsers = allowedUsers,
+        };
+        _logger.LogInformation("Kick live config updated for user {UserId}", userId);
+    }
+
+    // ── Permission denied feedback (rate-limited per user/platform) ──────────
+
+    private async Task NotifyPermissionDeniedAsync(string platform, string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return;
+        var key = $"{platform}:{username.ToLowerInvariant()}";
+        var now = DateTime.UtcNow;
+        if (_deniedNotifiedAt.TryGetValue(key, out var last) && now - last < DeniedCooldown) return;
+        _deniedNotifiedAt[key] = now;
+        try
+        {
+            await _chat.SendChatMessageAsync(username, "no tienes permiso para usar comandos", platform);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to send permission-denied feedback");
+        }
     }
 
     public void Disconnect(Guid userId, string platform)
@@ -142,12 +220,15 @@ public class PlatformConnectionManager
                 _activeTwitchClient  = null;
                 _activeTwitchChannel = null;
                 _chat.RegisterSender("twitch", null);
+                _twitchConfigs.TryRemove(userId, out _);
                 break;
             case "tiktok":
                 _chat.RegisterSender("tiktok", null);
+                _tikTokConfigs.TryRemove(userId, out _);
                 break;
             case "kick":
                 _chat.RegisterSender("kick", null);
+                _kickConfigs.TryRemove(userId, out _);
                 break;
         }
     }
@@ -304,12 +385,12 @@ public class PlatformConnectionManager
                 lastEventAt = DateTime.UtcNow;
                 if (tiktokRoomId == null && e.RoomId > 0)
                     tiktokRoomId = e.RoomId.ToString();
-                HandleTikTokChat(userId, config, e);
+                HandleTikTokChat(userId, e);
             };
             client.OnGiftMessage += (_, e) =>
             {
                 lastEventAt = DateTime.UtcNow;
-                HandleTikTokGift(userId, config, e);
+                HandleTikTokGift(userId, e);
             };
 
             _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
@@ -422,7 +503,7 @@ public class PlatformConnectionManager
         }
     }
 
-    private async void HandleTikTokChat(Guid userId, TikTokPlatformConfig config, Chat e)
+    private async void HandleTikTokChat(Guid userId, Chat e)
     {
         try
         {
@@ -434,7 +515,12 @@ public class PlatformConnectionManager
             _logger.LogDebug("TikTok chat @{User}: {Message}", username, message);
 
             if (message[0] is not ('!' or '.' or '/')) return;
-            if (e.Sender != null && !IsTikTokRoleAllowed(e.Sender, config.CommandRoles, config.TeamMinLevel, config.AllowedUsers)) return;
+            if (!_tikTokConfigs.TryGetValue(userId, out var config)) return;
+            if (e.Sender != null && !IsTikTokRoleAllowed(e.Sender, config.CommandRoles, config.TeamMinLevel, config.AllowedUsers))
+            {
+                await NotifyPermissionDeniedAsync("tiktok", username);
+                return;
+            }
             await RouteCommand(userId, username, message, "tiktok");
         }
         catch (Exception ex)
@@ -443,12 +529,13 @@ public class PlatformConnectionManager
         }
     }
 
-    private async void HandleTikTokGift(Guid userId, TikTokPlatformConfig config, GiftMessage e)
+    private async void HandleTikTokGift(Guid userId, GiftMessage e)
     {
         try
         {
             // Ignore intermediate combo events; only process when the streak ends
             if (!e.StreakEnd) return;
+            if (!_tikTokConfigs.TryGetValue(userId, out var config)) return;
 
             var username = e.User?.UniqueId ?? "viewer";
             var giftName = e.Gift?.Name ?? "regalo";
@@ -559,8 +646,12 @@ public class PlatformConnectionManager
             _activity.RecordMessage(e.ChatMessage.Username);
             if (msg[0] is ('!' or '.' or '/'))
             {
-                if (await IsTwitchRoleAllowedAsync(e.ChatMessage, config.CommandRoles, broadcasterId, config.AllowedUsers))
+                // Read the latest config so settings changes apply mid-stream
+                if (!_twitchConfigs.TryGetValue(userId, out var liveCfg)) return;
+                if (await IsTwitchRoleAllowedAsync(e.ChatMessage, liveCfg.CommandRoles, broadcasterId, liveCfg.AllowedUsers))
                     await RouteCommand(userId, e.ChatMessage.Username, msg, "twitch");
+                else
+                    await NotifyPermissionDeniedAsync("twitch", e.ChatMessage.Username);
             }
         };
 
@@ -589,8 +680,15 @@ public class PlatformConnectionManager
             if (string.IsNullOrEmpty(content)) return;
             var sender = msg.Sender?.Username ?? "viewer";
             _activity.RecordMessage(sender);
-            if (content[0] is ('!' or '.' or '/') && IsKickRoleAllowed(msg, config.CommandRoles, config.AllowedUsers))
-                _ = RouteCommand(userId, sender, content, "kick");
+            if (content[0] is ('!' or '.' or '/'))
+            {
+                // Read the latest config so settings changes apply mid-stream
+                if (!_kickConfigs.TryGetValue(userId, out var liveCfg)) return;
+                if (IsKickRoleAllowed(msg, liveCfg.CommandRoles, liveCfg.AllowedUsers))
+                    _ = RouteCommand(userId, sender, content, "kick");
+                else
+                    _ = NotifyPermissionDeniedAsync("kick", sender);
+            }
         };
 
         _logger.LogInformation("Kick connecting to channel {Channel}", config.Channel);
