@@ -584,10 +584,12 @@ public class PlatformConnectionManager
         if (badges != null)
         {
             if (roles.Contains("moderator") && badges.Any(b => b.Type is "moderator" or "broadcaster")) return true;
-            if (roles.Contains("subscriber") && badges.Any(b => b.Type is "subscriber" or "og")) return true;
+            if (roles.Contains("subscriber") && badges.Any(b => b.Type is "subscriber" or "founder")) return true;
+            if (roles.Contains("vip")        && badges.Any(b => b.Type == "vip")) return true;
+            if (roles.Contains("og")         && badges.Any(b => b.Type == "og")) return true;
         }
-        // Kick API doesn't expose follower status — best effort: any chatter is considered a follower
-        // (someone has to be in chat to send a command, and Kick channels typically gate chat to followers).
+        // Kick API doesn't expose follower status reliably — see thread; best effort treats any chatter
+        // as a follower since the API has no per-user follower query without webhook infrastructure.
         if (roles.Contains("follower")) return true;
         return false;
     }

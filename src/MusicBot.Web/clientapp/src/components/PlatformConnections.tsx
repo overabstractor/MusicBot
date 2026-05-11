@@ -68,6 +68,8 @@ const PLATFORM_ROLES: Record<string, { id: string; label: string }[]> = {
     { id: "all",        label: "Todos los usuarios" },
     { id: "follower",   label: "Seguidores" },
     { id: "subscriber", label: "Suscriptores" },
+    { id: "og",         label: "OGs" },
+    { id: "vip",        label: "VIPs" },
     { id: "moderator",  label: "Moderadores" },
   ],
 };
