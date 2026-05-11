@@ -3745,13 +3745,35 @@ a:hover { text-decoration: underline; }
   accent-color: var(--accent);
 }
 
-/* ── Platform sections (new layout) ── */
+/* ── Compact account row + auto-connect ── */
+
+.platform-account-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0;
+}
+
+.platform-auto-label-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.platform-auto-label-inline input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* ── Platform sections (collapsible) ── */
 
 .platform-sections {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
 }
 
 .platform-section {
@@ -3763,19 +3785,54 @@ a:hover { text-decoration: underline; }
   flex-direction: column;
 }
 
-.platform-section--full {
-  grid-column: 1 / -1;
+.platform-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+.platform-section-header:hover {
+  background: var(--bg);
 }
 
-.platform-section-header {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--text-dim);
-  padding: 6px 10px;
-  background: var(--bg);
+.platform-section--open .platform-section-header {
   border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.platform-section-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 10px;
+}
+
+.platform-section-title {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.platform-section-summary {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .platform-section-body {
@@ -3783,7 +3840,6 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1;
 }
 
 /* ── Role selector ── */
