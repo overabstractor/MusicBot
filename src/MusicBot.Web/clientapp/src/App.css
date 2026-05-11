@@ -3810,7 +3810,7 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
 }
 .role-item--dim {
-  opacity: 0.38;
+  opacity: 0.6;
   pointer-events: none;
 }
 
