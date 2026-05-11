@@ -596,9 +596,8 @@ public class PlatformConnectionManager
             if (roles.Contains("vip")        && badges.Any(b => b.Type == "vip")) return true;
             if (roles.Contains("og")         && badges.Any(b => b.Type == "og")) return true;
         }
-        // Kick API doesn't expose follower status reliably — see thread; best effort treats any chatter
-        // as a follower since the API has no per-user follower query without webhook infrastructure.
-        if (roles.Contains("follower")) return true;
+        // Note: Kick does not expose follower status without webhook infrastructure
+        // (channel.followed event + public endpoint). Follower role intentionally omitted.
         return false;
     }
 
