@@ -154,7 +154,7 @@ public class PlatformConnectionManager
 
     // ── Reconnect loop ────────────────────────────────────────────────────────
 
-    private static readonly int[] ReconnectDelays = [5, 10, 20, 45, 60];
+    private static readonly int[] ReconnectDelays = [2, 5, 10, 20, 45];
 
     private async Task RunWithReconnect(string key, Func<CancellationToken, Task> run, CancellationToken ct)
     {
@@ -223,16 +223,22 @@ public class PlatformConnectionManager
         var key = Key(userId, "tiktok");
         var hasSign = !string.IsNullOrWhiteSpace(config.SigningServerUrl);
 
+        // ── Tunable timings (kept low for fast recovery from transient drops) ─
+        const int LiveCheckSec       = 20;   // poll for "is live" while waiting for stream
+        const int WatchdogSec        = 45;   // how often watchdog checks live status
+        const int MaxConsecFails     = 2;    // tolerate this many failed checks before disconnect
+        const int MaxSilenceMinutes  = 3;    // force reconnect if WS shows connected but no events
+        const int EndedCooldownSec   = 5;    // cooldown after natural stream end
+        int[] wsRetryDelays          = [1, 2, 5, 10, 20]; // fast local backoff for WS-level errors
+        int wsFailCount = 0;
+
         while (!ct.IsCancellationRequested)
         {
             // ── Wait for the streamer to go live ──────────────────────────────
-            // Polls every 60 s to avoid hammering the signing server.
-            // Stays in "Connecting" status so the UI never shows the Connect button.
-            const int LiveCheckSec = 60;
             string? roomId = null;
             while (!ct.IsCancellationRequested)
             {
-                roomId = await _roomResolver.ResolveRoomIdAsync(config.Username, ct);
+                roomId = await SafeResolveRoomIdAsync(config.Username, ct);
                 if (roomId != null) break;
 
                 _logger.LogInformation("TikTok @{User} no está en vivo — verificando en {Sec}s",
@@ -251,7 +257,7 @@ public class PlatformConnectionManager
             var client = new TikTokLiveClient(
                 config.Username,
                 roomId: roomId,
-                skipRoomInfo: true,          // skip TikTok's own scraping entirely
+                skipRoomInfo: true,
                 processInitialData: false,
                 customSigningServer: hasSign ? config.SigningServerUrl : null,
                 signingServerApiKey: hasSign ? config.SigningServerApiKey : null);
@@ -260,8 +266,14 @@ public class PlatformConnectionManager
                               || AppEvents.HasTikTokWebViewSender;
 
             string? tiktokRoomId = null;
+            var lastEventAt = DateTime.UtcNow;
+            var connectedSuccessfully = false;
+
             client.OnConnected += (_, _) =>
             {
+                connectedSuccessfully = true;
+                wsFailCount = 0; // reset fast-retry backoff once we're actually connected
+                lastEventAt = DateTime.UtcNow;
                 _logger.LogInformation("TikTok connected to @{User}", config.Username);
                 _activity.SetIgnored(config.Username, true);
                 SetStatus(key, ConnectionStatus.Connected);
@@ -283,70 +295,130 @@ public class PlatformConnectionManager
                 _logger.LogInformation("TikTok disconnected from @{User}", config.Username);
                 _activity.SetIgnored(config.Username, false);
                 _chat.RegisterSender("tiktok", null);
-                // Keep "Connecting" if stream ended naturally (will poll for next live).
-                // Only switch to "Disconnected" when the user explicitly cancelled.
                 SetStatus(key, ct.IsCancellationRequested
                     ? ConnectionStatus.Disconnected
                     : ConnectionStatus.Connecting);
             };
             client.OnChatMessage += (_, e) =>
             {
-                // Capture roomId from first incoming message for sending
+                lastEventAt = DateTime.UtcNow;
                 if (tiktokRoomId == null && e.RoomId > 0)
                     tiktokRoomId = e.RoomId.ToString();
                 HandleTikTokChat(userId, config, e);
             };
-            client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, config, e);
+            client.OnGiftMessage += (_, e) =>
+            {
+                lastEventAt = DateTime.UtcNow;
+                HandleTikTokGift(userId, config, e);
+            };
 
             _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
                 config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
 
-            // Run the WebSocket client and a live-status watchdog in parallel.
-            // TikTok doesn't always send a disconnect event when a stream ends, so the
-            // watchdog polls every 90 s and cancels the client when the room is no longer live.
+            // Watchdog: tolerates transient failures (2 consecutive needed) + detects silent WS.
             using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var streamEndedByWatchdog = false;
             var runTask = client.RunAsync(streamCts.Token);
             var watchdogTask = Task.Run(async () =>
             {
-                const int WatchdogSec = 90;
+                int consecutiveFails = 0;
                 try
                 {
                     while (!streamCts.Token.IsCancellationRequested)
                     {
                         await Task.Delay(TimeSpan.FromSeconds(WatchdogSec), streamCts.Token);
-                        var stillLive = await _roomResolver.ResolveRoomIdAsync(config.Username, streamCts.Token);
-                        if (stillLive == null)
+
+                        // Heartbeat: if WS claims connected but no events flowing, force reconnect
+                        if (connectedSuccessfully &&
+                            (DateTime.UtcNow - lastEventAt).TotalMinutes > MaxSilenceMinutes)
                         {
-                            _logger.LogInformation(
-                                "TikTok watchdog: @{User} ya no está en vivo — cerrando conexión WebSocket",
-                                config.Username);
+                            _logger.LogWarning(
+                                "TikTok @{User} sin eventos por >{Min}min — forzando reconexión",
+                                config.Username, MaxSilenceMinutes);
+                            streamEndedByWatchdog = true;
                             streamCts.Cancel();
                             return;
+                        }
+
+                        var stillLive = await SafeResolveRoomIdAsync(config.Username, streamCts.Token);
+                        if (stillLive == null)
+                        {
+                            consecutiveFails++;
+                            _logger.LogDebug(
+                                "TikTok watchdog: @{User} chequeo fallido ({N}/{Max})",
+                                config.Username, consecutiveFails, MaxConsecFails);
+                            if (consecutiveFails >= MaxConsecFails)
+                            {
+                                _logger.LogInformation(
+                                    "TikTok watchdog: @{User} ya no está en vivo — cerrando conexión",
+                                    config.Username);
+                                streamEndedByWatchdog = true;
+                                streamCts.Cancel();
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            consecutiveFails = 0;
                         }
                     }
                 }
                 catch (OperationCanceledException) { }
             }, streamCts.Token);
 
+            bool wsError = false;
             try { await runTask; }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                // Cancelled by the watchdog (stream ended), not by the user — treat as natural end
+                return;
             }
-            await watchdogTask; // let it finish cleanly
-
-            // Stream ended naturally — brief cooldown before re-checking live status
-            // to avoid reconnecting to a stale room ID that TikTok hasn't invalidated yet.
-            if (!ct.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                const int EndedCooldownSec = 30;
-                _logger.LogInformation("TikTok @{User} stream ended — checking live again in {Sec}s",
+                // watchdog cancelled — natural stream end or heartbeat timeout
+            }
+            catch (Exception ex)
+            {
+                // WS-level error → handle locally with fast retry (don't bubble to slow RunWithReconnect)
+                wsError = true;
+                wsFailCount++;
+                var delay = wsRetryDelays[Math.Min(wsFailCount - 1, wsRetryDelays.Length - 1)];
+                _logger.LogWarning(ex,
+                    "TikTok @{User} WS error — reintentando en {Delay}s (intento {N})",
+                    config.Username, delay, wsFailCount);
+                SetStatus(key, ConnectionStatus.Connecting,
+                    $"Error temporal — reintentando en {delay}s…");
+                streamCts.Cancel();
+                try { await Task.Delay(TimeSpan.FromSeconds(delay), ct); }
+                catch (OperationCanceledException) { return; }
+            }
+            try { await watchdogTask; } catch { /* swallow */ }
+
+            // After natural stream-end or watchdog cancel, do brief cooldown then poll again.
+            // After WS error, we already waited — go straight to live check (skip cooldown).
+            if (!wsError && !ct.IsCancellationRequested)
+            {
+                _logger.LogInformation(
+                    streamEndedByWatchdog
+                        ? "TikTok @{User} stream ended — checking live again in {Sec}s"
+                        : "TikTok @{User} disconnected — checking live again in {Sec}s",
                     config.Username, EndedCooldownSec);
                 SetStatus(key, ConnectionStatus.Connecting,
-                    $"@{config.Username} terminó el vivo — verificando en {EndedCooldownSec}s…");
+                    $"@{config.Username} — verificando en {EndedCooldownSec}s…");
                 try { await Task.Delay(TimeSpan.FromSeconds(EndedCooldownSec), ct); }
                 catch (OperationCanceledException) { return; }
             }
+        }
+    }
+
+    /// <summary>ResolveRoomId wrapper that never throws on transient errors — only OCE bubbles up.</summary>
+    private async Task<string?> SafeResolveRoomIdAsync(string username, CancellationToken ct)
+    {
+        try { return await _roomResolver.ResolveRoomIdAsync(username, ct); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "TikTok ResolveRoomId transient failure for @{User}", username);
+            return null;
         }
     }
 
