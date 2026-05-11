@@ -56,6 +56,7 @@ const PLATFORM_ROLES: Record<string, { id: string; label: string }[]> = {
     { id: "subscriber", label: "Suscriptores" },
     { id: "moderator",  label: "Moderadores" },
     { id: "teamMember", label: "Team Members" },
+    { id: "list",       label: "Usuarios de la lista" },
   ],
   twitch: [
     { id: "all",        label: "Todos los usuarios" },
@@ -63,6 +64,7 @@ const PLATFORM_ROLES: Record<string, { id: string; label: string }[]> = {
     { id: "subscriber", label: "Suscriptores" },
     { id: "vip",        label: "VIPs" },
     { id: "moderator",  label: "Moderadores" },
+    { id: "list",       label: "Usuarios de la lista" },
   ],
   kick: [
     { id: "all",        label: "Todos los usuarios" },
@@ -71,7 +73,51 @@ const PLATFORM_ROLES: Record<string, { id: string; label: string }[]> = {
     { id: "og",         label: "OGs" },
     { id: "vip",        label: "VIPs" },
     { id: "moderator",  label: "Moderadores" },
+    { id: "list",       label: "Usuarios de la lista" },
   ],
+};
+
+// ── Allowed users editor (chips + add input) ──────────────────────────────────
+
+const AllowedUsersEditor: React.FC<{
+  users: string[];
+  onChange: (users: string[]) => void;
+}> = ({ users, onChange }) => {
+  const [draft, setDraft] = useState("");
+
+  const add = () => {
+    const v = draft.trim().replace(/^@/, "");
+    if (!v) return;
+    if (users.some(u => u.toLowerCase() === v.toLowerCase())) { setDraft(""); return; }
+    onChange([...users, v]);
+    setDraft("");
+  };
+
+  const remove = (u: string) => onChange(users.filter(x => x !== u));
+
+  return (
+    <div className="allowed-users">
+      <div className="allowed-users-chips">
+        {users.length === 0 ? (
+          <span className="allowed-users-empty">Sin usuarios — agregalos abajo</span>
+        ) : users.map(u => (
+          <span key={u} className="allowed-user-chip">
+            @{u}
+            <button type="button" className="allowed-user-remove" onClick={() => remove(u)}>×</button>
+          </span>
+        ))}
+      </div>
+      <div className="allowed-users-input">
+        <input
+          type="text" placeholder="usuario (sin @)"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+        />
+        <button type="button" className="btn btn-sm btn-primary" onClick={add} disabled={!draft.trim()}>+</button>
+      </div>
+    </div>
+  );
 };
 
 const RoleSelector: React.FC<{
@@ -177,6 +223,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   const [coinsPerBump, setCoinsPerBump]               = useState(cfg?.coinsPerBump ?? 1);
   const [commandRoles, setCommandRoles]               = useState<string[]>(cfg?.commandRoles ?? ["all"]);
   const [teamMinLevel, setTeamMinLevel]               = useState(cfg?.teamMinLevel ?? 1);
+  const [allowedUsers, setAllowedUsers]               = useState<string[]>(cfg?.allowedUsers ?? []);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [tiktokAuth, setTiktokAuth] = useState<{ authenticated: boolean; username: string | null } | null>(null);
@@ -201,7 +248,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       if (r.authenticated) {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         setAuthBusy(false);
-        if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel).catch(() => {});
+        if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel, allowedUsers).catch(() => {});
         onSaved();
       }
     });
@@ -221,7 +268,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
           stopPoll();
           setAuthBusy(false);
           setTiktokAuth(r);
-          if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel).catch(() => {});
+          if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel, allowedUsers).catch(() => {});
           onSaved();
         } else if (r.cancelled) {
           stopPoll();
@@ -241,7 +288,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     onSaved();
   };
 
-  const save = useCallback((patch?: Partial<{ threshold: number; bumpEn: boolean; intEn: boolean; cpb: number; roles: string[]; teamLevel: number }>) => {
+  const save = useCallback((patch?: Partial<{ threshold: number; bumpEn: boolean; intEn: boolean; cpb: number; roles: string[]; teamLevel: number; users: string[] }>) => {
     const u = tiktokAuth?.username;
     if (!u) return;
     const t  = patch?.threshold ?? giftThreshold;
@@ -250,8 +297,9 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     const c  = patch?.cpb       ?? coinsPerBump;
     const r  = patch?.roles     ?? commandRoles;
     const tl = patch?.teamLevel ?? teamMinLevel;
-    api.saveTikTok(u, autoConnect, t, be, ie, c, r, tl).catch(() => {});
-  }, [tiktokAuth, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel]);
+    const au = patch?.users     ?? allowedUsers;
+    api.saveTikTok(u, autoConnect, t, be, ie, c, r, tl, au).catch(() => {});
+  }, [tiktokAuth, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel, allowedUsers]);
 
   const connect = async () => {
     const channel = tiktokAuth?.username;
@@ -259,7 +307,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     setConnecting(true);
     setConnectError(null);
     try {
-      await api.saveTikTok(channel, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel);
+      await api.saveTikTok(channel, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel, allowedUsers);
       await api.connectPlatform("tiktok");
       onSaved();
     } catch (e) {
@@ -308,7 +356,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             <input type="checkbox" checked={autoConnect}
               onChange={async (e) => {
                 setAutoConnect(e.target.checked);
-                if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel).catch(() => {});
+                if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel, allowedUsers).catch(() => {});
               }} />
             Conectar al iniciar la app
           </label>
@@ -327,6 +375,12 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
                 onChange={(e) => setTeamMinLevel(Math.max(1, Number(e.target.value)))}
                 onBlur={() => save({ teamLevel: teamMinLevel })} />
             </div>
+          )}
+          {commandRoles.includes("list") && (
+            <AllowedUsersEditor
+              users={allowedUsers}
+              onChange={(u) => { setAllowedUsers(u); save({ users: u }); }}
+            />
           )}
         </PlatformSection>
 
@@ -390,6 +444,7 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
   const cfg = state?.config as TwitchConfig | null;
   const [commandRoles, setCommandRoles] = useState<string[]>(cfg?.commandRoles ?? ["all"]);
+  const [allowedUsers, setAllowedUsers] = useState<string[]>(cfg?.allowedUsers ?? []);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [twitchAuth, setTwitchAuth] = useState<{ authenticated: boolean; username: string | null } | null>(null);
@@ -405,11 +460,11 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     }).catch(() => setTwitchAuth({ authenticated: false, username: null }));
   }, [authUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveAndConnect = async (username: string, roles = commandRoles) => {
+  const saveAndConnect = async (username: string, roles = commandRoles, users = allowedUsers) => {
     setConnecting(true);
     setConnectError(null);
     try {
-      await api.saveTwitch(username, username, autoConnect, roles);
+      await api.saveTwitch(username, username, autoConnect, roles, users);
       await api.connectPlatform("twitch");
       onSaved();
     } catch (e) {
@@ -481,7 +536,7 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             <input type="checkbox" checked={autoConnect}
               onChange={async (e) => {
                 setAutoConnect(e.target.checked);
-                await api.saveTwitch(twitchAuth?.username ?? "", twitchAuth?.username ?? "", e.target.checked, commandRoles);
+                await api.saveTwitch(twitchAuth?.username ?? "", twitchAuth?.username ?? "", e.target.checked, commandRoles, allowedUsers);
               }} />
             Conectar al iniciar
           </label>
@@ -493,9 +548,18 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             roles={commandRoles}
             onChange={(r) => {
               setCommandRoles(r);
-              if (twitchAuth?.username) api.saveTwitch(twitchAuth.username, twitchAuth.username, autoConnect, r).catch(() => {});
+              if (twitchAuth?.username) api.saveTwitch(twitchAuth.username, twitchAuth.username, autoConnect, r, allowedUsers).catch(() => {});
             }}
           />
+          {commandRoles.includes("list") && (
+            <AllowedUsersEditor
+              users={allowedUsers}
+              onChange={(u) => {
+                setAllowedUsers(u);
+                if (twitchAuth?.username) api.saveTwitch(twitchAuth.username, twitchAuth.username, autoConnect, commandRoles, u).catch(() => {});
+              }}
+            />
+          )}
         </PlatformSection>
       </div>
 
@@ -524,6 +588,7 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
   const [channel, setChannel] = useState(cfg?.channel ?? "");
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
   const [commandRoles, setCommandRoles] = useState<string[]>(cfg?.commandRoles ?? ["all"]);
+  const [allowedUsers, setAllowedUsers] = useState<string[]>(cfg?.allowedUsers ?? []);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [kickAuth, setKickAuth] = useState<{ authenticated: boolean; channel: string | null } | null>(null);
@@ -544,11 +609,11 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
     }).catch(() => setKickAuth({ authenticated: false, channel: null }));
   }, [authUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveAndConnect = async (ch: string, roles = commandRoles) => {
+  const saveAndConnect = async (ch: string, roles = commandRoles, users = allowedUsers) => {
     setConnecting(true);
     setConnectError(null);
     try {
-      await api.saveKick(ch, autoConnect, roles);
+      await api.saveKick(ch, autoConnect, roles, users);
       await api.connectPlatform("kick");
       onSaved();
     } catch (e) {
@@ -622,7 +687,7 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
             <input type="checkbox" checked={autoConnect}
               onChange={async (e) => {
                 setAutoConnect(e.target.checked);
-                await api.saveKick(channel, e.target.checked, commandRoles);
+                await api.saveKick(channel, e.target.checked, commandRoles, allowedUsers);
               }} />
             Conectar al iniciar
           </label>
@@ -634,9 +699,18 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
             roles={commandRoles}
             onChange={(r) => {
               setCommandRoles(r);
-              api.saveKick(channel, autoConnect, r).catch(() => {});
+              api.saveKick(channel, autoConnect, r, allowedUsers).catch(() => {});
             }}
           />
+          {commandRoles.includes("list") && (
+            <AllowedUsersEditor
+              users={allowedUsers}
+              onChange={(u) => {
+                setAllowedUsers(u);
+                api.saveKick(channel, autoConnect, commandRoles, u).catch(() => {});
+              }}
+            />
+          )}
         </PlatformSection>
       </div>
 

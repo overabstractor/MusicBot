@@ -89,17 +89,20 @@ export interface TikTokConfig {
   coinsPerBump: number;
   commandRoles: string[];
   teamMinLevel: number;
+  allowedUsers: string[];
 }
 
 export interface TwitchConfig {
   channel: string;
   botUsername: string;
   commandRoles: string[];
+  allowedUsers: string[];
 }
 
 export interface KickConfig {
   channel: string;
   commandRoles: string[];
+  allowedUsers: string[];
 }
 
 export interface LibraryTrack {

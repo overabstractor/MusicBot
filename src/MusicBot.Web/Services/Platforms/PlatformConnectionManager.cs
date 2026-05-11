@@ -15,9 +15,9 @@ namespace MusicBot.Services.Platforms;
 
 public class PlatformConnectionManager
 {
-    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100, bool GiftBumpEnabled = true, bool GiftInterruptEnabled = true, int CoinsPerBump = 1, string[]? CommandRoles = null, int TeamMinLevel = 1);
-    public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken, string[]? CommandRoles = null);
-    public record KickPlatformConfig(string Channel, string[]? CommandRoles = null);
+    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100, bool GiftBumpEnabled = true, bool GiftInterruptEnabled = true, int CoinsPerBump = 1, string[]? CommandRoles = null, int TeamMinLevel = 1, string[]? AllowedUsers = null);
+    public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken, string[]? CommandRoles = null, string[]? AllowedUsers = null);
+    public record KickPlatformConfig(string Channel, string[]? CommandRoles = null, string[]? AllowedUsers = null);
 
     public enum ConnectionStatus { Disconnected, Connecting, Connected, Error }
 
@@ -362,7 +362,7 @@ public class PlatformConnectionManager
             _logger.LogDebug("TikTok chat @{User}: {Message}", username, message);
 
             if (message[0] is not ('!' or '.' or '/')) return;
-            if (e.Sender != null && !IsTikTokRoleAllowed(e.Sender, config.CommandRoles, config.TeamMinLevel)) return;
+            if (e.Sender != null && !IsTikTokRoleAllowed(e.Sender, config.CommandRoles, config.TeamMinLevel, config.AllowedUsers)) return;
             await RouteCommand(userId, username, message, "tiktok");
         }
         catch (Exception ex)
@@ -487,7 +487,7 @@ public class PlatformConnectionManager
             _activity.RecordMessage(e.ChatMessage.Username);
             if (msg[0] is ('!' or '.' or '/'))
             {
-                if (await IsTwitchRoleAllowedAsync(e.ChatMessage, config.CommandRoles, broadcasterId))
+                if (await IsTwitchRoleAllowedAsync(e.ChatMessage, config.CommandRoles, broadcasterId, config.AllowedUsers))
                     await RouteCommand(userId, e.ChatMessage.Username, msg, "twitch");
             }
         };
@@ -517,7 +517,7 @@ public class PlatformConnectionManager
             if (string.IsNullOrEmpty(content)) return;
             var sender = msg.Sender?.Username ?? "viewer";
             _activity.RecordMessage(sender);
-            if (content[0] is ('!' or '.' or '/') && IsKickRoleAllowed(msg, config.CommandRoles))
+            if (content[0] is ('!' or '.' or '/') && IsKickRoleAllowed(msg, config.CommandRoles, config.AllowedUsers))
                 _ = RouteCommand(userId, sender, content, "kick");
         };
 
@@ -550,9 +550,15 @@ public class PlatformConnectionManager
 
     // ── Role helpers ─────────────────────────────────────────────────────────────
 
-    private static bool IsTikTokRoleAllowed(TikTokLiveSharp.Events.Objects.User sender, string[]? roles, int teamMinLevel)
+    private static bool IsInAllowList(string? username, string[]? allowedUsers)
+        => !string.IsNullOrEmpty(username)
+           && allowedUsers != null
+           && allowedUsers.Any(u => string.Equals(u.TrimStart('@'), username, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsTikTokRoleAllowed(TikTokLiveSharp.Events.Objects.User sender, string[]? roles, int teamMinLevel, string[]? allowedUsers)
     {
         if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+        if (roles.Contains("list") && IsInAllowList(sender.UniqueId, allowedUsers)) return true;
         if (roles.Contains("moderator") && (sender.User_Attr?.IsAdmin == true || sender.User_Attr?.IsSuperAdmin == true)) return true;
         if (roles.Contains("subscriber") && sender.Subscribe_Info?.IsSubscribe == true) return true;
         if (roles.Contains("follower") && sender.IsFollower) return true;
@@ -564,9 +570,10 @@ public class PlatformConnectionManager
         return false;
     }
 
-    private async Task<bool> IsTwitchRoleAllowedAsync(TwitchLib.Client.Models.ChatMessage msg, string[]? roles, string? broadcasterId)
+    private async Task<bool> IsTwitchRoleAllowedAsync(TwitchLib.Client.Models.ChatMessage msg, string[]? roles, string? broadcasterId, string[]? allowedUsers)
     {
         if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+        if (roles.Contains("list") && IsInAllowList(msg.Username, allowedUsers)) return true;
         if (roles.Contains("moderator") && (msg.IsBroadcaster || msg.UserDetail.IsModerator)) return true;
         if (roles.Contains("subscriber") && msg.UserDetail.IsSubscriber) return true;
         if (roles.Contains("vip") && msg.UserDetail.IsVip) return true;
@@ -577,9 +584,10 @@ public class PlatformConnectionManager
         return false;
     }
 
-    private static bool IsKickRoleAllowed(KickChatSpy.Models.ChatMessage msg, string[]? roles)
+    private static bool IsKickRoleAllowed(KickChatSpy.Models.ChatMessage msg, string[]? roles, string[]? allowedUsers)
     {
         if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+        if (roles.Contains("list") && IsInAllowList(msg.Sender?.Username, allowedUsers)) return true;
         var badges = msg.Sender?.Identity?.Badges;
         if (badges != null)
         {

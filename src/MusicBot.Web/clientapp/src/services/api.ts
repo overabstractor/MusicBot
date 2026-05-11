@@ -218,16 +218,16 @@ export const api = {
   // Platforms
   getPlatforms: () => request<PlatformState[]>("/api/platforms"),
 
-  saveTikTok: (username: string, autoConnect: boolean, giftInterruptThreshold = 100, giftBumpEnabled = true, giftInterruptEnabled = true, coinsPerBump = 1, commandRoles: string[] = ["all"], teamMinLevel = 1) =>
+  saveTikTok: (username: string, autoConnect: boolean, giftInterruptThreshold = 100, giftBumpEnabled = true, giftInterruptEnabled = true, coinsPerBump = 1, commandRoles: string[] = ["all"], teamMinLevel = 1, allowedUsers: string[] = []) =>
     request<void>("/api/platforms/tiktok", {
       method: "PUT",
-      body: JSON.stringify({ username, autoConnect, giftInterruptThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel }),
+      body: JSON.stringify({ username, autoConnect, giftInterruptThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel, allowedUsers }),
     }),
 
-  saveTwitch: (channel: string, botUsername: string, autoConnect: boolean, commandRoles: string[] = ["all"]) =>
+  saveTwitch: (channel: string, botUsername: string, autoConnect: boolean, commandRoles: string[] = ["all"], allowedUsers: string[] = []) =>
     request<void>("/api/platforms/twitch", {
       method: "PUT",
-      body: JSON.stringify({ channel, botUsername, autoConnect, commandRoles }),
+      body: JSON.stringify({ channel, botUsername, autoConnect, commandRoles, allowedUsers }),
     }),
 
   // TikTok in-app login
@@ -256,10 +256,10 @@ export const api = {
   getKickStatus:    () => request<{ authenticated: boolean; channel: string | null }>("/api/auth/kick/status"),
   disconnectKick:   () => request<void>("/api/auth/kick", { method: "DELETE" }),
 
-  saveKick: (channel: string, autoConnect: boolean, commandRoles: string[] = ["all"]) =>
+  saveKick: (channel: string, autoConnect: boolean, commandRoles: string[] = ["all"], allowedUsers: string[] = []) =>
     request<void>("/api/platforms/kick", {
       method: "PUT",
-      body: JSON.stringify({ channel, autoConnect, commandRoles }),
+      body: JSON.stringify({ channel, autoConnect, commandRoles, allowedUsers }),
     }),
 
   connectPlatform:    (platform: string) =>

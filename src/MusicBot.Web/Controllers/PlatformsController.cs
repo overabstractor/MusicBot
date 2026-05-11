@@ -75,6 +75,7 @@ public class PlatformsController : ControllerBase
                 coinsPerBump           = req.CoinsPerBump,
                 commandRoles           = req.CommandRoles,
                 teamMinLevel           = req.TeamMinLevel,
+                allowedUsers           = req.AllowedUsers,
             }),
             req.AutoConnect);
 
@@ -87,7 +88,7 @@ public class PlatformsController : ControllerBase
     public async Task<IActionResult> SaveTwitch([FromBody] SaveTwitchRequest req)
     {
         await UpsertConfig("twitch",
-            JsonSerializer.Serialize(new { channel = req.Channel, botUsername = req.BotUsername, commandRoles = req.CommandRoles }),
+            JsonSerializer.Serialize(new { channel = req.Channel, botUsername = req.BotUsername, commandRoles = req.CommandRoles, allowedUsers = req.AllowedUsers }),
             req.AutoConnect);
 
         _manager.SetUserSlug(LocalUser.Id, LocalUser.Slug);
@@ -99,7 +100,7 @@ public class PlatformsController : ControllerBase
     public async Task<IActionResult> SaveKick([FromBody] SaveKickRequest req)
     {
         await UpsertConfig("kick",
-            JsonSerializer.Serialize(new { channel = req.Channel, commandRoles = req.CommandRoles }),
+            JsonSerializer.Serialize(new { channel = req.Channel, commandRoles = req.CommandRoles, allowedUsers = req.AllowedUsers }),
             req.AutoConnect);
 
         _manager.SetUserSlug(LocalUser.Id, LocalUser.Slug);
@@ -145,7 +146,8 @@ public class PlatformsController : ControllerBase
                     GiftInterruptEnabled:  c?.GiftInterruptEnabled ?? true,
                     CoinsPerBump:          c?.CoinsPerBump ?? 1,
                     CommandRoles:          c?.CommandRoles,
-                    TeamMinLevel:          c?.TeamMinLevel ?? 1));
+                    TeamMinLevel:          c?.TeamMinLevel ?? 1,
+                    AllowedUsers:          c?.AllowedUsers));
                 break;
             }
             case "twitch":
@@ -161,7 +163,7 @@ public class PlatformsController : ControllerBase
                 var botUser = _twitchAuth.BotUsername ?? c.BotUsername ?? "";
                 if (string.IsNullOrWhiteSpace(botUser))
                     return BadRequest(new { error = "No se encontró el username del bot — reconecta la cuenta de Twitch." });
-                _manager.ConnectTwitch(LocalUser.Id, new PlatformConnectionManager.TwitchPlatformConfig(c.Channel, botUser, $"oauth:{token}", c?.CommandRoles));
+                _manager.ConnectTwitch(LocalUser.Id, new PlatformConnectionManager.TwitchPlatformConfig(c.Channel, botUser, $"oauth:{token}", c?.CommandRoles, c?.AllowedUsers));
                 break;
             }
             case "kick":
@@ -173,7 +175,7 @@ public class PlatformsController : ControllerBase
                 var channel = _kickAuth.ChannelName ?? c?.Channel ?? "";
                 if (string.IsNullOrWhiteSpace(channel))
                     return BadRequest(new { error = "Kick channel not available — connect Kick account first" });
-                _manager.ConnectKick(LocalUser.Id, new PlatformConnectionManager.KickPlatformConfig(channel, c?.CommandRoles));
+                _manager.ConnectKick(LocalUser.Id, new PlatformConnectionManager.KickPlatformConfig(channel, c?.CommandRoles, c?.AllowedUsers));
                 break;
             }
             default:
@@ -242,9 +244,9 @@ public class PlatformsController : ControllerBase
         await _db.SaveChangesAsync();
     }
 
-    private sealed class TikTokJson { public string? Username { get; set; } public int GiftInterruptThreshold { get; set; } = 100; public bool GiftBumpEnabled { get; set; } = true; public bool GiftInterruptEnabled { get; set; } = true; public int CoinsPerBump { get; set; } = 1; public string[]? CommandRoles { get; set; } public int TeamMinLevel { get; set; } = 1; }
-    private sealed class TwitchJson { public string? Channel { get; set; } public string? BotUsername { get; set; } public string? OAuthToken { get; set; } public string[]? CommandRoles { get; set; } }
-    private sealed class KickJson   { public string? Channel { get; set; } public string[]? CommandRoles { get; set; } }
+    private sealed class TikTokJson { public string? Username { get; set; } public int GiftInterruptThreshold { get; set; } = 100; public bool GiftBumpEnabled { get; set; } = true; public bool GiftInterruptEnabled { get; set; } = true; public int CoinsPerBump { get; set; } = 1; public string[]? CommandRoles { get; set; } public int TeamMinLevel { get; set; } = 1; public string[]? AllowedUsers { get; set; } }
+    private sealed class TwitchJson { public string? Channel { get; set; } public string? BotUsername { get; set; } public string? OAuthToken { get; set; } public string[]? CommandRoles { get; set; } public string[]? AllowedUsers { get; set; } }
+    private sealed class KickJson   { public string? Channel { get; set; } public string[]? CommandRoles { get; set; } public string[]? AllowedUsers { get; set; } }
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
@@ -268,6 +270,7 @@ public class SaveTikTokRequest
     public int      CoinsPerBump           { get; set; } = 1;
     public string[] CommandRoles           { get; set; } = ["all"];
     public int      TeamMinLevel           { get; set; } = 1;
+    public string[] AllowedUsers           { get; set; } = [];
 }
 
 public class SaveTwitchRequest
@@ -276,6 +279,7 @@ public class SaveTwitchRequest
     public string   BotUsername  { get; set; } = string.Empty;
     public bool     AutoConnect  { get; set; }
     public string[] CommandRoles { get; set; } = ["all"];
+    public string[] AllowedUsers { get; set; } = [];
 }
 
 public class SaveKickRequest
@@ -283,4 +287,5 @@ public class SaveKickRequest
     public string   Channel      { get; set; } = string.Empty;
     public bool     AutoConnect  { get; set; }
     public string[] CommandRoles { get; set; } = ["all"];
+    public string[] AllowedUsers { get; set; } = [];
 }

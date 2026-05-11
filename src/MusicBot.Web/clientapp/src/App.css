@@ -3831,6 +3831,78 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 
+/* ── Allowed users editor (chips + input) ── */
+
+.allowed-users {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  margin-left: 22px;
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.allowed-users-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.allowed-users-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.allowed-user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.allowed-user-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 50%;
+}
+.allowed-user-remove:hover {
+  background: var(--red-dim, rgba(239,68,68,0.15));
+  color: var(--red);
+}
+
+.allowed-users-input {
+  display: flex;
+  gap: 4px;
+}
+.allowed-users-input input {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-input, var(--surface));
+  color: var(--text);
+}
+.allowed-users-input button {
+  padding: 0 10px !important;
+  font-size: 13px !important;
+}
+
 /* ── Platform account row ── */
 
 .platform-account {
