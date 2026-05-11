@@ -15,7 +15,7 @@ namespace MusicBot.Services.Platforms;
 
 public class PlatformConnectionManager
 {
-    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100);
+    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100, bool GiftBumpEnabled = true, bool GiftInterruptEnabled = true, int CoinsPerBump = 1);
     public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken);
     public record KickPlatformConfig(string Channel);
 
@@ -293,7 +293,7 @@ public class PlatformConnectionManager
                     tiktokRoomId = e.RoomId.ToString();
                 HandleTikTokChat(userId, e);
             };
-            client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, config.GiftInterruptThreshold, e);
+            client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, config, e);
 
             _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
                 config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
@@ -367,10 +367,13 @@ public class PlatformConnectionManager
         }
     }
 
-    private async void HandleTikTokGift(Guid userId, int interruptThreshold, GiftMessage e)
+    private async void HandleTikTokGift(Guid userId, TikTokPlatformConfig config, GiftMessage e)
     {
         try
         {
+            // Ignore intermediate combo events; only process when the streak ends
+            if (!e.StreakEnd) return;
+
             var username = e.User?.UniqueId ?? "viewer";
             var giftName = e.Gift?.Name ?? "regalo";
             var diamonds = e.Gift?.DiamondCost ?? 0;
@@ -378,6 +381,7 @@ public class PlatformConnectionManager
             var coins    = diamonds * repeat;
 
             if (coins <= 0) return;
+            if (!config.GiftBumpEnabled && !config.GiftInterruptEnabled) return;
 
             var slug = await GetUserSlugAsync(userId);
             if (slug == null) return;
@@ -386,7 +390,7 @@ public class PlatformConnectionManager
             if (services == null) return;
 
             CommandResult result;
-            if (coins >= interruptThreshold)
+            if (coins >= config.GiftInterruptThreshold && config.GiftInterruptEnabled)
             {
                 var ok = services.Queue.InterruptForUser(username);
                 if (!ok) return;
@@ -394,13 +398,15 @@ public class PlatformConnectionManager
                 await _sync.StartCurrentTrackAsync(services);
                 result = CommandResult.Ok($"@{username} interrumpió con {coins} monedas!");
             }
-            else
+            else if (coins < config.GiftInterruptThreshold && config.GiftBumpEnabled)
             {
+                var bumps = Math.Max(1, coins / Math.Max(1, config.CoinsPerBump));
                 if (!services.Queue.Bump(username)) return;
-                for (int i = 1; i < coins; i++)
+                for (int i = 1; i < bumps; i++)
                     if (!services.Queue.Bump(username)) break;
-                result = CommandResult.Ok($"@{username} subió su canción {coins} posición(es)");
+                result = CommandResult.Ok($"@{username} subió su canción {bumps} posición(es)");
             }
+            else return;
 
             await _hub.Clients.Group($"user:{userId}")
                 .SendAsync("integration:event", new

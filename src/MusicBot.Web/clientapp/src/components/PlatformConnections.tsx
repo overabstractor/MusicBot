@@ -93,7 +93,11 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 }) => {
   const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
-  const [giftThreshold, setGiftThreshold] = useState((state?.config as import("../types/models").TikTokConfig | null)?.giftInterruptThreshold ?? 100);
+  const cfg = state?.config as import("../types/models").TikTokConfig | null;
+  const [giftThreshold, setGiftThreshold]           = useState(cfg?.giftInterruptThreshold ?? 100);
+  const [giftBumpEnabled, setGiftBumpEnabled]       = useState(cfg?.giftBumpEnabled ?? true);
+  const [giftInterruptEnabled, setGiftInterruptEnabled] = useState(cfg?.giftInterruptEnabled ?? true);
+  const [coinsPerBump, setCoinsPerBump]             = useState(cfg?.coinsPerBump ?? 1);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [tiktokAuth, setTiktokAuth] = useState<{ authenticated: boolean; username: string | null } | null>(null);
@@ -120,7 +124,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       if (r.authenticated) {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         setAuthBusy(false);
-        if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold).catch(() => {});
+        if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
         onSaved();
       }
     });
@@ -141,7 +145,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
           stopPoll();
           setAuthBusy(false);
           setTiktokAuth(r);
-          if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold).catch(() => {});
+          if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
           onSaved();
         } else if (r.cancelled) {
           stopPoll();
@@ -167,7 +171,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     setConnecting(true);
     setConnectError(null);
     try {
-      await api.saveTikTok(channel, autoConnect, giftThreshold);
+      await api.saveTikTok(channel, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump);
       await api.connectPlatform("tiktok");
       onSaved();
     } catch (e) {
@@ -220,9 +224,43 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
           <input type="checkbox" checked={autoConnect}
             onChange={async (e) => {
               setAutoConnect(e.target.checked);
-              if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold).catch(() => {});
+              if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
             }} />
           Conectar al iniciar la app
+        </label>
+
+        <label style={{ fontSize: 12, marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+          <input type="checkbox" checked={giftBumpEnabled}
+            onChange={async (e) => {
+              setGiftBumpEnabled(e.target.checked);
+              if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold, e.target.checked, giftInterruptEnabled, coinsPerBump).catch(() => {});
+            }} />
+          <span style={{ color: "var(--text-muted)" }}>Subir posiciones por regalos</span>
+        </label>
+
+        {giftBumpEnabled && (
+          <div style={{ marginTop: 10 }}>
+            <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
+              Monedas por posición
+            </label>
+            <input
+              type="number" min={1} value={coinsPerBump}
+              onChange={(e) => setCoinsPerBump(Math.max(1, Number(e.target.value)))}
+              onBlur={async () => {
+                if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
+              }}
+              style={{ width: 80, padding: "3px 6px", fontSize: 13, borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg-input)", color: "var(--text)" }}
+            />
+          </div>
+        )}
+
+        <label style={{ fontSize: 12, marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+          <input type="checkbox" checked={giftInterruptEnabled}
+            onChange={async (e) => {
+              setGiftInterruptEnabled(e.target.checked);
+              if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold, giftBumpEnabled, e.target.checked, coinsPerBump).catch(() => {});
+            }} />
+          <span style={{ color: "var(--text-muted)" }}>Interrumpir canción por regalos</span>
         </label>
 
         <div style={{ marginTop: 10 }}>
@@ -233,7 +271,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             type="number" min={1} value={giftThreshold}
             onChange={(e) => setGiftThreshold(Math.max(1, Number(e.target.value)))}
             onBlur={async () => {
-              if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold).catch(() => {});
+              if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
             }}
             style={{ width: 80, padding: "3px 6px", fontSize: 13, borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg-input)", color: "var(--text)" }}
           />

@@ -218,10 +218,10 @@ export const api = {
   // Platforms
   getPlatforms: () => request<PlatformState[]>("/api/platforms"),
 
-  saveTikTok: (username: string, autoConnect: boolean, giftInterruptThreshold: number = 100) =>
+  saveTikTok: (username: string, autoConnect: boolean, giftInterruptThreshold = 100, giftBumpEnabled = true, giftInterruptEnabled = true, coinsPerBump = 1) =>
     request<void>("/api/platforms/tiktok", {
       method: "PUT",
-      body: JSON.stringify({ username, autoConnect, giftInterruptThreshold }),
+      body: JSON.stringify({ username, autoConnect, giftInterruptThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump }),
     }),
 
   saveTwitch: (channel: string, botUsername: string, autoConnect: boolean) =>

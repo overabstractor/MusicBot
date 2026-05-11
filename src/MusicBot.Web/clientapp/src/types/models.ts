@@ -84,6 +84,9 @@ export interface SpotifyQueueState {
 export interface TikTokConfig {
   username: string;
   giftInterruptThreshold: number;
+  giftBumpEnabled: boolean;
+  giftInterruptEnabled: boolean;
+  coinsPerBump: number;
 }
 
 export interface TwitchConfig {
