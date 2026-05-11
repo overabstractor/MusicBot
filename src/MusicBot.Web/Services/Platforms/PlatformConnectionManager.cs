@@ -333,7 +333,7 @@ public class PlatformConnectionManager
         // ── Tunable timings (kept low for fast recovery from transient drops) ─
         const int LiveCheckSec       = 20;   // poll for "is live" while waiting for stream
         const int WatchdogSec        = 45;   // how often watchdog checks live status
-        const int MaxConsecFails     = 2;    // tolerate this many failed checks before disconnect
+        const int MaxConsecFails     = 3;    // tolerate this many failed checks before disconnect
         const int MaxSilenceMinutes  = 3;    // force reconnect if WS shows connected but no events
         const int EndedCooldownSec   = 5;    // cooldown after natural stream end
         int[] wsRetryDelays          = [1, 2, 5, 10, 20]; // fast local backoff for WS-level errors
@@ -422,9 +422,13 @@ public class PlatformConnectionManager
             _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
                 config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
 
-            // Watchdog: tolerates transient failures (2 consecutive needed) + detects silent WS.
+            // Watchdog. Priority order:
+            //   1. Active chat = user is definitively live → skip resolver (which is flaky)
+            //   2. Long silence (>MaxSilenceMinutes) = WS likely dead → force reconnect
+            //   3. Moderate silence + resolver fails N consecutive times = stream ended
             using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var streamEndedByWatchdog = false;
+            const int ChatActiveSec = 120; // 2 min — if events within this window, trust WS
             var runTask = client.RunAsync(streamCts.Token);
             var watchdogTask = Task.Run(async () =>
             {
@@ -435,9 +439,22 @@ public class PlatformConnectionManager
                     {
                         await Task.Delay(TimeSpan.FromSeconds(WatchdogSec), streamCts.Token);
 
-                        // Heartbeat: if WS claims connected but no events flowing, force reconnect
-                        if (connectedSuccessfully &&
-                            (DateTime.UtcNow - lastEventAt).TotalMinutes > MaxSilenceMinutes)
+                        var silenceSec = (DateTime.UtcNow - lastEventAt).TotalSeconds;
+
+                        // 1. Chat is actively flowing → user IS live, regardless of what the
+                        //    HTTP resolver thinks. Skip the check entirely.
+                        if (connectedSuccessfully && silenceSec < ChatActiveSec)
+                        {
+                            if (consecutiveFails > 0)
+                                _logger.LogDebug(
+                                    "TikTok watchdog: chat activo ({Sec}s) — reset de fallos del resolver",
+                                    (int)silenceSec);
+                            consecutiveFails = 0;
+                            continue;
+                        }
+
+                        // 2. WS shows connected but completely silent for too long → force reconnect
+                        if (connectedSuccessfully && silenceSec / 60.0 > MaxSilenceMinutes)
                         {
                             _logger.LogWarning(
                                 "TikTok @{User} sin eventos por >{Min}min — forzando reconexión",
@@ -447,17 +464,19 @@ public class PlatformConnectionManager
                             return;
                         }
 
+                        // 3. Chat is quiet (between 2 min and MaxSilence). Use resolver as backup
+                        //    to detect natural stream-end. Requires multiple consecutive failures.
                         var stillLive = await SafeResolveRoomIdAsync(config.Username, streamCts.Token);
                         if (stillLive == null)
                         {
                             consecutiveFails++;
                             _logger.LogDebug(
-                                "TikTok watchdog: @{User} chequeo fallido ({N}/{Max})",
-                                config.Username, consecutiveFails, MaxConsecFails);
+                                "TikTok watchdog: @{User} resolver falló ({N}/{Max}), chat silencioso {Sec}s",
+                                config.Username, consecutiveFails, MaxConsecFails, (int)silenceSec);
                             if (consecutiveFails >= MaxConsecFails)
                             {
                                 _logger.LogInformation(
-                                    "TikTok watchdog: @{User} ya no está en vivo — cerrando conexión",
+                                    "TikTok watchdog: @{User} parece haber terminado el live — cerrando",
                                     config.Username);
                                 streamEndedByWatchdog = true;
                                 streamCts.Cancel();
