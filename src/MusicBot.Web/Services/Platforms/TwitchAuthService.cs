@@ -252,7 +252,23 @@ public class TwitchAuthService
             req.Headers.Add("Authorization", $"Bearer {token}");
             req.Headers.Add("Client-Id", _settings.ClientId);
             var res = await client.SendAsync(req);
-            if (!res.IsSuccessStatusCode) return false;
+            if (!res.IsSuccessStatusCode)
+            {
+                if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                    res.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    _logger.LogWarning(
+                        "Twitch follower lookup returned {Code} — el token OAuth probablemente no tiene el scope " +
+                        "'moderator:read:followers'. El usuario debe hacer 'Olvidar cuenta' y reconectar Twitch.",
+                        res.StatusCode);
+                }
+                else
+                {
+                    _logger.LogWarning("Twitch follower lookup returned {Code} for broadcaster={B} user={U}",
+                        res.StatusCode, broadcasterId, userId);
+                }
+                return false;
+            }
             var json = await JsonDocument.ParseAsync(await res.Content.ReadAsStreamAsync());
             return json.RootElement.GetProperty("data").GetArrayLength() > 0;
         }

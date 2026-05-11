@@ -823,21 +823,41 @@ public class PlatformConnectionManager
     private async Task<bool> IsTwitchRoleAllowedAsync(TwitchLib.Client.Models.ChatMessage msg, string[]? roles, string? broadcasterId, string[]? allowedUsers)
     {
         if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
-        if (roles.Contains("list") && IsInAllowList(msg.Username, allowedUsers)) return true;
+
+        var listMatch = roles.Contains("list") && IsInAllowList(msg.Username, allowedUsers);
+        if (listMatch) return true;
+
         if (roles.Contains("moderator") && (msg.IsBroadcaster || msg.UserDetail.IsModerator)) return true;
         if (roles.Contains("subscriber") && msg.UserDetail.IsSubscriber) return true;
         if (roles.Contains("vip") && msg.UserDetail.IsVip) return true;
+
+        var followerChecked = false;
+        var followerMatch   = false;
         if (roles.Contains("follower") && !string.IsNullOrEmpty(broadcasterId) && !string.IsNullOrEmpty(msg.UserId))
         {
-            if (await _twitchFollowers.IsFollowerAsync(broadcasterId, msg.UserId)) return true;
+            followerChecked = true;
+            followerMatch = await _twitchFollowers.IsFollowerAsync(broadcasterId, msg.UserId);
+            if (followerMatch) return true;
         }
+
+        _logger.LogInformation(
+            "Twitch role DENIED for @{User} | roles=[{Roles}] | IsBroadcaster={B} IsMod={M} IsSub={S} IsVip={V} | " +
+            "FollowerChecked={FC} FollowerMatch={FM} | ListMatch={LM} | UserId={Uid} BroadcasterId={Bid}",
+            msg.Username, string.Join(",", roles ?? []),
+            msg.IsBroadcaster, msg.UserDetail.IsModerator, msg.UserDetail.IsSubscriber, msg.UserDetail.IsVip,
+            followerChecked, followerMatch, listMatch,
+            msg.UserId ?? "(empty)", broadcasterId ?? "(unresolved)");
+
         return false;
     }
 
-    private static bool IsKickRoleAllowed(KickChatSpy.Models.ChatMessage msg, string[]? roles, string[]? allowedUsers)
+    private bool IsKickRoleAllowed(KickChatSpy.Models.ChatMessage msg, string[]? roles, string[]? allowedUsers)
     {
         if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
-        if (roles.Contains("list") && IsInAllowList(msg.Sender?.Username, allowedUsers)) return true;
+
+        var listMatch = roles.Contains("list") && IsInAllowList(msg.Sender?.Username, allowedUsers);
+        if (listMatch) return true;
+
         var badges = msg.Sender?.Identity?.Badges;
         if (badges != null)
         {
@@ -846,6 +866,12 @@ public class PlatformConnectionManager
             if (roles.Contains("vip")        && badges.Any(b => b.Type == "vip")) return true;
             if (roles.Contains("og")         && badges.Any(b => b.Type == "og")) return true;
         }
+
+        var badgeList = badges == null ? "(null)" : string.Join(",", badges.Select(b => b.Type));
+        _logger.LogInformation(
+            "Kick role DENIED for @{User} | roles=[{Roles}] | badges=[{Badges}] | ListMatch={LM}",
+            msg.Sender?.Username, string.Join(",", roles ?? []), badgeList, listMatch);
+
         // Note: Kick does not expose follower status without webhook infrastructure
         // (channel.followed event + public endpoint). Follower role intentionally omitted.
         return false;
