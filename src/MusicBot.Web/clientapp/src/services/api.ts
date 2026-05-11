@@ -218,16 +218,16 @@ export const api = {
   // Platforms
   getPlatforms: () => request<PlatformState[]>("/api/platforms"),
 
-  saveTikTok: (username: string, autoConnect: boolean, giftInterruptThreshold = 100, giftBumpEnabled = true, giftInterruptEnabled = true, coinsPerBump = 1) =>
+  saveTikTok: (username: string, autoConnect: boolean, giftInterruptThreshold = 100, giftBumpEnabled = true, giftInterruptEnabled = true, coinsPerBump = 1, commandRoles: string[] = ["all"]) =>
     request<void>("/api/platforms/tiktok", {
       method: "PUT",
-      body: JSON.stringify({ username, autoConnect, giftInterruptThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump }),
+      body: JSON.stringify({ username, autoConnect, giftInterruptThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles }),
     }),
 
-  saveTwitch: (channel: string, botUsername: string, autoConnect: boolean) =>
+  saveTwitch: (channel: string, botUsername: string, autoConnect: boolean, commandRoles: string[] = ["all"]) =>
     request<void>("/api/platforms/twitch", {
       method: "PUT",
-      body: JSON.stringify({ channel, botUsername, autoConnect }),
+      body: JSON.stringify({ channel, botUsername, autoConnect, commandRoles }),
     }),
 
   // TikTok in-app login
@@ -256,10 +256,10 @@ export const api = {
   getKickStatus:    () => request<{ authenticated: boolean; channel: string | null }>("/api/auth/kick/status"),
   disconnectKick:   () => request<void>("/api/auth/kick", { method: "DELETE" }),
 
-  saveKick: (channel: string, autoConnect: boolean) =>
+  saveKick: (channel: string, autoConnect: boolean, commandRoles: string[] = ["all"]) =>
     request<void>("/api/platforms/kick", {
       method: "PUT",
-      body: JSON.stringify({ channel, autoConnect }),
+      body: JSON.stringify({ channel, autoConnect, commandRoles }),
     }),
 
   connectPlatform:    (platform: string) =>

@@ -47,6 +47,72 @@ export const PlatformConnections: React.FC<Props> = ({ tiktokEvents, twitchEvent
   );
 };
 
+// ── Role selector ─────────────────────────────────────────────────────────────
+
+const PLATFORM_ROLES: Record<string, { id: string; label: string }[]> = {
+  tiktok: [
+    { id: "all",        label: "Todos los usuarios" },
+    { id: "follower",   label: "Seguidores" },
+    { id: "subscriber", label: "Suscriptores" },
+    { id: "moderator",  label: "Moderadores" },
+  ],
+  twitch: [
+    { id: "all",        label: "Todos los usuarios" },
+    { id: "subscriber", label: "Suscriptores" },
+    { id: "vip",        label: "VIPs" },
+    { id: "moderator",  label: "Moderadores" },
+  ],
+  kick: [
+    { id: "all",        label: "Todos los usuarios" },
+    { id: "subscriber", label: "Suscriptores" },
+    { id: "moderator",  label: "Moderadores" },
+  ],
+};
+
+const RoleSelector: React.FC<{
+  platform: string;
+  roles: string[];
+  onChange: (roles: string[]) => void;
+}> = ({ platform, roles, onChange }) => {
+  const defs = PLATFORM_ROLES[platform] ?? [];
+  const isAll = roles.length === 0 || roles.includes("all");
+
+  const toggle = (id: string) => {
+    if (id === "all") {
+      if (!isAll) onChange(["all"]);
+      return;
+    }
+    const current = roles.filter(r => r !== "all");
+    const next = current.includes(id) ? current.filter(r => r !== id) : [...current, id];
+    onChange(next.length === 0 ? ["all"] : next);
+  };
+
+  return (
+    <div className="role-list">
+      {defs.map(({ id, label }) => (
+        <label key={id} className={`role-item${id !== "all" && isAll ? " role-item--dim" : ""}`}>
+          <input
+            type="checkbox"
+            checked={id === "all" ? isAll : roles.includes(id)}
+            disabled={id !== "all" && isAll}
+            onChange={() => toggle(id)}
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  );
+};
+
+// ── Platform section ──────────────────────────────────────────────────────────
+
+const PlatformSection: React.FC<{ title: string; full?: boolean; children: React.ReactNode }> = ({ title, full, children }) => (
+  <div className={`platform-section${full ? " platform-section--full" : ""}`}>
+    <div className="platform-section-header">{title}</div>
+    <div className="platform-section-body">{children}</div>
+  </div>
+);
+
 // ── Shared event log ─────────────────────────────────────────────────────────
 
 const EventLog: React.FC<{ events: IntegrationEvent[]; isConnected: boolean }> = ({ events, isConnected }) => (
@@ -93,11 +159,12 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 }) => {
   const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
-  const cfg = state?.config as import("../types/models").TikTokConfig | null;
-  const [giftThreshold, setGiftThreshold]           = useState(cfg?.giftInterruptThreshold ?? 100);
-  const [giftBumpEnabled, setGiftBumpEnabled]       = useState(cfg?.giftBumpEnabled ?? true);
+  const cfg = state?.config as TikTokConfig | null;
+  const [giftThreshold, setGiftThreshold]             = useState(cfg?.giftInterruptThreshold ?? 100);
+  const [giftBumpEnabled, setGiftBumpEnabled]         = useState(cfg?.giftBumpEnabled ?? true);
   const [giftInterruptEnabled, setGiftInterruptEnabled] = useState(cfg?.giftInterruptEnabled ?? true);
-  const [coinsPerBump, setCoinsPerBump]             = useState(cfg?.coinsPerBump ?? 1);
+  const [coinsPerBump, setCoinsPerBump]               = useState(cfg?.coinsPerBump ?? 1);
+  const [commandRoles, setCommandRoles]               = useState<string[]>(cfg?.commandRoles ?? ["all"]);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [tiktokAuth, setTiktokAuth] = useState<{ authenticated: boolean; username: string | null } | null>(null);
@@ -114,17 +181,15 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     }
   }, []);
 
-  // Initial load
   useEffect(() => { fetchAuthStatus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When the SignalR auth:updated event fires (pushed by backend on successful login)
   useEffect(() => {
     if (!authUpdatedAt) return;
     fetchAuthStatus().then(async r => {
       if (r.authenticated) {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         setAuthBusy(false);
-        if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
+        if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles).catch(() => {});
         onSaved();
       }
     });
@@ -138,14 +203,13 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     setAuthBusy(true);
     try {
       await api.startTikTokLogin();
-      // Poll as fallback in case SignalR is unavailable; SignalR will stop the poll early
       pollRef.current = setInterval(async () => {
         const r = await api.getTikTokAuthStatus().catch(() => ({ authenticated: false, username: null as string | null, cancelled: false }));
         if (r.authenticated) {
           stopPoll();
           setAuthBusy(false);
           setTiktokAuth(r);
-          if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
+          if (r.username) await api.saveTikTok(r.username, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles).catch(() => {});
           onSaved();
         } else if (r.cancelled) {
           stopPoll();
@@ -165,13 +229,24 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     onSaved();
   };
 
+  const save = useCallback((patch?: Partial<{ threshold: number; bumpEn: boolean; intEn: boolean; cpb: number; roles: string[] }>) => {
+    const u = tiktokAuth?.username;
+    if (!u) return;
+    const t  = patch?.threshold ?? giftThreshold;
+    const be = patch?.bumpEn    ?? giftBumpEnabled;
+    const ie = patch?.intEn     ?? giftInterruptEnabled;
+    const c  = patch?.cpb       ?? coinsPerBump;
+    const r  = patch?.roles     ?? commandRoles;
+    api.saveTikTok(u, autoConnect, t, be, ie, c, r).catch(() => {});
+  }, [tiktokAuth, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles]);
+
   const connect = async () => {
     const channel = tiktokAuth?.username;
     if (!channel) return;
     setConnecting(true);
     setConnectError(null);
     try {
-      await api.saveTikTok(channel, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump);
+      await api.saveTikTok(channel, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles);
       await api.connectPlatform("tiktok");
       onSaved();
     } catch (e) {
@@ -202,80 +277,72 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       )}
       {connectError && <ConnectError message={connectError} onDismiss={() => setConnectError(null)} />}
 
-      <div className="platform-form">
-        {isAuthed ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ color: "var(--green)", fontWeight: 600, fontSize: 14 }}>
-              @{ttUser ?? "…"}
-            </span>
-            <button className="btn btn-sm btn-disconnect" onClick={handleForget}
-              style={{ marginLeft: "auto", fontSize: 11, padding: "2px 8px" }}>
-              Olvidar cuenta
+      <div className="platform-sections">
+        <PlatformSection title="Conexión">
+          {isAuthed ? (
+            <div className="platform-account">
+              <span className="platform-account-name">@{ttUser ?? "…"}</span>
+              <button className="btn btn-sm btn-disconnect platform-account-forget" onClick={handleForget}>
+                Olvidar
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-sm btn-primary" onClick={handleLogin} disabled={authBusy} style={{ width: "100%" }}>
+              {authBusy ? "Abriendo login…" : "Iniciar sesión en TikTok"}
             </button>
-          </div>
-        ) : (
-          <button className="btn btn-sm btn-primary" onClick={handleLogin} disabled={authBusy}
-            style={{ fontSize: 13, width: "100%" }}>
-            {authBusy ? "Abriendo ventana de login…" : "Iniciar sesión en TikTok"}
-          </button>
-        )}
-
-        <label className="platform-auto-label" style={{ marginTop: 10 }}>
-          <input type="checkbox" checked={autoConnect}
-            onChange={async (e) => {
-              setAutoConnect(e.target.checked);
-              if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
-            }} />
-          Conectar al iniciar la app
-        </label>
-
-        <label style={{ fontSize: 12, marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
-          <input type="checkbox" checked={giftBumpEnabled}
-            onChange={async (e) => {
-              setGiftBumpEnabled(e.target.checked);
-              if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold, e.target.checked, giftInterruptEnabled, coinsPerBump).catch(() => {});
-            }} />
-          <span style={{ color: "var(--text-muted)" }}>Subir posiciones por regalos</span>
-        </label>
-
-        {giftBumpEnabled && (
-          <div style={{ marginTop: 10 }}>
-            <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-              Monedas por posición
-            </label>
-            <input
-              type="number" min={1} value={coinsPerBump}
-              onChange={(e) => setCoinsPerBump(Math.max(1, Number(e.target.value)))}
-              onBlur={async () => {
-                if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
-              }}
-              style={{ width: 80, padding: "3px 6px", fontSize: 13, borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg-input)", color: "var(--text)" }}
-            />
-          </div>
-        )}
-
-        <label style={{ fontSize: 12, marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
-          <input type="checkbox" checked={giftInterruptEnabled}
-            onChange={async (e) => {
-              setGiftInterruptEnabled(e.target.checked);
-              if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold, giftBumpEnabled, e.target.checked, coinsPerBump).catch(() => {});
-            }} />
-          <span style={{ color: "var(--text-muted)" }}>Interrumpir canción por regalos</span>
-        </label>
-
-        <div style={{ marginTop: 10 }}>
-          <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-            Monedas para interrumpir canción
+          )}
+          <label className="platform-auto-label" style={{ marginTop: 8 }}>
+            <input type="checkbox" checked={autoConnect}
+              onChange={async (e) => {
+                setAutoConnect(e.target.checked);
+                if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles).catch(() => {});
+              }} />
+            Conectar al iniciar la app
           </label>
-          <input
-            type="number" min={1} value={giftThreshold}
-            onChange={(e) => setGiftThreshold(Math.max(1, Number(e.target.value)))}
-            onBlur={async () => {
-              if (ttUser) await api.saveTikTok(ttUser, autoConnect, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump).catch(() => {});
-            }}
-            style={{ width: 80, padding: "3px 6px", fontSize: 13, borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg-input)", color: "var(--text)" }}
+        </PlatformSection>
+
+        <PlatformSection title="Permisos de comandos">
+          <RoleSelector
+            platform="tiktok"
+            roles={commandRoles}
+            onChange={(r) => { setCommandRoles(r); save({ roles: r }); }}
           />
-        </div>
+        </PlatformSection>
+
+        <PlatformSection title="Regalos" full>
+          <div className="gift-settings">
+            <div className="gift-row">
+              <label className="gift-toggle">
+                <input type="checkbox" checked={giftBumpEnabled}
+                  onChange={(e) => { setGiftBumpEnabled(e.target.checked); save({ bumpEn: e.target.checked }); }} />
+                Subir posiciones por regalos
+              </label>
+              {giftBumpEnabled && (
+                <div className="gift-input-group">
+                  <span className="gift-input-label">Monedas/posición</span>
+                  <input type="number" className="gift-input" min={1} value={coinsPerBump}
+                    onChange={(e) => setCoinsPerBump(Math.max(1, Number(e.target.value)))}
+                    onBlur={() => save()} />
+                </div>
+              )}
+            </div>
+            <div className="gift-row">
+              <label className="gift-toggle">
+                <input type="checkbox" checked={giftInterruptEnabled}
+                  onChange={(e) => { setGiftInterruptEnabled(e.target.checked); save({ intEn: e.target.checked }); }} />
+                Interrumpir canción por regalos
+              </label>
+              {giftInterruptEnabled && (
+                <div className="gift-input-group">
+                  <span className="gift-input-label">Umbral (monedas)</span>
+                  <input type="number" className="gift-input" min={1} value={giftThreshold}
+                    onChange={(e) => setGiftThreshold(Math.max(1, Number(e.target.value)))}
+                    onBlur={() => save()} />
+                </div>
+              )}
+            </div>
+          </div>
+        </PlatformSection>
       </div>
 
       <div className="platform-actions">
@@ -300,9 +367,10 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 }) => {
   const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
+  const cfg = state?.config as TwitchConfig | null;
+  const [commandRoles, setCommandRoles] = useState<string[]>(cfg?.commandRoles ?? ["all"]);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
-
   const [twitchAuth, setTwitchAuth] = useState<{ authenticated: boolean; username: string | null } | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
 
@@ -316,11 +384,11 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
     }).catch(() => setTwitchAuth({ authenticated: false, username: null }));
   }, [authUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveAndConnect = async (username: string) => {
+  const saveAndConnect = async (username: string, roles = commandRoles) => {
     setConnecting(true);
     setConnectError(null);
     try {
-      await api.saveTwitch(username, username, autoConnect);
+      await api.saveTwitch(username, username, autoConnect, roles);
       await api.connectPlatform("twitch");
       onSaved();
     } catch (e) {
@@ -374,32 +442,40 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       {state?.errorMessage && <div className="platform-error">{state.errorMessage}</div>}
       {connectError && <ConnectError message={connectError} onDismiss={() => setConnectError(null)} />}
 
-      <div className="platform-form">
-        <label>Cuenta de Twitch</label>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="platform-sections">
+        <PlatformSection title="Conexión">
           {isAuthed ? (
-            <>
-              <span style={{ color: "var(--green)", fontWeight: 600, fontSize: 13 }}>
-                {twitchAuth?.username ?? "Conectado"}
-              </span>
-              <button className="btn btn-sm btn-disconnect" onClick={handleTwitchForget}
-                style={{ marginLeft: "auto", fontSize: 11, padding: "2px 8px" }}>
-                Olvidar cuenta
+            <div className="platform-account">
+              <span className="platform-account-name">{twitchAuth?.username ?? "Conectado"}</span>
+              <button className="btn btn-sm btn-disconnect platform-account-forget" onClick={handleTwitchForget}>
+                Olvidar
               </button>
-            </>
+            </div>
           ) : (
-            <button className="btn btn-sm btn-primary" onClick={handleTwitchOAuth} disabled={authBusy}
-              style={{ fontSize: 12 }}>
+            <button className="btn btn-sm btn-primary" onClick={handleTwitchOAuth} disabled={authBusy} style={{ width: "100%" }}>
               {authBusy ? "Abriendo..." : "Conectar con Twitch"}
             </button>
           )}
-        </div>
+          <label className="platform-auto-label" style={{ marginTop: 8 }}>
+            <input type="checkbox" checked={autoConnect}
+              onChange={async (e) => {
+                setAutoConnect(e.target.checked);
+                await api.saveTwitch(twitchAuth?.username ?? "", twitchAuth?.username ?? "", e.target.checked, commandRoles);
+              }} />
+            Conectar al iniciar
+          </label>
+        </PlatformSection>
 
-        <label className="platform-auto-label">
-          <input type="checkbox" checked={autoConnect}
-            onChange={async (e) => { setAutoConnect(e.target.checked); await api.saveTwitch(twitchAuth?.username ?? "", twitchAuth?.username ?? "", e.target.checked); }} />
-          Conectar al iniciar
-        </label>
+        <PlatformSection title="Permisos de comandos">
+          <RoleSelector
+            platform="twitch"
+            roles={commandRoles}
+            onChange={(r) => {
+              setCommandRoles(r);
+              if (twitchAuth?.username) api.saveTwitch(twitchAuth.username, twitchAuth.username, autoConnect, r).catch(() => {});
+            }}
+          />
+        </PlatformSection>
       </div>
 
       <div className="platform-actions">
@@ -426,15 +502,15 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
   const cfg = state?.config as KickConfig | null;
   const [channel, setChannel] = useState(cfg?.channel ?? "");
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
+  const [commandRoles, setCommandRoles] = useState<string[]>(cfg?.commandRoles ?? ["all"]);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
-
   const [kickAuth, setKickAuth] = useState<{ authenticated: boolean; channel: string | null } | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
 
   useEffect(() => {
     if (cfg?.channel && !channel) setChannel(cfg.channel);
-  }, [cfg]);
+  }, [cfg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     api.getKickStatus().then(r => {
@@ -447,11 +523,11 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
     }).catch(() => setKickAuth({ authenticated: false, channel: null }));
   }, [authUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const saveAndConnect = async (ch: string) => {
+  const saveAndConnect = async (ch: string, roles = commandRoles) => {
     setConnecting(true);
     setConnectError(null);
     try {
-      await api.saveKick(ch, autoConnect);
+      await api.saveKick(ch, autoConnect, roles);
       await api.connectPlatform("kick");
       onSaved();
     } catch (e) {
@@ -507,32 +583,40 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
       {state?.errorMessage && <div className="platform-error">{state.errorMessage}</div>}
       {connectError && <ConnectError message={connectError} onDismiss={() => setConnectError(null)} />}
 
-      <div className="platform-form">
-        <label>Cuenta de Kick</label>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="platform-sections">
+        <PlatformSection title="Conexión">
           {isAuthed ? (
-            <>
-              <span style={{ color: "var(--green)", fontWeight: 600, fontSize: 13 }}>
-                {kickAuth?.channel ?? "Conectado"}
-              </span>
-              <button className="btn btn-sm btn-disconnect" onClick={handleKickForget}
-                style={{ marginLeft: "auto", fontSize: 11, padding: "2px 8px" }}>
-                Olvidar cuenta
+            <div className="platform-account">
+              <span className="platform-account-name">{kickAuth?.channel ?? "Conectado"}</span>
+              <button className="btn btn-sm btn-disconnect platform-account-forget" onClick={handleKickForget}>
+                Olvidar
               </button>
-            </>
+            </div>
           ) : (
-            <button className="btn btn-sm btn-primary" onClick={handleKickOAuth} disabled={authBusy}
-              style={{ fontSize: 12 }}>
+            <button className="btn btn-sm btn-primary" onClick={handleKickOAuth} disabled={authBusy} style={{ width: "100%" }}>
               {authBusy ? "Abriendo..." : "Conectar con Kick"}
             </button>
           )}
-        </div>
+          <label className="platform-auto-label" style={{ marginTop: 8 }}>
+            <input type="checkbox" checked={autoConnect}
+              onChange={async (e) => {
+                setAutoConnect(e.target.checked);
+                await api.saveKick(channel, e.target.checked, commandRoles);
+              }} />
+            Conectar al iniciar
+          </label>
+        </PlatformSection>
 
-        <label className="platform-auto-label">
-          <input type="checkbox" checked={autoConnect}
-            onChange={async (e) => { setAutoConnect(e.target.checked); await api.saveKick(channel, e.target.checked); }} />
-          Conectar al iniciar
-        </label>
+        <PlatformSection title="Permisos de comandos">
+          <RoleSelector
+            platform="kick"
+            roles={commandRoles}
+            onChange={(r) => {
+              setCommandRoles(r);
+              api.saveKick(channel, autoConnect, r).catch(() => {});
+            }}
+          />
+        </PlatformSection>
       </div>
 
       <div className="platform-actions">

@@ -87,15 +87,18 @@ export interface TikTokConfig {
   giftBumpEnabled: boolean;
   giftInterruptEnabled: boolean;
   coinsPerBump: number;
+  commandRoles: string[];
 }
 
 export interface TwitchConfig {
   channel: string;
   botUsername: string;
+  commandRoles: string[];
 }
 
 export interface KickConfig {
   channel: string;
+  commandRoles: string[];
 }
 
 export interface LibraryTrack {

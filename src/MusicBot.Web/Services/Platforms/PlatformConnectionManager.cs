@@ -15,9 +15,9 @@ namespace MusicBot.Services.Platforms;
 
 public class PlatformConnectionManager
 {
-    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100, bool GiftBumpEnabled = true, bool GiftInterruptEnabled = true, int CoinsPerBump = 1);
-    public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken);
-    public record KickPlatformConfig(string Channel);
+    public record TikTokPlatformConfig(string Username, string? SigningServerUrl = null, string? SigningServerApiKey = null, string? SessionId = null, string? CookieString = null, int GiftInterruptThreshold = 100, bool GiftBumpEnabled = true, bool GiftInterruptEnabled = true, int CoinsPerBump = 1, string[]? CommandRoles = null);
+    public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken, string[]? CommandRoles = null);
+    public record KickPlatformConfig(string Channel, string[]? CommandRoles = null);
 
     public enum ConnectionStatus { Disconnected, Connecting, Connected, Error }
 
@@ -291,7 +291,7 @@ public class PlatformConnectionManager
                 // Capture roomId from first incoming message for sending
                 if (tiktokRoomId == null && e.RoomId > 0)
                     tiktokRoomId = e.RoomId.ToString();
-                HandleTikTokChat(userId, e);
+                HandleTikTokChat(userId, config.CommandRoles, e);
             };
             client.OnGiftMessage  += (_, e) => HandleTikTokGift(userId, config, e);
 
@@ -347,7 +347,7 @@ public class PlatformConnectionManager
         }
     }
 
-    private async void HandleTikTokChat(Guid userId, Chat e)
+    private async void HandleTikTokChat(Guid userId, string[]? commandRoles, Chat e)
     {
         try
         {
@@ -359,6 +359,7 @@ public class PlatformConnectionManager
             _logger.LogDebug("TikTok chat @{User}: {Message}", username, message);
 
             if (message[0] is not ('!' or '.' or '/')) return;
+            if (e.Sender != null && !IsTikTokRoleAllowed(e.Sender, commandRoles)) return;
             await RouteCommand(userId, username, message, "tiktok");
         }
         catch (Exception ex)
@@ -478,7 +479,7 @@ public class PlatformConnectionManager
             var msg = e.ChatMessage.Message?.Trim();
             if (string.IsNullOrEmpty(msg)) return;
             _activity.RecordMessage(e.ChatMessage.Username);
-            if (msg[0] is ('!' or '.' or '/'))
+            if (msg[0] is ('!' or '.' or '/') && IsTwitchRoleAllowed(e.ChatMessage, config.CommandRoles))
                 await RouteCommand(userId, e.ChatMessage.Username, msg, "twitch");
         };
 
@@ -507,7 +508,7 @@ public class PlatformConnectionManager
             if (string.IsNullOrEmpty(content)) return;
             var sender = msg.Sender?.Username ?? "viewer";
             _activity.RecordMessage(sender);
-            if (content[0] is ('!' or '.' or '/'))
+            if (content[0] is ('!' or '.' or '/') && IsKickRoleAllowed(msg, config.CommandRoles))
                 _ = RouteCommand(userId, sender, content, "kick");
         };
 
@@ -537,6 +538,36 @@ public class PlatformConnectionManager
     }
 
     // ── Shared command routing ────────────────────────────────────────────────
+
+    // ── Role helpers ─────────────────────────────────────────────────────────────
+
+    private static bool IsTikTokRoleAllowed(TikTokLiveSharp.Events.Objects.User sender, string[]? roles)
+    {
+        if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+        if (roles.Contains("moderator") && (sender.User_Attr?.IsAdmin == true || sender.User_Attr?.IsSuperAdmin == true)) return true;
+        if (roles.Contains("subscriber") && sender.Subscribe_Info?.IsSubscribe == true) return true;
+        if (roles.Contains("follower") && sender.IsFollower) return true;
+        return false;
+    }
+
+    private static bool IsTwitchRoleAllowed(TwitchLib.Client.Models.ChatMessage msg, string[]? roles)
+    {
+        if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+        if (roles.Contains("moderator") && (msg.IsBroadcaster || msg.UserDetail.IsModerator)) return true;
+        if (roles.Contains("subscriber") && msg.UserDetail.IsSubscriber) return true;
+        if (roles.Contains("vip") && msg.UserDetail.IsVip) return true;
+        return false;
+    }
+
+    private static bool IsKickRoleAllowed(KickChatSpy.Models.ChatMessage msg, string[]? roles)
+    {
+        if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
+        var badges = msg.Sender?.Identity?.Badges;
+        if (badges == null) return false;
+        if (roles.Contains("moderator") && badges.Any(b => b.Type is "moderator" or "broadcaster")) return true;
+        if (roles.Contains("subscriber") && badges.Any(b => b.Type is "subscriber" or "og")) return true;
+        return false;
+    }
 
     private async Task<CommandResult?> RouteCommand(Guid userId, string username, string message, string platform)
     {
