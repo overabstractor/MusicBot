@@ -764,26 +764,59 @@ public class PlatformConnectionManager
         return false;
     }
 
+    /// <summary>
+    /// Gets the user's fan-club (Team Member) level. TikTok has two parallel fields:
+    /// <c>Fans_Club.Data.Level</c> (populated only when status=Active) and
+    /// <c>FansClub_Info.FansLevel</c> (more reliable across event types). Returns max.
+    /// </summary>
+    private static int GetTikTokTeamLevel(TikTokLiveSharp.Events.Objects.User sender)
+    {
+        var dataLvl = sender.Fans_Club?.Data?.Level ?? 0;
+        var infoLvl = (int)(sender.FansClub_Info?.FansLevel ?? 0);
+        return Math.Max(dataLvl, infoLvl);
+    }
+
+    /// <summary>Checks moderator status across both the IsAdmin flag and the UserRole field.</summary>
+    private static bool IsTikTokModerator(TikTokLiveSharp.Events.Objects.User sender)
+    {
+        if (sender.User_Attr?.IsAdmin == true) return true;
+        if (sender.User_Attr?.IsSuperAdmin == true) return true;
+        // UserRole == 3 = moderator in TikTok protocol (1=anchor, 2=fan, 3=mod, ...)
+        if (sender.UserRole == 3) return true;
+        return false;
+    }
+
     private bool IsTikTokRoleAllowed(TikTokLiveSharp.Events.Objects.User sender, string[]? roles, int teamMinLevel, string[]? allowedUsers)
     {
         if (roles == null || roles.Length == 0 || roles.Contains("all")) return true;
-        if (roles.Contains("list") && IsInAllowList(sender.UniqueId, allowedUsers)) return true;
-        if (roles.Contains("moderator") && (sender.User_Attr?.IsAdmin == true || sender.User_Attr?.IsSuperAdmin == true)) return true;
+
+        var listMatch = roles.Contains("list") && IsInAllowList(sender.UniqueId, allowedUsers);
+        if (listMatch) return true;
+
+        if (roles.Contains("moderator") && IsTikTokModerator(sender)) return true;
         if (roles.Contains("subscriber") && sender.Subscribe_Info?.IsSubscribe == true) return true;
         if (roles.Contains("follower") && IsTikTokFollowing(sender)) return true;
         if (roles.Contains("teamMember"))
         {
-            var lvl = sender.Fans_Club?.Data?.Level ?? 0;
+            var lvl = GetTikTokTeamLevel(sender);
             if (lvl >= Math.Max(1, teamMinLevel)) return true;
         }
-        // Log for diagnostic purposes (only when denied)
-        _logger.LogDebug(
-            "TikTok role denied for @{User}: roles=[{Roles}] IsFollower={IsF} FollowStatus={FS} Sub={Sub} Mod={Mod} TeamLvl={Lvl}",
-            sender.UniqueId, string.Join(",", roles ?? []),
-            sender.IsFollower, sender.FollowStatus,
+
+        // Diagnostic logging — shows every signal the SDK provided for this user
+        _logger.LogInformation(
+            "TikTok role DENIED for @{User} | roles=[{Roles}] minTeam={MinTeam} | " +
+            "IsFollower={IsF} FollowStatus={FS} FollowInfoFS={FIFS} | " +
+            "Sub={Sub} | IsAdmin={Adm} IsSuperAdm={Sup} UserRole={UR} | " +
+            "FanData.Lvl={FDL} FanData.Status={FDS} FanInfo.Lvl={FIL} | " +
+            "ListMatch={LM}",
+            sender.UniqueId, string.Join(",", roles ?? []), teamMinLevel,
+            sender.IsFollower, sender.FollowStatus, sender.Follow_Info?.FollowStatus,
             sender.Subscribe_Info?.IsSubscribe == true,
-            sender.User_Attr?.IsAdmin == true,
-            sender.Fans_Club?.Data?.Level ?? 0);
+            sender.User_Attr?.IsAdmin == true, sender.User_Attr?.IsSuperAdmin == true, sender.UserRole,
+            sender.Fans_Club?.Data?.Level ?? 0,
+            sender.Fans_Club?.Data?.FansClubStatus,
+            sender.FansClub_Info?.FansLevel ?? 0,
+            listMatch);
         return false;
     }
 
