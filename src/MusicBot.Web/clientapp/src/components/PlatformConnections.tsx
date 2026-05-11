@@ -79,7 +79,13 @@ const RoleSelector: React.FC<{
 
   const toggle = (id: string) => {
     if (id === "all") {
-      if (!isAll) onChange(["all"]);
+      if (isAll) {
+        // Deseleccionar "Todos" → habilita selección específica con el primer rol como default
+        const firstSpecific = defs.find(r => r.id !== "all");
+        onChange(firstSpecific ? [firstSpecific.id] : ["all"]);
+      } else {
+        onChange(["all"]);
+      }
       return;
     }
     const current = roles.filter(r => r !== "all");
