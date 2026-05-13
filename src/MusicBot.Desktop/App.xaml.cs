@@ -56,10 +56,15 @@ public partial class App : SysWin.Application
         MusicBot.AppEvents.OnYouTubeSessionRestoreRequested += () => Dispatcher.Invoke(RestoreYouTubeSession);
         MusicBot.AppEvents.OnPlatformAuthForgotten         += ForgetPlatformSessionAsync;
         MusicBot.AppEvents.OnShutdownRequested             += () => Dispatcher.Invoke(ExitApp);
-        MusicBot.AppEvents.OnUpdateReady                   += v  => Dispatcher.Invoke(() =>
-            _tray.ShowBalloonTip(5_000, "MusicBot — Actualización lista",
-                $"Versión {v} descargada. Se aplicará al reiniciar.",
-                ToolTipIcon.Info));
+        MusicBot.AppEvents.OnUpdateReadyWithNotes += (v, notes) => Dispatcher.Invoke(() =>
+            new UpdateReadyDialog(v, notes, onConfirm: () => { Program.QueuePendingUpdate(); ExitApp(); }).ShowDialog());
+
+        MusicBot.AppEvents.OnPortableUpdateAvailable += (v, notes, zipUrl) => Dispatcher.Invoke(() =>
+            new UpdateReadyDialog(v, notes, onConfirm: () =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(zipUrl) { UseShellExecute = true }); }
+                catch (Exception ex) { Serilog.Log.Warning(ex, "No se pudo abrir la URL de descarga"); }
+            }).ShowDialog());
 
         _tray      = BuildTray();
         _mediaKeys = new MediaKeyHook(
@@ -297,11 +302,6 @@ public partial class App : SysWin.Application
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try   { await Host.StopAsync(cts.Token); }
         catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: error stopping host"); }
-
-        // Kill any WebView2 renderer processes that outlived their host windows.
-        // These can prevent Velopack from deleting the app directory during updates.
-        foreach (var proc in System.Diagnostics.Process.GetProcessesByName("msedgewebview2"))
-            try { proc.Kill(entireProcessTree: true); } catch { }
 
         Shutdown();
     }

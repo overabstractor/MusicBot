@@ -1,5 +1,7 @@
 using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -29,6 +31,26 @@ public static class Program
 
     // Held for the lifetime of the process to enforce single-instance
     private static Mutex? _instanceMutex;
+
+    // Set after a Velopack update is downloaded. Consumed by the update dialog
+    // when the user clicks "Actualizar ahora" — not applied automatically on exit.
+    private static UpdateManager? _pendingMgr;
+    private static Velopack.VelopackAsset? _pendingRelease;
+
+    /// <summary>
+    /// Queues the downloaded update to be applied when the process exits.
+    /// Called only when the user explicitly confirms the update dialog.
+    /// </summary>
+    public static void QueuePendingUpdate()
+    {
+        if (_pendingMgr != null && _pendingRelease != null)
+            // restart: false — Velopack applies the update silently on exit but does NOT
+            // relaunch the process. Relaunching via Velopack's Update.exe terminates
+            // WebView2 runtime processes system-wide, which crashes other apps (Teams)
+            // that share the same Evergreen WebView2 runtime. The user opens MusicBot
+            // manually after the update is applied.
+            _pendingMgr.WaitExitThenApplyUpdates(_pendingRelease, silent: true, restart: false);
+    }
 
     [STAThread]
     public static void Main(string[] args)
@@ -181,7 +203,11 @@ public static class Program
     {
         try
         {
-            if (!mgr.IsInstalled) return;
+            if (!mgr.IsInstalled)
+            {
+                await CheckPortableUpdateAsync();
+                return;
+            }
 
             Log.Information("Verificando actualizaciones…");
             var updateInfo = await mgr.CheckForUpdatesAsync();
@@ -196,13 +222,90 @@ public static class Program
 
             await mgr.DownloadUpdatesAsync(updateInfo);
 
-            Log.Information("Actualización {Version} descargada. Se aplicará al reiniciar.", newVersion);
-            mgr.WaitExitThenApplyUpdates(updateInfo.TargetFullRelease, silent: true, restart: true);
-            MusicBot.AppEvents.NotifyUpdateReady(newVersion);
+            // Store for later — only applied if the user confirms in the dialog.
+            _pendingMgr     = mgr;
+            _pendingRelease = updateInfo.TargetFullRelease;
+            Log.Information("Actualización {Version} descargada. Esperando confirmación del usuario.", newVersion);
+
+            var notes = await FetchReleaseNotesAsync(newVersion);
+            MusicBot.AppEvents.NotifyUpdateReadyWithNotes(newVersion, notes);
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "No se pudo verificar actualizaciones");
+        }
+    }
+
+    private static async Task CheckPortableUpdateAsync()
+    {
+        try
+        {
+            Log.Information("Modo portable: verificando actualizaciones vía GitHub Releases…");
+            using var http = new HttpClient();
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("MusicBot");
+            http.Timeout = TimeSpan.FromSeconds(10);
+
+            var json = await http.GetStringAsync(
+                "https://api.github.com/repos/overabstractor/MusicBot/releases/latest");
+
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var tagName = root.GetProperty("tag_name").GetString()?.TrimStart('v') ?? "";
+            var notes   = root.GetProperty("body").GetString() ?? "";
+
+            var zipUrl  = "";
+            if (root.TryGetProperty("assets", out var assets))
+            {
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    var name = asset.GetProperty("name").GetString() ?? "";
+                    if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        zipUrl = asset.GetProperty("browser_download_url").GetString() ?? "";
+                        break;
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(tagName)) return;
+
+            var currentVersionStr = MusicBot.AppInfo.Version;
+            if (currentVersionStr == "dev") return;
+
+            if (!NuGet.Versioning.SemanticVersion.TryParse(tagName, out var latestVersion)) return;
+            if (!NuGet.Versioning.SemanticVersion.TryParse(currentVersionStr, out var currentVersion)) return;
+            if (latestVersion <= currentVersion)
+            {
+                Log.Information("Modo portable: MusicBot está actualizado ({Version})", currentVersionStr);
+                return;
+            }
+
+            Log.Information("Modo portable: nueva versión {Latest} disponible (actual: {Current})",
+                tagName, currentVersionStr);
+            MusicBot.AppEvents.NotifyPortableUpdateAvailable(tagName, notes, zipUrl);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "No se pudo verificar actualizaciones (modo portable)");
+        }
+    }
+
+    private static async Task<string> FetchReleaseNotesAsync(string version)
+    {
+        try
+        {
+            using var http = new HttpClient();
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("MusicBot");
+            http.Timeout = TimeSpan.FromSeconds(10);
+            var json = await http.GetStringAsync(
+                $"https://api.github.com/repos/overabstractor/MusicBot/releases/tags/v{version}");
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("body").GetString() ?? "";
+        }
+        catch
+        {
+            return "";
         }
     }
 }
