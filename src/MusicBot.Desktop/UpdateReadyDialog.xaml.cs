@@ -29,6 +29,14 @@ public partial class UpdateReadyDialog : Window
     {
         try
         {
+            // Pin to MusicBot's own user data folder to avoid sharing a browser process
+            // with other apps (Teams, Edge) that use the WebView2 default profile.
+            NotesWebView.CreationProperties = new Microsoft.Web.WebView2.Wpf.CoreWebView2CreationProperties
+            {
+                UserDataFolder = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "MusicBot", "WebView2")
+            };
             await NotesWebView.EnsureCoreWebView2Async();
 
             // Disable navigation so links don't open inside the dialog
