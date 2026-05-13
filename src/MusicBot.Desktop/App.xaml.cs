@@ -303,11 +303,6 @@ public partial class App : SysWin.Application
         try   { await Host.StopAsync(cts.Token); }
         catch (Exception ex) { Serilog.Log.Warning(ex, "Shutdown: error stopping host"); }
 
-        // Kill only the WebView2 renderer processes that are descendants of this process.
-        // Killing all msedgewebview2 instances system-wide would also terminate WebView2
-        // used by other apps (e.g. Teams), causing those apps to restart unexpectedly.
-        KillOwnWebView2Processes();
-
         Shutdown();
     }
 
@@ -466,77 +461,6 @@ public partial class App : SysWin.Application
             SysWin.MessageBox.Show(ex.Message, "MusicBot — Error",
                 SysWin.MessageBoxButton.OK, SysWin.MessageBoxImage.Warning);
         }
-    }
-
-    // ── WebView2 cleanup ──────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Kills msedgewebview2 processes that are descendants of the current process only.
-    /// Avoids terminating WebView2 instances owned by other apps (Teams, etc.).
-    /// </summary>
-    private static void KillOwnWebView2Processes()
-    {
-        try
-        {
-            int ownPid = System.Diagnostics.Process.GetCurrentProcess().Id;
-
-            // Build a child→parent map for all running processes once.
-            var parentOf = new Dictionary<int, int>();
-            foreach (var p in System.Diagnostics.Process.GetProcesses())
-            {
-                try { parentOf[p.Id] = GetParentPid(p); }
-                catch { /* process may have exited */ }
-            }
-
-            foreach (var proc in System.Diagnostics.Process.GetProcessesByName("msedgewebview2"))
-            {
-                try
-                {
-                    if (IsDescendantOf(proc.Id, ownPid, parentOf))
-                        proc.Kill(entireProcessTree: false);
-                }
-                catch { }
-                finally { proc.Dispose(); }
-            }
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning(ex, "Shutdown: error cleaning up WebView2 processes");
-        }
-    }
-
-    private static bool IsDescendantOf(int pid, int ancestorPid, Dictionary<int, int> parentOf)
-    {
-        var visited = new HashSet<int>();
-        int current = pid;
-        while (parentOf.TryGetValue(current, out int parent) && visited.Add(current))
-        {
-            if (parent == ancestorPid) return true;
-            current = parent;
-        }
-        return false;
-    }
-
-    [DllImport("ntdll.dll")] private static extern int NtQueryInformationProcess(
-        IntPtr processHandle, int processInformationClass,
-        ref ProcessBasicInformation pbi, int processInformationLength, out int returnLength);
-
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-    private struct ProcessBasicInformation
-    {
-        public IntPtr Reserved1;
-        public IntPtr PebBaseAddress;
-        public IntPtr Reserved2_0;
-        public IntPtr Reserved2_1;
-        public IntPtr UniqueProcessId;
-        public IntPtr InheritedFromUniqueProcessId;
-    }
-
-    private static int GetParentPid(System.Diagnostics.Process proc)
-    {
-        var pbi = new ProcessBasicInformation();
-        NtQueryInformationProcess(proc.Handle, 0, ref pbi, System.Runtime.InteropServices.Marshal.SizeOf(pbi), out _);
-        return pbi.InheritedFromUniqueProcessId.ToInt32();
     }
 
     // ── Icon ──────────────────────────────────────────────────────────────────
