@@ -20,7 +20,7 @@ public partial class UpdateReadyDialog : Window
         _onConfirm = onConfirm;
         _notes     = notes;
 
-        VersionLabel.Text = $"MusicBot v{version} lista para instalar";
+        VersionLabel.Text = $"MusicBot v{version} — se instalará al cerrar";
 
         Loaded += OnLoaded;
     }

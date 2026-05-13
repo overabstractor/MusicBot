@@ -44,7 +44,12 @@ public static class Program
     public static void QueuePendingUpdate()
     {
         if (_pendingMgr != null && _pendingRelease != null)
-            _pendingMgr.WaitExitThenApplyUpdates(_pendingRelease, silent: true, restart: true);
+            // restart: false — Velopack applies the update silently on exit but does NOT
+            // relaunch the process. Relaunching via Velopack's Update.exe terminates
+            // WebView2 runtime processes system-wide, which crashes other apps (Teams)
+            // that share the same Evergreen WebView2 runtime. The user opens MusicBot
+            // manually after the update is applied.
+            _pendingMgr.WaitExitThenApplyUpdates(_pendingRelease, silent: true, restart: false);
     }
 
     [STAThread]
