@@ -151,8 +151,18 @@ public static class AppEvents
 
     /// <summary>
     /// Raised by Program.cs when a new version has been downloaded and is ready to apply on restart.
-    /// The Desktop layer shows a tray balloon tip informing the user.
+    /// Carries the version string and release notes markdown so the Desktop layer can show a dialog.
     /// </summary>
-    public static event Action<string>? OnUpdateReady;
-    public static void NotifyUpdateReady(string newVersion) => OnUpdateReady?.Invoke(newVersion);
+    public static event Action<string, string>? OnUpdateReadyWithNotes;
+    public static void NotifyUpdateReadyWithNotes(string newVersion, string notes)
+        => OnUpdateReadyWithNotes?.Invoke(newVersion, notes);
+
+    /// <summary>
+    /// Raised by Program.cs when running in portable (ZIP) mode and a newer version is available
+    /// on GitHub Releases. Since Velopack cannot auto-apply in portable mode, the Desktop layer
+    /// shows the same update dialog with a download link to the ZIP asset.
+    /// </summary>
+    public static event Action<string, string, string>? OnPortableUpdateAvailable;
+    public static void NotifyPortableUpdateAvailable(string newVersion, string notes, string zipUrl)
+        => OnPortableUpdateAvailable?.Invoke(newVersion, notes, zipUrl);
 }
