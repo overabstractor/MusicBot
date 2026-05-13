@@ -33,6 +33,15 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.*" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.*" />
     <PackageReference Include="Velopack" Version="0.0.1298" />
+    <!--
+      Velopack 0.0.1298 está compilado contra NuGet.Versioning 6.14.0.116
+      y exige esa versión exacta al cargar VelopackApp.Run() para los hooks
+      de ciclo de vida (veloapp-install, veloapp-updated, veloapp-obsolete,
+      veloapp-uninstall). Sin este pin la cadena de dependencias resuelve a
+      6.8.x y el hook crashea con FileNotFoundException antes de llegar a
+      Main, rompiendo la instalación o el auto-update.
+    -->
+    <PackageReference Include="NuGet.Versioning" Version="6.14.0" />
   </ItemGroup>
 
 </Project>
