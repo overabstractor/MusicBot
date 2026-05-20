@@ -192,8 +192,8 @@ export const api = {
     }),
 
   // Settings
-  getSettings: () => request<{ maxQueueSize: number; maxSongsPerUser: number; votingEnabled: boolean; presenceCheckEnabled: boolean; presenceCheckWarningSeconds: number; presenceCheckConfirmSeconds: number; saveDownloads: boolean; autoQueueEnabled: boolean; openLogOnStart: boolean }>("/api/settings"),
-  updateSettings: (s: { maxQueueSize: number; maxSongsPerUser: number; votingEnabled: boolean; presenceCheckEnabled: boolean; presenceCheckWarningSeconds: number; presenceCheckConfirmSeconds: number; saveDownloads: boolean; autoQueueEnabled: boolean; openLogOnStart: boolean }) =>
+  getSettings: () => request<{ maxQueueSize: number; maxSongsPerUser: number; votingEnabled: boolean; presenceCheckEnabled: boolean; presenceCheckWarningSeconds: number; presenceCheckConfirmSeconds: number; saveDownloads: boolean; autoQueueEnabled: boolean; loudnessNormalizationEnabled: boolean; openLogOnStart: boolean }>("/api/settings"),
+  updateSettings: (s: { maxQueueSize: number; maxSongsPerUser: number; votingEnabled: boolean; presenceCheckEnabled: boolean; presenceCheckWarningSeconds: number; presenceCheckConfirmSeconds: number; saveDownloads: boolean; autoQueueEnabled: boolean; loudnessNormalizationEnabled: boolean; openLogOnStart: boolean }) =>
     request<void>("/api/settings", { method: "PUT", body: JSON.stringify(s) }),
 
   // Ticker messages

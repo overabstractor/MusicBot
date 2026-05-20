@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../services/api";
 import { QueueSettings } from "../hooks/useSignalR";
 import { useConfirm } from "../hooks/useConfirm";
@@ -49,8 +49,12 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
     }
   }, []);
 
-  // Sync if settings change via SignalR from another client
-  useEffect(() => { setForm(settings); }, [settings]);
+  // Sync if settings change via SignalR (our own save echo or another client).
+  // Update lastSavedRef so this incoming state doesn't trigger a redundant PUT.
+  useEffect(() => {
+    setForm(settings);
+    lastSavedRef.current = settings;
+  }, [settings]);
 
   const refreshYtAuth = useCallback(() => {
     api.getYouTubeAuthStatus()
@@ -154,25 +158,76 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await api.updateSettings(form);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e) {
-      console.error("Failed to save settings", e);
-    } finally {
-      setSaving(false);
+  // ── Auto-save ────────────────────────────────────────────────────────────
+  // Every change to `form` debounces a PUT to /api/settings (500ms). No save
+  // button, no risk of forgetting to persist. We compare against the last
+  // value we successfully saved so SignalR pushes from the server (which arrive
+  // via the `settings` prop) don't loop back as a redundant save.
+  const lastSavedRef = useRef<QueueSettings>(settings);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Suppress the first auto-save effect run so the initial sync from props
+  // doesn't trigger a no-op PUT on mount.
+  const isInitialSyncRef = useRef(true);
+
+  useEffect(() => {
+    if (isInitialSyncRef.current) {
+      isInitialSyncRef.current = false;
+      lastSavedRef.current = form;
+      return;
     }
-  };
+    // Skip if `form` matches whatever the server last confirmed — covers the
+    // re-sync after our own save completes and SignalR echoes the new state back.
+    if (JSON.stringify(form) === JSON.stringify(lastSavedRef.current)) return;
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaving(true);
+    setSaved(false);
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        await api.updateSettings(form);
+        lastSavedRef.current = form;
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1500);
+      } catch (e) {
+        console.error("Failed to save settings", e);
+      } finally {
+        setSaving(false);
+      }
+    }, 500);
+
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [form]);
 
   const set = (key: keyof QueueSettings, value: number | boolean | string) =>
     setForm(f => ({ ...f, [key]: value }));
 
+  const statusLabel = saving ? "Guardando…" : saved ? "✓ Guardado" : "Los cambios se guardan automáticamente";
+  const statusColor = saving
+    ? "var(--color-muted, #888)"
+    : saved
+      ? "var(--color-success, #1db954)"
+      : "var(--color-muted, #888)";
+
   return (
     <>{confirmModal}
     <div className="settings-panel">
+      <div
+        className="settings-autosave-status"
+        style={{
+          position:     "sticky",
+          top:          0,
+          zIndex:       10,
+          padding:      "6px 10px",
+          marginBottom: 8,
+          fontSize:     12,
+          fontWeight:   500,
+          color:        statusColor,
+          background:   "var(--color-bg, #1a1a1a)",
+          borderBottom: "1px solid var(--color-border, rgba(255,255,255,0.08))",
+        }}
+      >
+        {statusLabel}
+      </div>
       <div className="settings-section">
         <div className="settings-section-title">Cola de reproducción</div>
 
@@ -272,6 +327,22 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
         </label>
         <p className="settings-hint">
           Si está desactivado, los archivos se eliminan automáticamente al terminar de reproducirse.
+        </p>
+
+        <label className="settings-row settings-row-toggle">
+          <span className="settings-label">Normalizar volumen al descargar</span>
+          <div
+            className={`settings-toggle${form.loudnessNormalizationEnabled ? " on" : ""}`}
+            onClick={() => set("loudnessNormalizationEnabled", !form.loudnessNormalizationEnabled)}
+          >
+            <div className="settings-toggle-thumb" />
+          </div>
+        </label>
+        <p className="settings-hint">
+          Iguala el volumen de las canciones descargadas a ~-14 LUFS (estilo Spotify/YouTube Music) usando ffmpeg
+          <code>loudnorm</code> en dos pasadas con <code>linear=true</code> — aplica una única ganancia lineal sin compresión dinámica,
+          así se preserva la dinámica original (sin "pumping" ni distorsión). Solo afecta descargas nuevas;
+          si tienes canciones ya cacheadas que sonaban mal con la versión anterior, bórralas de la librería para re-descargarlas.
         </p>
       </div>
 
@@ -431,11 +502,6 @@ export const SettingsPanel: React.FC<Props> = ({ settings }) => {
         </p>
       </div>
 
-      <div className="settings-actions">
-        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-          {saved ? "✓ Guardado" : saving ? "Guardando…" : "Guardar cambios"}
-        </button>
-      </div>
     </div>
     </>
   );

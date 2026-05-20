@@ -708,6 +708,7 @@ public class YtDlpDownloaderService
     private async Task<string> DownloadCoreAsync(Song song)
     {
         var safeId     = song.SpotifyUri.Replace(":", "_");
+        bool normalize = _queueSettings.LoudnessNormalizationEnabled;
         var ext        = _settings.UseNativeAudioFormat ? "m4a" : "mp3";
         var outputPath = Path.GetFullPath(Path.Combine(_settings.LibraryPath, $"{safeId}.{ext}"));
 
@@ -825,6 +826,23 @@ public class YtDlpDownloaderService
 
             if (!File.Exists(filePath))
                 throw new InvalidOperationException($"yt-dlp finished but output file not found: {filePath}");
+
+            // Loudness normalization: two-pass EBU R128 with linear=true.
+            // First pass measures, second pass applies a single linear gain (NO dynamic compression),
+            // preserving the original dynamics — equivalent to ReplayGain/Spotify-style normalization.
+            if (normalize)
+            {
+                try
+                {
+                    var ok = await NormalizeAudioFileAsync(filePath, song.Title);
+                    if (!ok)
+                        _logger.LogWarning("Loudness normalization skipped/failed for \"{Title}\" — keeping original file", song.Title);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Loudness normalization threw for \"{Title}\" — keeping original file", song.Title);
+                }
+            }
 
             // Correct DurationMs from the actual downloaded file (metadata duration can differ)
             try
@@ -1014,5 +1032,206 @@ public class YtDlpDownloaderService
             results.Add(new YtCandidate(entry.ID, score, diff));
         }
         return results;
+    }
+
+    // ── Loudness normalization ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Two-pass EBU R128 loudness normalization with linear=true.
+    /// Pass 1 measures, pass 2 applies a single linear gain (no dynamic compression)
+    /// so the original dynamics are preserved — equivalent to ReplayGain / Spotify's
+    /// gain-only normalization mode. Target -14 LUFS with TP -1.5 dBTP ceiling.
+    /// Returns true on success, false on any failure (caller keeps the original file).
+    /// </summary>
+    private async Task<bool> NormalizeAudioFileAsync(string filePath, string songTitle)
+    {
+        var ffmpeg = _ytdl.FFmpegPath;
+        if (string.IsNullOrEmpty(ffmpeg))
+        {
+            _logger.LogDebug("Skipping loudness normalization: ffmpeg path not configured");
+            return false;
+        }
+        if (!File.Exists(ffmpeg) && !IsOnPath(ffmpeg))
+        {
+            _logger.LogDebug("Skipping loudness normalization: ffmpeg not found at {Path}", ffmpeg);
+            return false;
+        }
+
+        _logger.LogInformation("Normalizing loudness for \"{Title}\"…", songTitle);
+
+        // ── Pass 1: measure ────────────────────────────────────────────────
+        const string LOUDNORM_TARGET = "I=-14:LRA=11:TP=-1.5";
+        var pass1Stderr = await RunFfmpegCaptureStderrAsync(ffmpeg,
+            ["-hide_banner", "-nostats", "-i", filePath,
+             "-af", $"loudnorm={LOUDNORM_TARGET}:print_format=json",
+             "-f", "null", "-"],
+            TimeSpan.FromMinutes(5));
+
+        if (pass1Stderr == null) return false;
+
+        // ffmpeg prints the JSON block at the END of stderr — grab the last { ... } pair
+        var jsonStart = pass1Stderr.LastIndexOf('{');
+        var jsonEnd   = pass1Stderr.LastIndexOf('}');
+        if (jsonStart < 0 || jsonEnd <= jsonStart)
+        {
+            _logger.LogWarning("Could not locate loudnorm JSON in ffmpeg output for \"{Title}\"", songTitle);
+            return false;
+        }
+
+        string input_i, input_lra, input_tp, input_thresh, target_offset;
+        try
+        {
+            var json = pass1Stderr.Substring(jsonStart, jsonEnd - jsonStart + 1);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            input_i       = root.GetProperty("input_i").GetString() ?? "0";
+            input_lra     = root.GetProperty("input_lra").GetString() ?? "0";
+            input_tp      = root.GetProperty("input_tp").GetString() ?? "0";
+            input_thresh  = root.GetProperty("input_thresh").GetString() ?? "0";
+            target_offset = root.GetProperty("target_offset").GetString() ?? "0";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse loudnorm JSON for \"{Title}\"", songTitle);
+            return false;
+        }
+
+        // If input is effectively silent, ebur128 returns "-inf" / "nan" — skip.
+        if (input_i.Contains("inf", StringComparison.OrdinalIgnoreCase)
+         || input_i.Contains("nan", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("Skipping normalization for \"{Title}\": measured loudness is {I}", songTitle, input_i);
+            return false;
+        }
+
+        // ── Pass 2: apply linear gain ──────────────────────────────────────
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        // libmp3lame doesn't support 192kHz (loudnorm's internal rate), so resample back to 44.1kHz.
+        var filter = $"loudnorm={LOUDNORM_TARGET}" +
+                     $":measured_I={input_i}:measured_LRA={input_lra}:measured_TP={input_tp}" +
+                     $":measured_thresh={input_thresh}:offset={target_offset}" +
+                     $":linear=true:print_format=summary,aresample=44100";
+
+        string[] codecArgs = ext switch
+        {
+            ".mp3" => ["-c:a", "libmp3lame", "-q:a", "2"],
+            ".m4a" => ["-c:a", "aac", "-b:a", "192k"],
+            _      => ["-c:a", "libmp3lame", "-q:a", "2"],
+        };
+
+        var tempPath = filePath + ".norm.tmp" + ext;
+        try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+
+        var pass2Args = new List<string>
+        {
+            "-y", "-hide_banner", "-nostats",
+            "-i", filePath,
+            "-af", filter,
+        };
+        pass2Args.AddRange(codecArgs);
+        pass2Args.Add(tempPath);
+
+        var pass2Ok = await RunFfmpegSilentAsync(ffmpeg, pass2Args, TimeSpan.FromMinutes(10));
+        if (!pass2Ok || !File.Exists(tempPath) || new FileInfo(tempPath).Length < 10_000)
+        {
+            _logger.LogWarning("Loudness normalization pass 2 failed for \"{Title}\"", songTitle);
+            try { File.Delete(tempPath); } catch { }
+            return false;
+        }
+
+        // Swap files atomically (delete + move; File.Replace requires both on same volume which they are).
+        try
+        {
+            File.Delete(filePath);
+            File.Move(tempPath, filePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to replace original file after normalization for \"{Title}\"", songTitle);
+            try { File.Delete(tempPath); } catch { }
+            return false;
+        }
+
+        _logger.LogInformation("Normalized \"{Title}\": {From} LUFS → -14 LUFS (linear gain)", songTitle, input_i);
+        return true;
+    }
+
+    private async Task<string?> RunFfmpegCaptureStderrAsync(string ffmpegPath, IEnumerable<string> args, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        var psi = new ProcessStartInfo
+        {
+            FileName               = ffmpegPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute        = false,
+            CreateNoWindow         = true,
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+
+        using var proc = new Process { StartInfo = psi };
+        try
+        {
+            proc.Start();
+            var stderrTask = proc.StandardError.ReadToEndAsync(cts.Token);
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync(cts.Token);
+            await proc.WaitForExitAsync(cts.Token);
+            await stdoutTask;
+            return await stderrTask;
+        }
+        catch (OperationCanceledException)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ffmpeg process failed");
+            return null;
+        }
+    }
+
+    private async Task<bool> RunFfmpegSilentAsync(string ffmpegPath, IEnumerable<string> args, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        var psi = new ProcessStartInfo
+        {
+            FileName               = ffmpegPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute        = false,
+            CreateNoWindow         = true,
+        };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+
+        using var proc = new Process { StartInfo = psi };
+        try
+        {
+            proc.Start();
+            // Drain both streams so the process doesn't block on a full pipe buffer.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync(cts.Token);
+            var stderrTask = proc.StandardError.ReadToEndAsync(cts.Token);
+            await proc.WaitForExitAsync(cts.Token);
+            await stdoutTask;
+            var stderr = await stderrTask;
+            if (proc.ExitCode != 0)
+            {
+                var tail = stderr.Length > 500 ? stderr[^500..] : stderr;
+                _logger.LogWarning("ffmpeg exited with code {Code}. Last stderr: {Err}", proc.ExitCode, tail);
+                return false;
+            }
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            _logger.LogWarning("ffmpeg timed out after {Timeout}", timeout);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ffmpeg process failed");
+            return false;
+        }
     }
 }

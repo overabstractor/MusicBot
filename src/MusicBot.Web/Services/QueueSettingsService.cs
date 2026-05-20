@@ -16,6 +16,7 @@ public class QueueSettingsService
     public int    PresenceCheckConfirmSeconds      { get; private set; } = 30;
     public bool   SaveDownloads                    { get; private set; } = false;
     public bool   AutoQueueEnabled                 { get; private set; } = false;
+    public bool   LoudnessNormalizationEnabled     { get; private set; } = true;
 
     private readonly IHubContext<OverlayHub> _hub;
 
@@ -31,6 +32,7 @@ public class QueueSettingsService
         PresenceCheckConfirmSeconds = q.GetValue("PresenceCheckConfirmSeconds", 30);
         SaveDownloads    = q.GetValue("SaveDownloads",    false);
         AutoQueueEnabled = q.GetValue("AutoQueueEnabled", false);
+        LoudnessNormalizationEnabled = q.GetValue("LoudnessNormalizationEnabled", true);
     }
 
     public async Task UpdateAsync(
@@ -41,7 +43,8 @@ public class QueueSettingsService
         int    presenceCheckWarningSeconds,
         int    presenceCheckConfirmSeconds,
         bool   saveDownloads   = false,
-        bool   autoQueueEnabled = false)
+        bool   autoQueueEnabled = false,
+        bool   loudnessNormalizationEnabled = true)
     {
         MaxQueueSize                    = maxQueueSize;
         MaxSongsPerUser                 = maxSongsPerUser;
@@ -51,6 +54,7 @@ public class QueueSettingsService
         PresenceCheckConfirmSeconds     = Math.Max(5, presenceCheckConfirmSeconds);
         SaveDownloads                   = saveDownloads;
         AutoQueueEnabled                = autoQueueEnabled;
+        LoudnessNormalizationEnabled    = loudnessNormalizationEnabled;
 
         await _hub.Clients.Group($"user:{LocalUser.Id}")
                           .SendAsync("settings:updated", new
@@ -63,6 +67,7 @@ public class QueueSettingsService
                               presenceCheckConfirmSeconds     = PresenceCheckConfirmSeconds,
                               saveDownloads,
                               autoQueueEnabled,
+                              loudnessNormalizationEnabled,
                           });
     }
 }
