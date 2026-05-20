@@ -42,6 +42,19 @@ export const PlayerBar: React.FC<Props> = ({
   const [seekValue,     setSeekValue]     = useState(0);
   const [volume,        setVolume]        = useState(1.0);
   const volumeDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const volumeRef      = useRef<HTMLInputElement>(null);
+
+  // Persist latest volume so the wheel handler (attached once on mount) always
+  // applies its delta on top of the current value, not the captured-at-mount one.
+  const volumeStateRef = useRef(1.0);
+  useEffect(() => { volumeStateRef.current = volume; }, [volume]);
+
+  const pushVolume = useCallback((next: number) => {
+    const clamped = Math.max(0, Math.min(1, next));
+    setVolume(clamped);
+    if (volumeDebounce.current) clearTimeout(volumeDebounce.current);
+    volumeDebounce.current = setTimeout(() => api.setVolume(clamped).catch(() => {}), 120);
+  }, []);
 
   useEffect(() => { api.getVolume().then(({ volume: v }) => setVolume(v)).catch(() => {}); }, []);
   useEffect(() => { if (!isSeeking) setLocalProgress(state?.progressMs ?? 0); }, [state?.progressMs, isSeeking]);
@@ -63,14 +76,30 @@ export const PlayerBar: React.FC<Props> = ({
     setLocalProgress(ms); setIsSeeking(false); api.seek(ms).catch(() => {});
   }, []);
   const handleVolume = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number(e.target.value); setVolume(v);
-    if (volumeDebounce.current) clearTimeout(volumeDebounce.current);
-    volumeDebounce.current = setTimeout(() => api.setVolume(v).catch(() => {}), 150);
-  }, []);
+    pushVolume(Number(e.target.value));
+  }, [pushVolume]);
   const handlePrev    = useCallback(() => { api.seek(0).catch(() => {}); }, []);
   const toggleMute    = useCallback(() => {
-    setVolume(v => { const nv = v === 0 ? 1 : 0; api.setVolume(nv).catch(() => {}); return nv; });
-  }, []);
+    pushVolume(volumeStateRef.current === 0 ? 1 : 0);
+  }, [pushVolume]);
+
+  // Mouse-wheel scroll on the volume control (matches Spotify/VLC/YouTube Music UX).
+  // React's synthetic onWheel is passive by default, so preventDefault() inside an
+  // onWheel prop has no effect — we attach a native non-passive listener via ref.
+  useEffect(() => {
+    const el = volumeRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const stepBase = 0.05;            // 5% per notch
+      // deltaMode: 0 = pixels, 1 = lines, 2 = pages. Normalize finely for touchpads.
+      const magnitude = e.deltaMode === 0 ? Math.min(1, Math.abs(e.deltaY) / 100) : 1;
+      const dir       = e.deltaY < 0 ? 1 : -1;
+      pushVolume(volumeStateRef.current + dir * stepBase * magnitude);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [pushVolume]);
 
   const queueActive   = rightPanelMode === "queue";
   const devicesActive = rightPanelMode === "devices";
@@ -203,9 +232,11 @@ export const PlayerBar: React.FC<Props> = ({
             <VolumeIcon size={16} />
           </button>
           <input
+            ref={volumeRef}
             type="range" className="pb-vol"
             min={0} max={1} step={0.02} value={volume}
             onChange={handleVolume}
+            title="Volumen (rueda del ratón para ajustar)"
           />
         </div>
       </div>

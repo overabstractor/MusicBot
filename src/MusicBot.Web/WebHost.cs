@@ -47,6 +47,10 @@ public static class WebHost
         builder.Configuration["ConnectionStrings:DefaultConnection"] =
             $"Data Source={Path.Combine(dataDir, "musicbot.db")}";
         builder.Configuration["MusicLibrary:ToolsDirectory"] = toolsDir;
+        // NOTE: User-overridable settings file (appsettings.user.json) is registered by
+        // the Desktop entry point in Program.cs — not here — because content-root path
+        // resolution and the decision of "where user-mutable state lives" belong to the
+        // host application, not to this shared web library.
 
         // ── Configuration ────────────────────────────────────────────────────
         builder.Services.Configure<SpotifySettings>(builder.Configuration.GetSection("Spotify"));

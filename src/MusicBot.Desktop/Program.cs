@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using Velopack;
@@ -142,6 +143,32 @@ public static class Program
             var builder = WebHost.CreateBuilder(args);
             builder.Services.Replace(
                 ServiceDescriptor.Singleton<IHostLifetime, TrayLifetime>());
+
+            // ── User-overridable settings file (Desktop is the entry point, so
+            // path resolution lives here, not in the shared WebHost library). ──
+            // Loaded as the LAST JSON config source so its values override the
+            // bundled appsettings.json defaults. Lives in %AppData%\MusicBot\ so
+            // it survives dotnet rebuilds (which overwrite bin/appsettings.json)
+            // and Velopack updates (which wipe the install dir).
+            //
+            // We mount it via an explicit PhysicalFileProvider anchored to the
+            // user data directory — NOT via AddJsonFile(absolutePath) — because
+            // the default file provider is rooted at ContentRoot, which varies
+            // depending on how the app is launched (dotnet run vs .exe vs VS)
+            // and would silently ignore absolute paths in some scenarios.
+            var userDataDir = builder.Configuration["DataDirectory"]
+                ?? Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "MusicBot");
+            Directory.CreateDirectory(userDataDir);
+            var userConfigProvider = new PhysicalFileProvider(userDataDir);
+            builder.Configuration.AddJsonFile(
+                userConfigProvider,
+                "appsettings.user.json",
+                optional: true,
+                reloadOnChange: true);
+            Log.Information("Configuración de usuario montada desde {Path}",
+                Path.Combine(userDataDir, "appsettings.user.json"));
 
             var webApp = WebHost.Configure(builder);
 

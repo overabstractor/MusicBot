@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import * as signalR from "@microsoft/signalr";
 import { NowPlayingState, SpotifyQueueState, QueueItem, QueueState } from "../types/models";
 import { resolveGoogleAuth } from "../services/community/googleAuthBus";
+import { api } from "../services/api";
 
 const HUB_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/hub/overlay`
@@ -35,6 +36,7 @@ export interface QueueSettings {
   presenceCheckConfirmSeconds: number;
   saveDownloads: boolean;
   autoQueueEnabled: boolean;
+  loudnessNormalizationEnabled: boolean;
   openLogOnStart: boolean;
 }
 
@@ -69,7 +71,7 @@ export function useSignalR(overlayToken: string | null) {
   const [twitchStatus,       setTwitchStatus]        = useState<IntegrationStatus>("disconnected");
   const [kickStatus,         setKickStatus]          = useState<IntegrationStatus>("disconnected");
   const [integrationEvents,  setIntegrationEvents]  = useState<IntegrationEvent[]>([]);
-  const [queueSettings,      setQueueSettings]      = useState<QueueSettings>({ maxQueueSize: 50, maxSongsPerUser: 10, votingEnabled: false, presenceCheckEnabled: false, presenceCheckWarningSeconds: 30, presenceCheckConfirmSeconds: 30, saveDownloads: false, autoQueueEnabled: false, openLogOnStart: false });
+  const [queueSettings,      setQueueSettings]      = useState<QueueSettings>({ maxQueueSize: 50, maxSongsPerUser: 10, votingEnabled: false, presenceCheckEnabled: false, presenceCheckWarningSeconds: 30, presenceCheckConfirmSeconds: 30, saveDownloads: false, autoQueueEnabled: false, loudnessNormalizationEnabled: true, openLogOnStart: false });
   const [tickerMessages,     setTickerMessages]     = useState<TickerMessage[]>([]);
   const [activePlaylistName,  setActivePlaylistName]  = useState<string | null>(null);
   const [queueUpdateCount,    setQueueUpdateCount]    = useState(0);
@@ -106,7 +108,10 @@ export function useSignalR(overlayToken: string | null) {
       if (p.source === "kick")    setKickStatus(p.status);
     });
 
-    conn.on("settings:updated",  (s: QueueSettings) => setQueueSettings(s));
+    // Merge instead of replace: the server payload may omit fields like
+    // openLogOnStart (which lives in the Desktop section, not Queue). Without
+    // merge those would be wiped to `undefined` after every save.
+    conn.on("settings:updated",  (s: Partial<QueueSettings>) => setQueueSettings(prev => ({ ...prev, ...s })));
     conn.on("playlist:status",   ()                  => setPlaylistUpdateCount(c => c + 1));
 
     conn.on("ticker:updated", (msgs: TickerMessage[]) => setTickerMessages(msgs || []));
@@ -201,6 +206,12 @@ export function useSignalR(overlayToken: string | null) {
     conn.onreconnected(async () => {
       setConnected(true);
       try { await conn.invoke("JoinUserGroup", overlayToken!); } catch {}
+      // Refresh settings — they may have changed (or the backend restarted with new
+      // values from appsettings.user.json) while we were disconnected.
+      try {
+        const s = await api.getSettings();
+        if (activeRef.current) setQueueSettings(s);
+      } catch {}
     });
 
     conn.onclose(() => {
@@ -224,6 +235,14 @@ export function useSignalR(overlayToken: string | null) {
 
       await conn.invoke("JoinUserGroup", overlayToken!);
       try { const msgs = await fetch("/api/ticker").then(r => r.json()); setTickerMessages(msgs || []); } catch {}
+      // Initial fetch of persisted settings — the SignalR `settings:updated` event only
+      // fires when someone changes them, so without this the UI would always show the
+      // hardcoded React state defaults (loudnessNormalizationEnabled=true, etc.)
+      // instead of whatever's actually loaded from appsettings.user.json on the backend.
+      try {
+        const s = await api.getSettings();
+        if (activeRef.current) setQueueSettings(s);
+      } catch {}
       setConnected(true);
     } catch {
       if (connRef.current === conn) connRef.current = null;

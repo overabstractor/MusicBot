@@ -32,6 +32,7 @@ public class SettingsController : ControllerBase
         presenceCheckConfirmSeconds     = _settings.PresenceCheckConfirmSeconds,
         saveDownloads                   = _settings.SaveDownloads,
         autoQueueEnabled                = _settings.AutoQueueEnabled,
+        loudnessNormalizationEnabled    = _settings.LoudnessNormalizationEnabled,
         openLogOnStart                  = _config.GetValue<bool>("Desktop:OpenLogOnStart", false),
     });
 
@@ -49,50 +50,109 @@ public class SettingsController : ControllerBase
             req.PresenceCheckWarningSeconds,
             req.PresenceCheckConfirmSeconds,
             req.SaveDownloads,
-            req.AutoQueueEnabled);
+            req.AutoQueueEnabled,
+            req.LoudnessNormalizationEnabled);
 
-        // Persist Desktop:OpenLogOnStart to appsettings.json
-        PersistDesktopSetting("OpenLogOnStart", req.OpenLogOnStart);
+        // Persist BOTH Queue and Desktop sections to %AppData%\MusicBot\appsettings.user.json.
+        // That file is loaded as a higher-priority config source (see WebHost.cs), so values
+        // here override the bundled appsettings.json on next startup. It survives both dotnet
+        // rebuilds (which overwrite bin/appsettings.json) and Velopack updates.
+        // Keys must match exactly what QueueSettingsService reads in its ctor.
+        var userConfigPath = ResolveUserConfigPath();
+        PersistUserConfigSection(userConfigPath, "Queue", new Dictionary<string, object?>
+        {
+            ["MaxSize"]                      = req.MaxQueueSize,
+            ["MaxSongsPerUser"]              = req.MaxSongsPerUser,
+            ["VotingEnabled"]                = req.VotingEnabled,
+            ["PresenceCheckEnabled"]         = req.PresenceCheckEnabled,
+            ["PresenceCheckWarningSeconds"]  = req.PresenceCheckWarningSeconds,
+            ["PresenceCheckConfirmSeconds"]  = req.PresenceCheckConfirmSeconds,
+            ["SaveDownloads"]                = req.SaveDownloads,
+            ["AutoQueueEnabled"]             = req.AutoQueueEnabled,
+            ["LoudnessNormalizationEnabled"] = req.LoudnessNormalizationEnabled,
+        });
+        PersistUserConfigSection(userConfigPath, "Desktop", new Dictionary<string, object?>
+        {
+            ["OpenLogOnStart"] = req.OpenLogOnStart,
+        });
 
         return NoContent();
     }
 
-    private static void PersistDesktopSetting(string key, bool value)
+    private string ResolveUserConfigPath()
+    {
+        // Set by WebHost.cs at startup. Fall back to %AppData%\MusicBot\ if missing
+        // (covers test scenarios where the config key isn't injected).
+        var dataDir = _config["DataDirectory"];
+        if (string.IsNullOrWhiteSpace(dataDir))
+            dataDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "MusicBot");
+        Directory.CreateDirectory(dataDir);
+        return Path.Combine(dataDir, "appsettings.user.json");
+    }
+
+    /// <summary>
+    /// Writes the given key/value pairs into the named top-level section of the user
+    /// config file, preserving every other section as-is. Creates the file if missing.
+    /// Best effort — failures (read-only file, parse error) are swallowed so a UI save
+    /// never errors out; in-memory state is already updated and broadcast.
+    /// </summary>
+    private static void PersistUserConfigSection(string path, string sectionName, IDictionary<string, object?> updates)
     {
         try
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-            if (!System.IO.File.Exists(path)) return;
-
-            var json = System.IO.File.ReadAllText(path);
-            using var doc = JsonDocument.Parse(json);
             var dict = new Dictionary<string, object?>();
+            bool sectionFound = false;
 
-            foreach (var prop in doc.RootElement.EnumerateObject())
+            if (System.IO.File.Exists(path))
             {
-                if (prop.Name == "Desktop")
+                var json = System.IO.File.ReadAllText(path);
+                if (!string.IsNullOrWhiteSpace(json))
                 {
-                    var desktop = new Dictionary<string, object>();
-                    foreach (var dp in prop.Value.EnumerateObject())
-                        desktop[dp.Name] = dp.Value.ValueKind == JsonValueKind.True || dp.Value.ValueKind == JsonValueKind.False
-                            ? dp.Value.GetBoolean() : dp.Value.Clone();
-                    desktop[key] = value;
-                    dict[prop.Name] = desktop;
-                }
-                else
-                {
-                    dict[prop.Name] = prop.Value.Clone();
+                    using var doc = JsonDocument.Parse(json);
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        if (prop.Name == sectionName)
+                        {
+                            sectionFound = true;
+                            var section = new Dictionary<string, object?>();
+                            foreach (var dp in prop.Value.EnumerateObject())
+                                section[dp.Name] = JsonElementToObject(dp.Value);
+                            foreach (var kv in updates) section[kv.Key] = kv.Value;
+                            dict[prop.Name] = section;
+                        }
+                        else
+                        {
+                            dict[prop.Name] = JsonElementToObject(prop.Value);
+                        }
+                    }
                 }
             }
 
-            if (!dict.ContainsKey("Desktop"))
-                dict["Desktop"] = new Dictionary<string, object> { [key] = value };
+            if (!sectionFound)
+                dict[sectionName] = new Dictionary<string, object?>(updates);
 
             var output = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
-            System.IO.File.WriteAllText(path, output);
+            // Write to a temp file then move, so a partial write never corrupts the user config.
+            var tempPath = path + ".tmp";
+            System.IO.File.WriteAllText(tempPath, output);
+            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            System.IO.File.Move(tempPath, path);
         }
-        catch { /* best effort */ }
+        catch { /* best effort — in-memory state is already updated */ }
     }
+
+    private static object? JsonElementToObject(JsonElement el) => el.ValueKind switch
+    {
+        JsonValueKind.True or JsonValueKind.False => el.GetBoolean(),
+        JsonValueKind.Number => el.TryGetInt64(out var l) ? l : el.GetDouble(),
+        JsonValueKind.String => el.GetString(),
+        JsonValueKind.Null   => null,
+        JsonValueKind.Object => el.EnumerateObject().ToDictionary(p => p.Name, p => JsonElementToObject(p.Value)),
+        JsonValueKind.Array  => el.EnumerateArray().Select(JsonElementToObject).ToList(),
+        _ => el.Clone(),
+    };
 }
 
 public class UpdateSettingsRequest
@@ -105,5 +165,6 @@ public class UpdateSettingsRequest
     public int    PresenceCheckConfirmSeconds      { get; set; } = 30;
     public bool   SaveDownloads                    { get; set; } = false;
     public bool   AutoQueueEnabled                 { get; set; } = false;
+    public bool   LoudnessNormalizationEnabled     { get; set; } = true;
     public bool   OpenLogOnStart                   { get; set; } = false;
 }
