@@ -342,9 +342,7 @@ public partial class TikTokLoginWindow : Window
 
         try
         {
-            var raw = await WebView.CoreWebView2.ExecuteScriptAsync(script);
-            if (raw == "null" || string.IsNullOrWhiteSpace(raw)) return null;
-            var handle = JsonSerializer.Deserialize<string>(raw)?.TrimStart('@');
+            var handle = (await RunAsyncScriptAsync(script, timeoutSec: 10))?.TrimStart('@');
             if (!string.IsNullOrWhiteSpace(handle) && !_ignoredHandles.Contains(handle))
                 return handle;
         }
@@ -444,13 +442,10 @@ public partial class TikTokLoginWindow : Window
 
         try
         {
-            var raw = await Dispatcher.InvokeAsync(async () =>
-                await WebView.CoreWebView2.ExecuteScriptAsync(script)).Result;
+            var raw = await RunAsyncScriptAsync(script, timeoutSec: 15);
+            if (string.IsNullOrWhiteSpace(raw)) return (Array.Empty<byte>(), "");
 
-            var inner = JsonSerializer.Deserialize<string>(raw);
-            if (inner == null) return (Array.Empty<byte>(), "");
-
-            using var doc = JsonDocument.Parse(inner);
+            using var doc = JsonDocument.Parse(raw);
             var ok = doc.RootElement.TryGetProperty("ok", out var okProp) && okProp.GetBoolean();
             if (!ok)
             {
@@ -483,55 +478,108 @@ public partial class TikTokLoginWindow : Window
     private async Task<string?> ResolveRoomIdViaWebViewAsync(string username)
     {
         var usernameJson = JsonSerializer.Serialize(username);
+        // Returns a structured JSON envelope every time so failures carry diagnostic info:
+        //   success: { ok:true,  roomId, source, ... }
+        //   failure: { ok:false, attempts:[ ... ] }       (logged at Warning so we can see TikTok's actual shape)
         var script = $$"""
             (async function() {
+                const username = {{usernameJson}};
+                const out = { ok: false, attempts: [] };
+
+                // Try multiple webcast APIs. /room/info/ + /room/info_by_user/ both 404 on self-query
+                // but might work for other creators.
+                const apis = [
+                    'https://webcast.tiktok.com/webcast/room/info/?aid=1988&uniqueId=' + encodeURIComponent(username),
+                    'https://webcast.tiktok.com/webcast/room/info_by_user/?aid=1988&uniqueId=' + encodeURIComponent(username),
+                ];
+                for (const url of apis) {
+                    const att = { kind: 'api', endpoint: url.replace(/\?.*$/, '') };
+                    try {
+                        const r = await fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } });
+                        att.http = r.status;
+                        const d = await r.json().catch(() => null);
+                        if (d) {
+                            att.status = d?.data?.roomInfo?.status ?? d?.data?.status ?? d?.data?.room?.status;
+                            const roomId = (d?.data?.roomInfo?.roomId) || (d?.data?.room_id) || (d?.roomId) || (d?.data?.id);
+                            att.roomId = roomId ? String(roomId) : null;
+                            if (att.status === 2 && roomId) {
+                                out.ok = true;
+                                out.roomId = String(roomId);
+                                out.source = att.endpoint.split('/').pop();
+                                out.attempts.push(att);
+                                return JSON.stringify(out);
+                            }
+                        }
+                    } catch(e) { att.error = String((e && e.message) || e); }
+                    out.attempts.push(att);
+                }
+
+                // HTML scrape of /@user/live — works for self-query when the regex matches.
+                const att2 = { kind: 'html', url: 'https://www.tiktok.com/@' + username + '/live' };
                 try {
-                    const username = {{usernameJson}};
+                    const page = await fetch(att2.url, { credentials: 'include' });
+                    att2.http = page.status;
+                    const html = await page.text();
+                    att2.len = html.length;
+                    att2.hasStatus2 = /"status"\s*:\s*2\b/.test(html);
+                    att2.hasRoomIdKey = html.includes('roomId') || html.includes('room_id');
 
-                    // Primary: webcast room/info API
-                    const r = await fetch(
-                        'https://webcast.tiktok.com/webcast/room/info/?aid=1988&uniqueId=' + encodeURIComponent(username),
-                        { credentials: 'include', headers: { 'Accept': 'application/json' } }
-                    );
-                    const d = await r.json();
-
-                    // TikTok room status: 2 = live/streaming, 4 = ended/offline.
-                    // Only return the roomId when the API confirms the room is currently live.
-                    const status = d?.data?.roomInfo?.status ?? d?.data?.status ?? d?.data?.room?.status;
-                    if (status === 2) {
-                        const roomId =
-                            (d?.data?.roomInfo?.roomId) ||
-                            (d?.data?.room_id)          ||
-                            (d?.roomId)                 ||
-                            (d?.data?.id);
-                        if (roomId) return String(roomId);
+                    const patterns = [
+                        /"roomId"\s*:\s*"(\d{15,25})"/,
+                        /"roomId"\s*:\s*(\d{15,25})\b/,
+                        /"room_id"\s*:\s*"(\d{15,25})"/,
+                        /"room_id"\s*:\s*(\d{15,25})\b/,
+                        /room_id["=:]+\s*["']?(\d{15,25})/,
+                        /roomID["=:]+\s*["']?(\d{15,25})/,
+                    ];
+                    for (let i = 0; i < patterns.length; i++) {
+                        const m = html.match(patterns[i]);
+                        if (m) {
+                            att2.matchedPatternIndex = i;
+                            out.ok = true;
+                            out.roomId = m[1];
+                            out.source = 'html';
+                            out.attempts.push(att2);
+                            return JSON.stringify(out);
+                        }
                     }
 
-                    // Fallback: scrape the live page — TikTok only embeds roomId when the user is live
-                    const page = await fetch(
-                        'https://www.tiktok.com/@' + encodeURIComponent(username) + '/live',
-                        { credentials: 'include' }
-                    );
-                    const html = await page.text();
+                    // Capture surrounding context for diagnosis (first occurrence of each keyword)
+                    const grab = (key) => {
+                        const idx = html.indexOf(key);
+                        return idx < 0 ? null : html.substring(Math.max(0, idx - 20), Math.min(html.length, idx + 100));
+                    };
+                    att2.ctxRoomId = grab('roomId') || grab('room_id');
+                    att2.ctxStatus = grab('"status"');
+                } catch(e) { att2.error = String((e && e.message) || e); }
+                out.attempts.push(att2);
 
-                    // Match "roomId":"digits" or roomId:digits
-                    const m = html.match(/"roomId"\s*:\s*"?(\d{15,25})"?/);
-                    if (m) return m[1];
-                } catch(e) {}
-                return null;
+                return JSON.stringify(out);
             })()
             """;
 
         try
         {
-            var raw = await Dispatcher.InvokeAsync(async () =>
-                await WebView.CoreWebView2.ExecuteScriptAsync(script)).Result;
+            var raw = await RunAsyncScriptAsync(script, timeoutSec: 12);
+            if (string.IsNullOrWhiteSpace(raw)) return null;
 
-            if (raw == "null" || string.IsNullOrWhiteSpace(raw)) return null;
-            return JsonSerializer.Deserialize<string>(raw);
+            using var doc = JsonDocument.Parse(raw);
+            var ok = doc.RootElement.TryGetProperty("ok", out var okProp) && okProp.GetBoolean();
+            if (ok && doc.RootElement.TryGetProperty("roomId", out var ridProp))
+            {
+                var source = doc.RootElement.TryGetProperty("source", out var s) ? s.GetString() ?? "?" : "?";
+                Serilog.Log.Information("TikTok WebView roomId resolved via {Source}: {RoomId}", source, ridProp.GetString());
+                return ridProp.GetString();
+            }
+
+            // Diagnostic: dump what TikTok actually returned. Truncated to keep logs readable.
+            var diag = raw.Length > 1500 ? raw[..1500] + "…(truncated)" : raw;
+            Serilog.Log.Warning("TikTok WebView resolve failed for @{User} — diag: {Diag}", username, diag);
+            return null;
         }
-        catch
+        catch (Exception ex)
         {
+            Serilog.Log.Warning(ex, "TikTok WebView roomId resolve error");
             return null;
         }
     }
@@ -609,18 +657,10 @@ public partial class TikTokLoginWindow : Window
 
         try
         {
-            var raw = await Dispatcher.InvokeAsync(async () =>
-                await WebView.CoreWebView2.ExecuteScriptAsync(script)).Result;
+            var raw = await RunAsyncScriptAsync(script, timeoutSec: 15);
+            if (string.IsNullOrWhiteSpace(raw)) return false;
 
-            // ExecuteScriptAsync wraps string return values in an extra JSON layer (e.g. "\"...\"").
-            // If the script somehow returned a bare object instead, Deserialize<string> would throw —
-            // so fall back to parsing raw directly.
-            string jsonToParse;
-            try   { jsonToParse = JsonSerializer.Deserialize<string>(raw) ?? raw; }
-            catch { jsonToParse = raw; }
-            if (string.IsNullOrWhiteSpace(jsonToParse)) return false;
-
-            using var doc = JsonDocument.Parse(jsonToParse);
+            using var doc = JsonDocument.Parse(raw);
             var ok         = doc.RootElement.TryGetProperty("ok",         out var okProp)         && okProp.GetBoolean();
             var httpStatus = doc.RootElement.TryGetProperty("httpStatus", out var httpStatusProp)  ? httpStatusProp.GetInt32() : -1;
             var code       = doc.RootElement.TryGetProperty("code",       out var codeProp)        ? codeProp.GetInt32() : -1;
@@ -716,13 +756,16 @@ public partial class TikTokLoginWindow : Window
     {
         try
         {
-            if (WebView.CoreWebView2 == null) return null;
-
-            IReadOnlyList<Microsoft.Web.WebView2.Core.CoreWebView2Cookie> cookies = null!;
-            await Dispatcher.InvokeAsync(async () =>
+            // Both the null-check and the cookie read must go through the dispatcher —
+            // this method is invoked from thread-pool callers via AppEvents.
+            var cookies = await Dispatcher.InvokeAsync(async () =>
             {
-                cookies = await WebView.CoreWebView2.CookieManager.GetCookiesAsync("https://www.tiktok.com");
+                if (WebView.CoreWebView2 == null)
+                    return (IReadOnlyList<CoreWebView2Cookie>?)null;
+                return await WebView.CoreWebView2.CookieManager.GetCookiesAsync("https://www.tiktok.com");
             }).Task.Unwrap();
+
+            if (cookies == null) return null;
 
             var cookieStr = string.Join("; ", cookies
                 .Where(c => !string.IsNullOrWhiteSpace(c.Value))
@@ -735,6 +778,124 @@ public partial class TikTokLoginWindow : Window
             Serilog.Log.Warning(ex, "TikTok WebView: failed to read current cookies for refresh");
             return null;
         }
+    }
+
+    // ── JS Promise execution helper ───────────────────────────────────────────
+
+    /// <summary>
+    /// Runs a JS expression that evaluates to a Promise, and awaits the Promise's resolved value.
+    /// Uses postMessage + WebMessageReceived because <c>ExecuteScriptAsync</c> alone serializes the
+    /// Promise object itself (yielding <c>{}</c>) — not its resolved value — on every WebView2 runtime
+    /// we have empirically tested, regardless of what the docs claim about modern runtimes.
+    /// Returns the script's resolved string value, or null on timeout / error / null result.
+    /// </summary>
+    private async Task<string?> RunAsyncScriptAsync(string promiseScript, int timeoutSec = 15)
+    {
+        var correlationId = "JOB_" + Guid.NewGuid().ToString("N");
+        var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Handler ONLY reads event args + sets the TCS — it does not touch WebView,
+        // so it doesn't matter what thread WebView2 fires this on.
+        EventHandler<CoreWebView2WebMessageReceivedEventArgs>? handler = null;
+        handler = (_, e) =>
+        {
+            try
+            {
+                var msg = e.TryGetWebMessageAsString();
+                if (msg == null || !msg.StartsWith(correlationId + "|", StringComparison.Ordinal)) return;
+                tcs.TrySetResult(msg[(correlationId.Length + 1)..]);
+            }
+            catch (Exception ex) { Serilog.Log.Debug(ex, "TikTok WebView handler parse error"); }
+        };
+
+        var wrapped = $$"""
+            (function() {
+                const __id = '{{correlationId}}';
+                try {
+                    Promise.resolve(({{promiseScript}})).then(
+                        function(v) {
+                            let s;
+                            if (v == null) s = '';
+                            else if (typeof v === 'string') s = v;
+                            else s = JSON.stringify(v);
+                            window.chrome.webview.postMessage(__id + '|' + s);
+                        },
+                        function(e) {
+                            window.chrome.webview.postMessage(__id + '|__ERR__' + String((e && e.message) || e));
+                        }
+                    );
+                } catch(e) {
+                    window.chrome.webview.postMessage(__id + '|__ERR__' + String((e && e.message) || e));
+                }
+            })();
+            """;
+
+        // EVERY access to WebView.CoreWebView2 must go through the Dispatcher — this method
+        // is invoked from thread-pool callers via AppEvents, and WPF/WebView2 objects are
+        // thread-affine. The previous version's null check at the top crashed every call.
+        try
+        {
+            var initOk = await Dispatcher.InvokeAsync(() =>
+            {
+                if (WebView.CoreWebView2 == null) return false;
+                WebView.CoreWebView2.WebMessageReceived += handler;
+                return true;
+            }).Task;
+
+            if (!initOk) return null;
+
+            _ = Dispatcher.InvokeAsync(async () =>
+            {
+                try { await WebView.CoreWebView2.ExecuteScriptAsync(wrapped); }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning(ex, "TikTok WebView ExecuteScriptAsync threw");
+                    tcs.TrySetResult(null);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "TikTok WebView script setup failed");
+            await UnsubscribeAsync(handler);
+            return null;
+        }
+
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSec));
+        using var reg = timeoutCts.Token.Register(() => tcs.TrySetResult(null));
+
+        var result = await tcs.Task;
+
+        // Always unsubscribe, even on success — handlers are per-call.
+        await UnsubscribeAsync(handler);
+
+        if (result == null)
+        {
+            Serilog.Log.Warning("TikTok WebView script timeout after {Sec}s (id={Id})", timeoutSec, correlationId);
+            return null;
+        }
+        if (result.StartsWith("__ERR__", StringComparison.Ordinal))
+        {
+            Serilog.Log.Warning("TikTok WebView script JS error: {Err}", result[7..]);
+            return null;
+        }
+
+        return result;
+    }
+
+    /// <summary>Detach a WebMessageReceived handler via the UI dispatcher (silent on any failure).</summary>
+    private async Task UnsubscribeAsync(EventHandler<CoreWebView2WebMessageReceivedEventArgs>? handler)
+    {
+        if (handler == null) return;
+        try
+        {
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (WebView.CoreWebView2 != null)
+                    WebView.CoreWebView2.WebMessageReceived -= handler;
+            }).Task;
+        }
+        catch { /* best-effort cleanup */ }
     }
 
     /// <summary>Permanently close — called on app exit or auth disconnect.</summary>

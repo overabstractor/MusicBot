@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Security;
+using System.Security.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Microsoft.OpenApi.Models;
@@ -68,6 +71,26 @@ public static class WebHost
         // ── Core services ────────────────────────────────────────────────────
         builder.Services.AddHttpClient();
         builder.Services.AddHttpClient("itunes");
+
+        // Named client for TikTok endpoints. TikTok performs post-handshake TLS
+        // renegotiation on webcast/live URLs and the default SocketsHttpHandler in
+        // .NET 7+ blocks it, causing intermittent timeouts and truncated responses.
+        builder.Services.AddHttpClient("tiktok", c =>
+        {
+            c.Timeout              = TimeSpan.FromSeconds(20);
+            c.DefaultRequestVersion = HttpVersion.Version11;
+            c.DefaultVersionPolicy  = HttpVersionPolicy.RequestVersionExact;
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                AllowRenegotiation  = true,
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            },
+            AutomaticDecompression   = DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        });
 
         builder.Services.AddSingleton<IMetadataService, ItunesMetadataService>();
         builder.Services.AddSingleton<ILocalLibraryService, LocalLibraryService>();

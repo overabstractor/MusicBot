@@ -74,7 +74,18 @@ public class TikTokRoomResolver
                 _logger.LogInformation("TikTok room ID for @{User} resolved via WebView: {RoomId}", username, roomId);
                 return roomId;
             }
-            _logger.LogDebug("TikTok WebView resolver returned null for @{User} — trying fallbacks", username);
+            _logger.LogInformation("TikTok WebView resolver returned null for @{User} — trying HTTP fallbacks", username);
+        }
+        else
+        {
+            // Loud warning: HTTP fallbacks fail for self-query (your own account returns 404 from anchorinfo
+            // and an HTML stub from /@user/live). Without the WebView resolver registered, the connection
+            // cannot succeed for the logged-in user's own live. Usually means the TikTokLoginWindow silent
+            // restore did not complete — check for "TikTok WebView session restored silently" at startup.
+            _logger.LogWarning(
+                "TikTok WebView resolver NOT registered for @{User} — bot-detection bypass disabled. " +
+                "Look for 'TikTok WebView session restored silently' or 'no sessionid cookie' in startup logs.",
+                username);
         }
 
         // Strategy 2: HTTP scrape with browser headers
@@ -108,7 +119,7 @@ public class TikTokRoomResolver
 
         try
         {
-            var client = _httpFactory.CreateClient();
+            var client = _httpFactory.CreateClient("tiktok");
 
             // webcast/live/anchorinfo/ accepts a uniqueId query parameter and returns
             // the room_id in JSON without needing to scrape HTML.
@@ -174,7 +185,7 @@ public class TikTokRoomResolver
     {
         try
         {
-            var client = _httpFactory.CreateClient();
+            var client = _httpFactory.CreateClient("tiktok");
             var request = new HttpRequestMessage(HttpMethod.Get, $"https://www.tiktok.com/@{username}/live");
             request.Headers.Add("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
