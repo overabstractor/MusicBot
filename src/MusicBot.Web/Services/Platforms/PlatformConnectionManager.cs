@@ -365,30 +365,50 @@ public class PlatformConnectionManager
                 _logger.LogWarning("TikTok WebView resolver no se registró en {Sec}s — continuando con HTTP fallbacks", maxWait.TotalSeconds);
         }
 
+        // Persist across reconnects so we can reuse the roomId after a watchdog kill
+        // without re-querying TikTok (which triggers the bot-detection rate-limit and
+        // returns 1155-byte stubs for ~30 min, breaking all subsequent attempts).
+        string? lastKnownRoomId = null;
+        bool reuseLastRoomId = false;
+
         while (!ct.IsCancellationRequested)
         {
             // ── Wait for the streamer to go live ──────────────────────────────
             string? roomId = null;
-            int consecutiveNotLive = 0;
-            while (!ct.IsCancellationRequested)
+
+            if (reuseLastRoomId && lastKnownRoomId != null)
             {
-                roomId = await SafeResolveRoomIdAsync(config.Username, ct);
-                if (roomId != null) break;
+                _logger.LogInformation(
+                    "TikTok @{User}: reutilizando roomId {RoomId} tras watchdog kill (evitar rate-limit)",
+                    config.Username, lastKnownRoomId);
+                roomId = lastKnownRoomId;
+                reuseLastRoomId = false; // only one shot; if it fails we re-resolve next round
+            }
+            else
+            {
+                int consecutiveNotLive = 0;
+                while (!ct.IsCancellationRequested)
+                {
+                    roomId = await SafeResolveRoomIdAsync(config.Username, ct);
+                    if (roomId != null) break;
 
-                var idx = Math.Min(consecutiveNotLive, liveCheckDelaysSec.Length - 1);
-                var delaySec = liveCheckDelaysSec[idx];
+                    var idx = Math.Min(consecutiveNotLive, liveCheckDelaysSec.Length - 1);
+                    var delaySec = liveCheckDelaysSec[idx];
 
-                _logger.LogInformation("TikTok @{User} no está en vivo — verificando en {Sec}s (intento #{N})",
-                    config.Username, delaySec, consecutiveNotLive + 1);
-                SetStatus(key, ConnectionStatus.Connecting,
-                    $"@{config.Username} no está en vivo — verificando en {delaySec}s…");
+                    _logger.LogInformation("TikTok @{User} no está en vivo — verificando en {Sec}s (intento #{N})",
+                        config.Username, delaySec, consecutiveNotLive + 1);
+                    SetStatus(key, ConnectionStatus.Connecting,
+                        $"@{config.Username} no está en vivo — verificando en {delaySec}s…");
 
-                try { await Task.Delay(TimeSpan.FromSeconds(delaySec), ct); }
-                catch (OperationCanceledException) { return; }
-                consecutiveNotLive++;
+                    try { await Task.Delay(TimeSpan.FromSeconds(delaySec), ct); }
+                    catch (OperationCanceledException) { return; }
+                    consecutiveNotLive++;
+                }
             }
 
             if (ct.IsCancellationRequested) return;
+            if (roomId == null) continue;
+            lastKnownRoomId = roomId;
 
             _logger.LogDebug("TikTok room ID: {RoomId}", roomId);
 
@@ -437,6 +457,11 @@ public class PlatformConnectionManager
                     ? ConnectionStatus.Disconnected
                     : ConnectionStatus.Connecting);
             };
+            // OnMessage dispara para CUALQUIER mensaje del WebSocket — likes, joins, follows,
+            // gifts, control messages, etc. Es la única forma confiable de detectar que el WS
+            // sigue vivo. Subscribirse solo a OnChatMessage/OnGiftMessage perdía actividad de
+            // lives sin chat (resultaba en false-positives del watchdog tras 10min "sin eventos").
+            client.OnMessage += (_, _) => lastEventAt = DateTime.UtcNow;
             client.OnChatMessage += (_, e) =>
             {
                 lastEventAt = DateTime.UtcNow;
@@ -528,6 +553,13 @@ public class PlatformConnectionManager
                 catch (OperationCanceledException) { return; }
             }
             try { await watchdogTask; } catch { /* swallow */ }
+
+            // If the watchdog killed us (not a clean stream end), the live MIGHT still be on —
+            // TikTok just stopped sending events for 10+ min. Try reconnecting with the same
+            // roomId next iteration to avoid hammering the resolver (which would get rate-limited).
+            // If the live actually ended, the WS will fail and we'll re-resolve normally.
+            if (streamEndedByWatchdog && !ct.IsCancellationRequested)
+                reuseLastRoomId = true;
 
             // After natural stream-end or watchdog cancel, do brief cooldown then poll again.
             // After WS error, we already waited — go straight to live check (skip cooldown).
