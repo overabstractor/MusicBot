@@ -8,14 +8,15 @@ interface Props {
   kickStatus:       IntegrationStatus;
 }
 
-function dotClass(status: "ok" | "warn" | "err" | "connecting"): string {
+function dotClass(status: "ok" | "warn" | "err" | "connecting" | "waiting"): string {
   return `status-dot ${status}`;
 }
 
-function statusToDot(status: IntegrationStatus): "ok" | "warn" | "err" | "connecting" {
-  return status === "connected"  ? "ok"
-       : status === "connecting" ? "connecting"
-       : status === "error"      ? "err"
+function statusToDot(status: IntegrationStatus): "ok" | "warn" | "err" | "connecting" | "waiting" {
+  return status === "connected"   ? "ok"
+       : status === "waitinglive" ? "waiting"
+       : status === "connecting"  ? "connecting"
+       : status === "error"       ? "err"
        : "warn";
 }
 

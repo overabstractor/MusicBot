@@ -2483,6 +2483,7 @@ a:hover { text-decoration: underline; }
 .status-dot.err        { background: var(--red);   box-shadow: 0 0 6px var(--red); }
 .status-dot.warn       { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
 .status-dot.connecting { background: #f59e0b; animation: pulse-dot 1s ease-in-out infinite; }
+.status-dot.waiting    { background: #38bdf8; animation: pulse-dot 1.6s ease-in-out infinite; }
 @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 /* ════════════════════════════════════════════
@@ -3687,6 +3688,8 @@ a:hover { text-decoration: underline; }
 .platform-status-connected    { color: var(--green); }
 .platform-status-connecting   .platform-status-dot { background: #f59e0b; animation: pulse-dot 1.2s infinite; }
 .platform-status-connecting   { color: #f59e0b; }
+.platform-status-waitinglive  .platform-status-dot { background: #38bdf8; animation: pulse-dot 1.6s infinite; }
+.platform-status-waitinglive  { color: #38bdf8; }
 .platform-status-disconnected .platform-status-dot { background: var(--text-muted); }
 .platform-status-disconnected { color: var(--text-muted); }
 .platform-status-error        .platform-status-dot { background: var(--red); }
