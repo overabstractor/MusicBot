@@ -56,7 +56,27 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        VelopackApp.Build().Run();
+        // ── Diagnóstico de arranque ───────────────────────────────────────────
+        // Serilog aún no existe en este punto. Si VelopackApp.Run() o el arranque
+        // crashean en una máquina limpia de usuario final (típicamente por
+        // cuarentena de antivirus del .exe sin firmar, o WebView2/dependencias
+        // faltantes) no quedaría ningún rastro legible y el instalador solo diría
+        // "problema con los hooks de instalación". Esta traza a disco —junto al
+        // velopack.log— permite saber exactamente hasta dónde llegó el proceso.
+        BootTrace($"Main start, args=[{string.Join(' ', args)}]");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            BootTrace($"UnhandledException: {e.ExceptionObject}");
+
+        try
+        {
+            VelopackApp.Build().Run();
+            BootTrace("VelopackApp.Run() completado");
+        }
+        catch (Exception ex)
+        {
+            BootTrace($"VelopackApp.Run() FALLÓ: {ex}");
+            throw;
+        }
 
         // Si fuimos invocados como hook de Velopack (--velopack-install,
         // --velopack-updated, etc.) salir aquí. Algunas versiones de Velopack
@@ -197,6 +217,27 @@ public static class Program
             _instanceMutex?.ReleaseMutex();
             _instanceMutex?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Escribe una línea de diagnóstico al boot.log junto al velopack.log
+    /// (%LocalAppData%\MusicBot\). Pensado para los puntos del arranque que
+    /// ocurren ANTES de que Serilog exista. Nunca lanza: si no puede escribir
+    /// (permisos, disco), se ignora silenciosamente para no romper el hook.
+    /// </summary>
+    private static void BootTrace(string message)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MusicBot");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(
+                Path.Combine(dir, "boot.log"),
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] pid={Environment.ProcessId} {message}{Environment.NewLine}");
+        }
+        catch { /* nunca debe tumbar el arranque ni el hook */ }
     }
 
     /// <summary>

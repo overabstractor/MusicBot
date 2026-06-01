@@ -8,7 +8,9 @@ const HUB_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/hub/overlay`
   : "/hub/overlay";
 
-export type IntegrationStatus = "disconnected" | "connecting" | "connected" | "error";
+// "waitinglive" is TikTok-only: the bot is armed and polling but the host is not streaming
+// yet (no chat to join). Distinct from "connecting" so the UI shows "Esperando tu Live".
+export type IntegrationStatus = "disconnected" | "connecting" | "waitinglive" | "connected" | "error";
 
 export interface IntegrationStatusPayload {
   source: "tiktok" | "twitch" | "kick";

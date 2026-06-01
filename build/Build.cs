@@ -30,6 +30,14 @@ class Build : NukeBuild
 
     Project DesktopProject => Solution.GetProject("MusicBot.Desktop")!;
 
+    // Ruta explícita al .csproj de Desktop. Se usa en `dotnet publish` en lugar
+    // del objeto Project porque su interpolación en la línea de comandos resolvía
+    // a vacío → `dotnet publish` sin proyecto tomaba MusicBot.sln y publicaba
+    // TODA la solución (incluido MusicBot.Tests + coverlet) al mismo --output,
+    // contaminando el paquete de Velopack. Apuntar al csproj publica solo Desktop.
+    AbsolutePath DesktopProjectFile =>
+        RootDirectory / "src" / "MusicBot.Desktop" / "MusicBot.Desktop.csproj";
+
     void Npm(string args) =>
         ProcessTasks.StartProcess("npm", args, workingDirectory: ClientAppDir)
             .AssertZeroExitCode();
@@ -72,11 +80,29 @@ class Build : NukeBuild
     Target Publish => _ => _
         .DependsOn(Test)
         .Executes(() =>
-            DotNet($"publish {DesktopProject} " +
+        {
+            // Limpiar el directorio de publish ANTES de publicar. Sin esto, los
+            // artefactos de MusicBot.Tests (MusicBot.Tests.dll, coverlet.*,
+            // CodeCoverage/, TestResults/) que se filtran al directorio quedan
+            // dentro del paquete de vpk: engorda el .nupkg a >100MB e introduce
+            // DLLs de instrumentación de coverlet que disparan falsos positivos
+            // de antivirus en máquinas de usuarios finales.
+            PublishDir.CreateOrCleanDirectory();
+
+            DotNet($"publish {DesktopProjectFile} " +
                    $"--configuration {Configuration} " +
                    $"--runtime {Runtime} " +
                    $"--self-contained " +
-                   $"--output {PublishDir}"));
+                   $"--output {PublishDir}");
+
+            // Copiar el build de React junto al .exe. Al publicar SOLO el proyecto
+            // Desktop, los static web assets de MusicBot.Web (su wwwroot) no se
+            // emiten al output. El runtime los sirve desde <dir-del-exe>\wwwroot
+            // (UseStaticFiles + MapFallbackToFile("index.html") en WebHost.cs);
+            // sin esta copia la UI responde 404. WwwRootDir ya fue generado por
+            // BuildClient (dependencia transitiva de este target vía Compile).
+            WwwRootDir.Copy(PublishDir / "wwwroot", ExistsPolicy.MergeAndOverwrite);
+        });
 
     /// Empaqueta el output publicado con Velopack (instalador + delta updates).
     Target Pack => _ => _

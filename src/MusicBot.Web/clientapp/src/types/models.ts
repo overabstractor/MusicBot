@@ -133,7 +133,7 @@ export interface HistoryItem {
 
 export interface PlatformState {
   platform: "tiktok" | "twitch" | "kick";
-  status: "connected" | "connecting" | "disconnected" | "error";
+  status: "connected" | "connecting" | "waitinglive" | "disconnected" | "error";
   errorMessage?: string;
   autoConnect: boolean;
   config: TikTokConfig | TwitchConfig | KickConfig | null;

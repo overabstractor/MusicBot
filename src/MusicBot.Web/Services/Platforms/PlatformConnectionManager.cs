@@ -19,7 +19,11 @@ public class PlatformConnectionManager
     public record TwitchPlatformConfig(string Channel, string BotUsername, string OAuthToken, string[]? CommandRoles = null, string[]? AllowedUsers = null);
     public record KickPlatformConfig(string Channel, string[]? CommandRoles = null, string[]? AllowedUsers = null);
 
-    public enum ConnectionStatus { Disconnected, Connecting, Connected, Error }
+    // WaitingLive is TikTok-specific: the bot is armed and polling, but the host is not
+    // streaming yet, so there is no chat to join. It is deliberately distinct from Connecting
+    // (which means "actively opening the WebSocket") so the UI can say "Esperando tu Live"
+    // instead of implying an active connection. ToString().ToLower() => "waitinglive".
+    public enum ConnectionStatus { Disconnected, Connecting, WaitingLive, Connected, Error }
 
     public class ConnectionState
     {
@@ -331,11 +335,22 @@ public class PlatformConnectionManager
         var hasSign = !string.IsNullOrWhiteSpace(config.SigningServerUrl);
 
         // ── Tunable timings (kept low for fast recovery from transient drops) ─
-        // TikTok rate-limits the /@user/live scrape after ~6 fetches: subsequent requests
-        // return a 1155-byte stub with no roomId for several minutes. The backoff stays
-        // fast for the first few attempts (to catch a freshly-started live) then spaces
-        // out to stay well under the rate-limit threshold.
-        int[] liveCheckDelaysSec     = [20, 20, 20, 60, 60, 60, 300];
+        // Two backoff profiles depending on which resolve path is available:
+        //
+        //  • webViewLiveCheckDelaysSec — used when the authenticated WebView resolver is
+        //    registered (self-query of the logged-in host's OWN live). That path runs the
+        //    fetch from a real browser with session cookies, bypassing TikTok's bot-detection,
+        //    so we can poll frequently and pick up "just went live" within seconds. This is
+        //    the common case for the host and the one users notice: without it, a live that
+        //    starts long after the bot booted wasn't detected until the next 5-min poll, so
+        //    chat commands were ignored until a manual reconnect.
+        //
+        //  • httpLiveCheckDelaysSec — used for the pure-HTTP fallback (other creators, or the
+        //    WebView resolver not yet registered). TikTok rate-limits the /@user/live scrape
+        //    after ~6 fetches (returns a 1155-byte stub with no roomId for several minutes),
+        //    so this profile spaces out aggressively to stay under the threshold.
+        int[] webViewLiveCheckDelaysSec = [10, 10, 15, 15, 20, 20, 30];
+        int[] httpLiveCheckDelaysSec    = [20, 20, 20, 60, 60, 60, 300];
         const int WatchdogSec        = 60;   // how often watchdog checks WS liveness
         const int MaxSilenceMinutes  = 10;   // force reconnect if WS shows connected but no events
         const int EndedCooldownSec   = 5;    // cooldown after natural stream end
@@ -392,13 +407,19 @@ public class PlatformConnectionManager
                     roomId = await SafeResolveRoomIdAsync(config.Username, ct);
                     if (roomId != null) break;
 
-                    var idx = Math.Min(consecutiveNotLive, liveCheckDelaysSec.Length - 1);
-                    var delaySec = liveCheckDelaysSec[idx];
+                    // Pick the backoff profile dynamically: the WebView resolver may register a
+                    // few seconds after this loop starts (it has to navigate to tiktok.com and
+                    // read the sessionid cookie), so re-evaluate each iteration instead of caching.
+                    var delays = AppEvents.HasTikTokRoomIdResolver
+                        ? webViewLiveCheckDelaysSec
+                        : httpLiveCheckDelaysSec;
+                    var idx = Math.Min(consecutiveNotLive, delays.Length - 1);
+                    var delaySec = delays[idx];
 
                     _logger.LogInformation("TikTok @{User} no está en vivo — verificando en {Sec}s (intento #{N})",
                         config.Username, delaySec, consecutiveNotLive + 1);
-                    SetStatus(key, ConnectionStatus.Connecting,
-                        $"@{config.Username} no está en vivo — verificando en {delaySec}s…");
+                    SetStatus(key, ConnectionStatus.WaitingLive,
+                        $"@{config.Username} no está en vivo — esperando que inicies tu Live (revisando cada {delaySec}s)");
 
                     try { await Task.Delay(TimeSpan.FromSeconds(delaySec), ct); }
                     catch (OperationCanceledException) { return; }
@@ -409,6 +430,10 @@ public class PlatformConnectionManager
             if (ct.IsCancellationRequested) return;
             if (roomId == null) continue;
             lastKnownRoomId = roomId;
+
+            // Live found — now opening the WebSocket. Flip to Connecting so the UI moves from
+            // "Esperando tu Live" to "Conectando…" during the (brief) handshake before OnConnected.
+            SetStatus(key, ConnectionStatus.Connecting, $"@{config.Username} está en vivo — conectando al chat…");
 
             _logger.LogDebug("TikTok room ID: {RoomId}", roomId);
 

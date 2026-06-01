@@ -374,7 +374,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       </div>
 
       {state?.errorMessage && (
-        <div className={status === "connecting" ? "platform-note" : "platform-error"}>
+        <div className={status === "connecting" || status === "waitinglive" ? "platform-note" : "platform-error"}>
           {state.errorMessage}
         </div>
       )}
@@ -773,6 +773,7 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
 const STATUS_LABELS: Record<string, string> = {
   connected: "Conectado",
   connecting: "Conectando...",
+  waitinglive: "Esperando tu Live",
   disconnected: "Desconectado",
   error: "Error",
 };
