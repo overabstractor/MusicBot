@@ -63,6 +63,10 @@ public class PlatformConnectionManager
     private TwitchClient? _activeTwitchClient;
     private string? _activeTwitchChannel;
 
+    // Latches true after Euler /webcast/chat returns 401/402/403 once: the plan lacks the Premium
+    // Routes Addon, so skip Euler and go straight to the WebView2 sender on every later message.
+    private volatile bool _eulerChatDisabled;
+
     public PlatformConnectionManager(
         CommandRouterService router,
         UserContextManager userContext,
@@ -475,7 +479,7 @@ public class PlatformConnectionManager
                 if (canSendChat || AppEvents.HasTikTokWebViewSender)
                 {
                     _chat.RegisterSender("tiktok", async msg =>
-                        await SendTikTokChatAsync(config.CookieString, tiktokRoomId, msg));
+                        await SendTikTokChatAsync(config.CookieString, tiktokRoomId, msg, signing.ApiKey));
                     _logger.LogInformation("TikTok chat sender registered (webview={WebView}, http={Http})",
                         AppEvents.HasTikTokWebViewSender, !string.IsNullOrWhiteSpace(config.CookieString));
                 }
@@ -1087,7 +1091,7 @@ public class PlatformConnectionManager
 
     // ── TikTok chat sender ─────────────────────────────────────────────────────
 
-    private async Task<bool> SendTikTokChatAsync(string? cookieString, string? roomId, string message)
+    private async Task<bool> SendTikTokChatAsync(string? cookieString, string? roomId, string message, string? eulerApiKey = null)
     {
         if (string.IsNullOrWhiteSpace(roomId))
         {
@@ -1095,7 +1099,25 @@ public class PlatformConnectionManager
             return false;
         }
 
-        // Primary: execute fetch() inside the authenticated WebView2 window.
+        // Preferred: POST to Euler Stream's /webcast/chat. Euler performs the X-Bogus/anti-bot
+        // signing server-side, so this is more robust than the direct HTTP path below. It still
+        // requires an authenticated session (sessionid + tt-target-idc in the cookie header) and
+        // a Premium Routes Addon on the Euler plan — otherwise it 403s and we fall back.
+        if (!_eulerChatDisabled && !string.IsNullOrWhiteSpace(eulerApiKey) && !string.IsNullOrWhiteSpace(cookieString))
+        {
+            try
+            {
+                if (await SendTikTokChatViaEulerAsync(eulerApiKey!, cookieString!, roomId!, message))
+                    return true;
+                _logger.LogWarning("TikTok Euler chat send failed — falling back to WebView/HTTP");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "TikTok Euler chat send error — falling back to WebView/HTTP");
+            }
+        }
+
+        // Fallback A: execute fetch() inside the authenticated WebView2 window.
         // TikTok's own JS SDK then adds X-Bogus, X-Gnarly, tt-ticket-guard-* automatically.
         _logger.LogDebug("TikTok send attempt — webview={WebView} hasCookie={HasCookie}",
             AppEvents.HasTikTokWebViewSender, !string.IsNullOrWhiteSpace(cookieString));
@@ -1251,6 +1273,60 @@ public class PlatformConnectionManager
             _logger.LogWarning(ex, "TikTok chat send error");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Sends a chat message via Euler Stream's <c>POST /webcast/chat</c>. Euler signs the request
+    /// server-side; we only supply the API key (<c>x-api-key</c>) and the authenticated session as
+    /// a cookie header (<c>x-cookie-header</c>, must contain sessionid + tt-target-idc). Returns
+    /// false (so the caller falls back) on 401/402/403 — i.e. the plan lacks the Premium Routes Addon.
+    /// </summary>
+    private async Task<bool> SendTikTokChatViaEulerAsync(string apiKey, string cookieString, string roomId, string message)
+    {
+        var http = _httpFactory.CreateClient();
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://tiktok.eulerstream.com/webcast/chat");
+        request.Headers.Add("x-api-key", apiKey);
+        request.Headers.Add("x-cookie-header", cookieString);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new { content = message, targetRoomId = roomId }),
+            System.Text.Encoding.UTF8, "application/json");
+
+        var response = await http.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (response.StatusCode is System.Net.HttpStatusCode.Forbidden
+                                or System.Net.HttpStatusCode.PaymentRequired
+                                or System.Net.HttpStatusCode.Unauthorized)
+        {
+            _eulerChatDisabled = true; // don't try Euler chat again this session
+            _logger.LogWarning(
+                "TikTok Euler /webcast/chat rechazado ({Status}) — el plan de Euler no cubre el envío de chat (Premium Routes Addon). Deshabilitado por esta sesión; usando WebView2.",
+                (int)response.StatusCode);
+            return false;
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("TikTok Euler chat send HTTP {Status}: {Body}",
+                (int)response.StatusCode, body.Length > 300 ? body[..300] : body);
+            return false;
+        }
+
+        // WebcastRoomChatRouteResponse: { code, data, message } — code 0 = success.
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("code", out var codeEl)
+                && codeEl.ValueKind == JsonValueKind.Number
+                && codeEl.GetDouble() != 0)
+            {
+                _logger.LogWarning("TikTok Euler chat send code≠0: {Body}", body.Length > 300 ? body[..300] : body);
+                return false;
+            }
+        }
+        catch { /* non-JSON 2xx — treat as success */ }
+
+        _logger.LogInformation("TikTok chat sent via Euler: {Message}", message);
+        return true;
     }
 
     /// <summary>Extracts a single cookie value from a browser cookie string (key=value; key2=value2).</summary>

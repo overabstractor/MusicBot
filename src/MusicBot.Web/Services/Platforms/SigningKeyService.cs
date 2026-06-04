@@ -92,4 +92,16 @@ public class SigningKeyService
             _gate.Release();
         }
     }
+
+    /// <summary>
+    /// Resolves the effective Euler Stream API key for REST calls: the caller's own
+    /// config/env key wins, otherwise the shared relay key. Returns null if neither exists
+    /// (the caller should then skip Euler REST endpoints and fall back). Mirrors the
+    /// config→shared priority of <c>PlatformConnectionManager.ResolveSigningConfig</c>.
+    /// </summary>
+    public async Task<string?> GetEffectiveKeyAsync(string? configKey, CancellationToken ct = default)
+    {
+        if (!string.IsNullOrWhiteSpace(configKey)) return configKey;
+        return await GetSharedSigningKeyAsync(ct);
+    }
 }
