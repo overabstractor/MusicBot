@@ -52,6 +52,7 @@ public class PlatformConnectionManager
     private readonly ChatResponseService _chat;
     private readonly ChatActivityTracker _activity;
     private readonly TikTokRoomResolver _roomResolver;
+    private readonly SigningKeyService _signingKeys;
     private readonly TikTokAuthService _tikTokAuth;
     private readonly KickAuthService _kickAuth;
     private readonly TwitchFollowerCache _twitchFollowers;
@@ -71,6 +72,7 @@ public class PlatformConnectionManager
         ChatResponseService chat,
         ChatActivityTracker activity,
         TikTokRoomResolver roomResolver,
+        SigningKeyService signingKeys,
         TikTokAuthService tikTokAuth,
         KickAuthService kickAuth,
         TwitchFollowerCache twitchFollowers,
@@ -85,6 +87,7 @@ public class PlatformConnectionManager
         _chat            = chat;
         _activity        = activity;
         _roomResolver    = roomResolver;
+        _signingKeys     = signingKeys;
         _tikTokAuth      = tikTokAuth;
         _kickAuth        = kickAuth;
         _twitchFollowers = twitchFollowers;
@@ -335,7 +338,9 @@ public class PlatformConnectionManager
 
         // Resolve the Euler Stream signing tier ONCE per connection (not per WS retry).
         // Never silently fall back to the anonymous/rate-limited tier if a key is available.
-        var signing = ResolveSigningConfig(config);
+        // The shared key (relay/Worker) is the fallback when the user has no key of their own.
+        var sharedKey = await _signingKeys.GetSharedSigningKeyAsync(ct);
+        var signing = ResolveSigningConfig(config, sharedKey);
 
         // ── Tunable timings (kept low for fast recovery from transient drops) ─
         // Two backoff profiles depending on which resolve path is available:

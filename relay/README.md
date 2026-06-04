@@ -64,10 +64,11 @@ relay/
 
 | Método | Ruta            | Descripción                                      |
 |--------|-----------------|--------------------------------------------------|
-| GET    | `/ping`         | Health check — verifica que el relay esté activo y la clave sea válida |
-| POST   | `/token/spotify`| Intercambia/renueva tokens de Spotify            |
-| POST   | `/token/twitch` | Intercambia/renueva tokens de Twitch             |
-| POST   | `/token/kick`   | Intercambia/renueva tokens de Kick (con PKCE)    |
+| GET    | `/ping`             | Health check — verifica que el relay esté activo y la clave sea válida |
+| GET    | `/signing-key/tiktok`| Devuelve la key compartida de Euler Stream (`{ "key": "..." }`) para firmar TikTok LIVE en el tier autenticado. Vacía si no está configurada |
+| POST   | `/token/spotify`    | Intercambia/renueva tokens de Spotify            |
+| POST   | `/token/twitch`     | Intercambia/renueva tokens de Twitch             |
+| POST   | `/token/kick`       | Intercambia/renueva tokens de Kick (con PKCE)    |
 
 Todos los endpoints requieren el header `X-Relay-Key: <RELAY_API_KEY>`.
 
@@ -156,6 +157,11 @@ wrangler secret put TWITCH_CLIENT_SECRET
 # Kick (desde https://kick.com/settings/developer)
 wrangler secret put KICK_CLIENT_ID
 wrangler secret put KICK_CLIENT_SECRET
+
+# Euler Stream — key compartida para firmar TikTok LIVE (opcional pero recomendado).
+# Sin ella, los clientes sin key propia usan el tier anónimo rate-limited.
+# Consíguela en https://www.eulerstream.com
+wrangler secret put EULER_SIGNING_KEY
 ```
 
 Para ver qué secrets están cargados (sin ver los valores):
@@ -199,6 +205,7 @@ TWITCH_CLIENT_ID=tu-client-id
 TWITCH_CLIENT_SECRET=tu-client-secret
 KICK_CLIENT_ID=tu-client-id
 KICK_CLIENT_SECRET=tu-client-secret
+EULER_SIGNING_KEY=tu-euler-key
 ```
 
 ```bash
