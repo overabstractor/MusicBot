@@ -1,7 +1,9 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../services/api";
 
 export const ImportPlaylist: React.FC = () => {
+  const { t } = useTranslation();
   const [url,         setUrl]         = useState("");
   const [requestedBy, setRequestedBy] = useState("Admin");
   const [loading,     setLoading]     = useState(false);
@@ -14,10 +16,10 @@ export const ImportPlaylist: React.FC = () => {
     setMessage(null);
     try {
       const res = await api.importPlaylist(url.trim(), requestedBy);
-      setMessage({ text: `✓ ${res.added} canciones agregadas (${res.skipped} omitidas de ${res.total})`, ok: true });
+      setMessage({ text: `✓ ${t("importPlaylist.success", { added: res.added, skipped: res.skipped, total: res.total })}`, ok: true });
       if (res.added > 0) setUrl("");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al importar playlist";
+      const msg = err instanceof Error ? err.message : t("importPlaylist.errImport");
       setMessage({ text: msg, ok: false });
     } finally {
       setLoading(false);
@@ -27,13 +29,13 @@ export const ImportPlaylist: React.FC = () => {
   return (
     <form className="import-playlist-form" onSubmit={handleImport}>
       <p className="import-playlist-hint">
-        Pega una URL de playlist de YouTube o Spotify para agregar todas sus canciones a la cola (máx. 50).
+        {t("importPlaylist.hint")}
       </p>
       <div className="form-row">
         <input
           type="text"
           className="input"
-          placeholder="https://www.youtube.com/playlist?list=… o https://open.spotify.com/playlist/…"
+          placeholder={t("importPlaylist.urlPlaceholder")}
           value={url}
           onChange={e => setUrl(e.target.value)}
           disabled={loading}
@@ -41,7 +43,7 @@ export const ImportPlaylist: React.FC = () => {
         <input
           type="text"
           className="input input-sm"
-          placeholder="Solicitado por"
+          placeholder={t("importPlaylist.requestedBy")}
           value={requestedBy}
           onChange={e => setRequestedBy(e.target.value)}
         />
@@ -51,7 +53,7 @@ export const ImportPlaylist: React.FC = () => {
           style={{ width: "100%" }}
           disabled={loading || !url.trim()}
         >
-          {loading ? "Importando…" : "Importar playlist"}
+          {loading ? t("importPlaylist.importing") : t("importPlaylist.importBtn")}
         </button>
       </div>
       {message && (

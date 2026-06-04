@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LogIn, LogOut, Loader } from "lucide-react";
 import { communityService } from "../services/community";
 import { CommunityUser } from "../services/community/ICommunityService";
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export const ComunidadAuth: React.FC<Props> = ({ user }) => {
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,10 +18,10 @@ export const ComunidadAuth: React.FC<Props> = ({ user }) => {
     try {
       await communityService.signIn();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Error al iniciar sesión";
+      const msg = e instanceof Error ? e.message : t("community.signInError");
       // Ignore user-cancelled popup
       if (!msg.includes("popup-closed") && !msg.includes("cancelled")) {
-        setError("No se pudo iniciar sesión. Inténtalo de nuevo.");
+        setError(t("community.signInRetry"));
       }
     } finally { setBusy(false); }
   };
@@ -42,7 +44,7 @@ export const ComunidadAuth: React.FC<Props> = ({ user }) => {
           <span className="comm-auth-name">{user.displayName ?? user.email}</span>
           <span className="comm-auth-email">{user.email}</span>
         </div>
-        <button className="comm-auth-signout" onClick={handleSignOut} disabled={busy} title="Cerrar sesión">
+        <button className="comm-auth-signout" onClick={handleSignOut} disabled={busy} title={t("community.signOut")}>
           {busy ? <Loader size={14} className="spin" /> : <LogOut size={14} />}
         </button>
       </div>
@@ -53,14 +55,14 @@ export const ComunidadAuth: React.FC<Props> = ({ user }) => {
     <div className="comm-auth-bar comm-auth-bar--out">
       <div className="comm-auth-prompt">
         <span className="comm-auth-prompt-text">
-          Inicia sesión para votar en solicitudes y enviar tickets
+          {t("community.authPrompt")}
         </span>
         {error && <span className="comm-auth-error">{error}</span>}
       </div>
       <button className="btn btn-primary comm-auth-btn" onClick={handleSignIn} disabled={busy}>
         {busy
-          ? <><Loader size={14} className="spin" /> Iniciando…</>
-          : <><LogIn size={14} /> Iniciar sesión con Google</>
+          ? <><Loader size={14} className="spin" /> {t("community.signingIn")}</>
+          : <><LogIn size={14} /> {t("community.signInGoogle")}</>
         }
       </button>
     </div>

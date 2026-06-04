@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { HistoryItem } from "../types/models";
 import { formatDuration, getPlatform } from "../utils";
 import { api } from "../services/api";
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export const SongHistory: React.FC<Props> = ({ onPlayNow, onEnqueue, onAddToAutoQueue, refreshKey }) => {
+  const { t } = useTranslation();
   const [history,  setHistory]  = useState<HistoryItem[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [msg,      setMsg]      = useState<{ id: string; text: string } | null>(null);
@@ -70,7 +72,7 @@ export const SongHistory: React.FC<Props> = ({ onPlayNow, onEnqueue, onAddToAuto
           <input
             className="history-search-input"
             type="text"
-            placeholder="Buscar por título, artista o usuario…"
+            placeholder={t("history.searchPlaceholder")}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -80,26 +82,26 @@ export const SongHistory: React.FC<Props> = ({ onPlayNow, onEnqueue, onAddToAuto
         </div>
         <div className="history-toolbar-right">
           <span className="history-count">
-            {filtered.length}{search ? ` / ${history.length}` : ""} canciones
+            {filtered.length}{search ? ` / ${history.length}` : ""} {t("history.songsLabel")}
           </span>
           {!confirm ? (
             <button className="btn btn-sm btn-danger-outline" onClick={() => setConfirm(true)} disabled={history.length === 0}>
-              Limpiar historial
+              {t("history.clearHistory")}
             </button>
           ) : (
             <div className="history-confirm">
-              <span>¿Limpiar {history.length} entradas?</span>
-              <button className="btn btn-sm btn-danger" onClick={handleClear}>Sí</button>
-              <button className="btn btn-sm btn-secondary" onClick={() => setConfirm(false)}>No</button>
+              <span>{t("history.confirmClear", { count: history.length })}</span>
+              <button className="btn btn-sm btn-danger" onClick={handleClear}>{t("common.yes")}</button>
+              <button className="btn btn-sm btn-secondary" onClick={() => setConfirm(false)}>{t("common.no")}</button>
             </div>
           )}
         </div>
       </div>
 
       {loading ? (
-        <div className="history-empty">Cargando historial...</div>
+        <div className="history-empty">{t("history.loadingHistory")}</div>
       ) : filtered.length === 0 ? (
-        <div className="history-empty">{history.length === 0 ? "No hay canciones en el historial." : "Sin resultados."}</div>
+        <div className="history-empty">{history.length === 0 ? t("history.emptyHistory") : t("history.noResults")}</div>
       ) : (
       <div className="history-list">
       {filtered.map((item) => {
@@ -128,14 +130,14 @@ export const SongHistory: React.FC<Props> = ({ onPlayNow, onEnqueue, onAddToAuto
                 <div className="history-feedback">{feedback}</div>
               ) : (
                 <div className="history-actions">
-                  <button className="btn btn-sm btn-primary" onClick={() => handlePlay(item)} title="Reproducir ahora">▶ Ahora</button>
-                  <button className="btn btn-sm btn-outline" onClick={() => handleEnqueue(item)} title="Agregar a la cola">+ Cola</button>
+                  <button className="btn btn-sm btn-primary" onClick={() => handlePlay(item)} title={t("history.playNowTitle")}>▶ {t("history.playNow")}</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => handleEnqueue(item)} title={t("history.addToQueueTitle")}>+ {t("history.queueShort")}</button>
                   {onAddToAutoQueue && (
                     <button
                       className="btn btn-sm btn-autoqueue"
                       onClick={() => onAddToAutoQueue({ spotifyUri: item.trackId, title: item.title, artist: item.artist, coverUrl: item.coverUrl ?? undefined, durationMs: item.durationMs })}
-                      title="Agregar a autocola"
-                    >+ AutoCola</button>
+                      title={t("history.addToAutoQueueTitle")}
+                    >+ {t("history.autoQueueShort")}</button>
                   )}
                 </div>
               )}

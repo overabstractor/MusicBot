@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronUp, Plus, Trash2, Rss, Lightbulb, Tag, Users, Shield, X } from "lucide-react";
 import { NewsCard } from "./NewsCard";
 import { FormModal } from "./FormModal";
@@ -10,30 +11,30 @@ import { ComunidadAuth } from "./ComunidadAuth";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-const STATUS_LABELS: Record<string, string> = {
-  open:          "Abierta",
-  planned:       "Planificada",
-  "in-progress": "En progreso",
-  done:          "Lista",
-  rejected:      "Rechazada",
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  open:          "community.statusOpen",
+  planned:       "community.statusPlanned",
+  "in-progress": "community.statusInProgress",
+  done:          "community.statusDone",
+  rejected:      "community.statusRejected",
 };
 
 const NEWS_TAGS = [
-  { value: "novedad",   label: "Novedad"   },
-  { value: "mejora",    label: "Mejora"    },
-  { value: "arreglado", label: "Arreglado" },
+  { value: "novedad",   labelKey: "community.tagNovedad"   },
+  { value: "mejora",    labelKey: "community.tagMejora"    },
+  { value: "arreglado", labelKey: "community.tagArreglado" },
 ] as const;
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin:   "Admin",
-  editor:  "Editor",
-  support: "Soporte",
+const ROLE_LABEL_KEYS: Record<UserRole, string> = {
+  admin:   "community.roleAdmin",
+  editor:  "community.roleEditor",
+  support: "community.roleSupport",
 };
 
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: "admin",   label: "Admin" },
-  { value: "editor",  label: "Editor" },
-  { value: "support", label: "Soporte" },
+const ROLE_OPTIONS: { value: UserRole; labelKey: string }[] = [
+  { value: "admin",   labelKey: "community.roleAdmin" },
+  { value: "editor",  labelKey: "community.roleEditor" },
+  { value: "support", labelKey: "community.roleSupport" },
 ];
 
 type ComunidadTab = "noticias" | "solicitudes" | "equipo";
@@ -48,6 +49,7 @@ const emptyNewsForm = () => ({
 });
 
 export const ComunidadPanel: React.FC = () => {
+  const { t } = useTranslation();
   const [activeTab,    setActiveTab]    = useState<ComunidadTab>("noticias");
   const [user,         setUser]         = useState<CommunityUser | null>(() => communityService.getCurrentUser());
   const [news,         setNews]         = useState<NewsItem[]>([]);
@@ -125,19 +127,19 @@ export const ComunidadPanel: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) { setError("El título es obligatorio"); return; }
+    if (!title.trim()) { setError(t("community.titleRequired")); return; }
     setSaving(true); setError(null);
     try {
       const created = await communityService.createFeatureRequest(title.trim(), description.trim());
       setFeatures(prev => [created, ...prev]);
       setTitle(""); setDescription(""); setShowForm(false);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error al enviar");
+      setError(err instanceof Error ? err.message : t("community.submitError"));
     } finally { setSaving(false); }
   };
 
   const handleDeleteFeature = async (id: string) => {
-    const ok = await confirm({ title: "¿Eliminar solicitud?", message: "Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true });
+    const ok = await confirm({ title: t("community.deleteFeatureTitle"), message: t("community.actionIrreversible"), confirmText: t("common.delete"), danger: true });
     if (!ok) return;
     try {
       await communityService.deleteFeatureRequest(id);
@@ -171,8 +173,8 @@ export const ComunidadPanel: React.FC = () => {
 
   const handleNewsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newsForm.title.trim()) { setNewsError("El título es obligatorio"); return; }
-    if (!newsForm.excerpt.trim()) { setNewsError("El resumen es obligatorio"); return; }
+    if (!newsForm.title.trim()) { setNewsError(t("community.titleRequired")); return; }
+    if (!newsForm.excerpt.trim()) { setNewsError(t("community.excerptRequired")); return; }
     setNewsSaving(true); setNewsError(null);
     const payload = {
       title:   newsForm.title.trim(),
@@ -191,12 +193,12 @@ export const ComunidadPanel: React.FC = () => {
       }
       closeNewsForm();
     } catch (err: unknown) {
-      setNewsError(err instanceof Error ? err.message : "Error al guardar");
+      setNewsError(err instanceof Error ? err.message : t("community.saveError"));
     } finally { setNewsSaving(false); }
   };
 
   const handleDeleteNews = async (id: string) => {
-    const ok = await confirm({ title: "¿Eliminar novedad?", message: "Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true });
+    const ok = await confirm({ title: t("community.deleteNewsTitle"), message: t("community.actionIrreversible"), confirmText: t("common.delete"), danger: true });
     if (!ok) return;
     try {
       await communityService.deleteNews(id);
@@ -208,19 +210,19 @@ export const ComunidadPanel: React.FC = () => {
 
   const handleAddRole = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRoleUid.trim()) { setRoleError("El UID es obligatorio"); return; }
+    if (!newRoleUid.trim()) { setRoleError(t("community.uidRequired")); return; }
     setRoleSaving(true); setRoleError(null);
     try {
       await communityService.setUserRole(newRoleUid.trim(), newRoleValue, newRoleEmail.trim() || undefined, newRoleName.trim() || undefined);
       setNewRoleUid(""); setNewRoleEmail(""); setNewRoleName("");
       await loadRoles();
     } catch (err: unknown) {
-      setRoleError(err instanceof Error ? err.message : "Error al asignar rol");
+      setRoleError(err instanceof Error ? err.message : t("community.assignRoleError"));
     } finally { setRoleSaving(false); }
   };
 
   const handleRemoveRole = async (uid: string) => {
-    const ok = await confirm({ title: "¿Quitar rol?", message: "El usuario perderá sus permisos.", confirmText: "Quitar", danger: true });
+    const ok = await confirm({ title: t("community.removeRoleTitle"), message: t("community.removeRoleMsg"), confirmText: t("community.remove"), danger: true });
     if (!ok) return;
     try {
       await communityService.removeUserRole(uid);
@@ -236,14 +238,14 @@ export const ComunidadPanel: React.FC = () => {
 
       <div className="comunidad-tabs">
         <button className={`comunidad-tab${activeTab === "noticias" ? " active" : ""}`} onClick={() => setActiveTab("noticias")}>
-          <Rss size={13} /> Novedades
+          <Rss size={13} /> {t("community.tabNews")}
         </button>
         <button className={`comunidad-tab${activeTab === "solicitudes" ? " active" : ""}`} onClick={() => setActiveTab("solicitudes")}>
-          <Lightbulb size={13} /> Solicitudes
+          <Lightbulb size={13} /> {t("community.tabRequests")}
         </button>
         {isAdmin && (
           <button className={`comunidad-tab${activeTab === "equipo" ? " active" : ""}`} onClick={() => setActiveTab("equipo")}>
-            <Users size={13} /> Equipo
+            <Users size={13} /> {t("community.tabTeam")}
           </button>
         )}
       </div>
@@ -251,7 +253,7 @@ export const ComunidadPanel: React.FC = () => {
       {/* ── Modal de novedad (crear / editar) ── */}
       {isEditor && showNewsForm && (
         <FormModal
-          title={editingNewsId ? "Editar novedad" : "Nueva novedad"}
+          title={editingNewsId ? t("community.editNews") : t("community.newNews")}
           onClose={closeNewsForm}
           width={680}
         >
@@ -259,7 +261,7 @@ export const ComunidadPanel: React.FC = () => {
             <div className="news-admin-form-row">
               <input
                 className="input"
-                placeholder="Título…"
+                placeholder={t("community.titlePlaceholder")}
                 value={newsForm.title}
                 onChange={e => setNewsForm(f => ({ ...f, title: e.target.value }))}
                 disabled={newsSaving}
@@ -271,7 +273,7 @@ export const ComunidadPanel: React.FC = () => {
                 onChange={e => setNewsForm(f => ({ ...f, tag: e.target.value as NewsItem["tag"] }))}
                 disabled={newsSaving}
               >
-                {NEWS_TAGS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {NEWS_TAGS.map(tag => <option key={tag.value} value={tag.value}>{t(tag.labelKey)}</option>)}
               </select>
               <input
                 type="date"
@@ -284,7 +286,7 @@ export const ComunidadPanel: React.FC = () => {
 
             <textarea
               className="input"
-              placeholder="Resumen (se muestra en la card sin expandir)…"
+              placeholder={t("community.excerptPlaceholder")}
               value={newsForm.excerpt}
               onChange={e => setNewsForm(f => ({ ...f, excerpt: e.target.value }))}
               rows={2}
@@ -292,15 +294,15 @@ export const ComunidadPanel: React.FC = () => {
             />
 
             <div className="news-admin-body-tabs">
-              <button type="button" className={`news-admin-body-tab${newsFormTab === "editar" ? " active" : ""}`} onClick={() => setNewsFormTab("editar")}>Editar</button>
-              <button type="button" className={`news-admin-body-tab${newsFormTab === "preview" ? " active" : ""}`} onClick={() => setNewsFormTab("preview")}>Vista previa</button>
-              <span className="news-admin-body-hint">Markdown · imágenes · iframes de YouTube</span>
+              <button type="button" className={`news-admin-body-tab${newsFormTab === "editar" ? " active" : ""}`} onClick={() => setNewsFormTab("editar")}>{t("community.editTab")}</button>
+              <button type="button" className={`news-admin-body-tab${newsFormTab === "preview" ? " active" : ""}`} onClick={() => setNewsFormTab("preview")}>{t("community.previewTab")}</button>
+              <span className="news-admin-body-hint">{t("community.mdHint")}</span>
             </div>
 
             {newsFormTab === "editar" ? (
               <textarea
                 className="input news-admin-body"
-                placeholder={"## Título\n\nContenido en **markdown**…\n\n![descripción](url-imagen)\n\n<iframe src=\"https://www.youtube.com/embed/ID\" allowfullscreen></iframe>"}
+                placeholder={t("community.bodyPlaceholder")}
                 value={newsForm.body}
                 onChange={e => setNewsForm(f => ({ ...f, body: e.target.value }))}
                 rows={12}
@@ -310,7 +312,7 @@ export const ComunidadPanel: React.FC = () => {
               <div className="news-admin-preview">
                 {newsForm.body.trim()
                   ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{newsForm.body}</ReactMarkdown>
-                  : <span className="news-admin-preview-empty">Sin contenido aún…</span>
+                  : <span className="news-admin-preview-empty">{t("community.previewEmpty")}</span>
                 }
               </div>
             )}
@@ -318,9 +320,9 @@ export const ComunidadPanel: React.FC = () => {
             {newsError && <span className="feature-error">{newsError}</span>}
 
             <div className="feature-form-actions">
-              <button type="button" className="btn btn-outline btn-sm" onClick={closeNewsForm}>Cancelar</button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={closeNewsForm}>{t("common.cancel")}</button>
               <button type="submit" className="btn btn-primary btn-sm" disabled={newsSaving || !newsForm.title.trim() || !newsForm.excerpt.trim()}>
-                {newsSaving ? "Guardando…" : editingNewsId ? "Guardar cambios" : "Publicar novedad"}
+                {newsSaving ? t("common.saving") : editingNewsId ? t("community.saveChanges") : t("community.publishNews")}
               </button>
             </div>
           </form>
@@ -333,9 +335,9 @@ export const ComunidadPanel: React.FC = () => {
 
           {isEditor && (
             <div className="news-admin-toolbar">
-              <span className={`news-admin-badge role-badge-${user?.role ?? "editor"}`}>{ROLE_LABELS[user?.role ?? "editor"]}</span>
+              <span className={`news-admin-badge role-badge-${user?.role ?? "editor"}`}>{t(ROLE_LABEL_KEYS[user?.role ?? "editor"])}</span>
               <button className="btn btn-primary btn-sm" onClick={() => { closeNewsForm(); setShowNewsForm(true); }}>
-                <Plus size={14} /> Nueva novedad
+                <Plus size={14} /> {t("community.newNews")}
               </button>
             </div>
           )}
@@ -370,28 +372,28 @@ export const ComunidadPanel: React.FC = () => {
           {!user ? (
             <div className="comunidad-empty">
               <Lightbulb size={36} className="comunidad-empty-icon" />
-              <div className="comunidad-empty-title">Inicia sesión para ver las solicitudes</div>
-              <div className="comunidad-empty-sub">Necesitas una cuenta de Google para votar y proponer nuevas funciones.</div>
+              <div className="comunidad-empty-title">{t("community.requestsLoginTitle")}</div>
+              <div className="comunidad-empty-sub">{t("community.requestsLoginSub")}</div>
             </div>
           ) : (
             <>
               <div className="feature-toolbar">
                 <span className="feature-toolbar-title">
-                  {features.length > 0 ? `${features.length} solicitud${features.length !== 1 ? "es" : ""}` : ""}
+                  {features.length > 0 ? t("community.requestCount", { count: features.length }) : ""}
                 </span>
                 <button className={`btn btn-primary btn-sm${showForm ? " active" : ""}`} onClick={() => { setShowForm(v => !v); setError(null); }}>
-                  <Plus size={14} /> Nueva solicitud
+                  <Plus size={14} /> {t("community.newRequest")}
                 </button>
               </div>
 
               {showForm && (
                 <form className="feature-form" onSubmit={handleSubmit}>
-                  <input className="input" placeholder="Título de la funcionalidad…" value={title} onChange={e => setTitle(e.target.value)} autoFocus disabled={saving} />
-                  <textarea className="input feature-textarea" placeholder="Describe la funcionalidad con más detalle (opcional)…" value={description} onChange={e => setDescription(e.target.value)} rows={3} disabled={saving} />
+                  <input className="input" placeholder={t("community.featureTitlePlaceholder")} value={title} onChange={e => setTitle(e.target.value)} autoFocus disabled={saving} />
+                  <textarea className="input feature-textarea" placeholder={t("community.featureDescPlaceholder")} value={description} onChange={e => setDescription(e.target.value)} rows={3} disabled={saving} />
                   {error && <span className="feature-error">{error}</span>}
                   <div className="feature-form-actions">
-                    <button type="button" className="btn btn-outline btn-sm" onClick={() => { setShowForm(false); setError(null); }}>Cancelar</button>
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !title.trim()}>{saving ? "Enviando…" : "Enviar solicitud"}</button>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => { setShowForm(false); setError(null); }}>{t("common.cancel")}</button>
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !title.trim()}>{saving ? t("community.sending") : t("community.sendRequest")}</button>
                   </div>
                 </form>
               )}
@@ -408,14 +410,14 @@ export const ComunidadPanel: React.FC = () => {
               {!loading && features.length === 0 && (
                 <div className="comunidad-empty">
                   <Lightbulb size={36} className="comunidad-empty-icon" />
-                  <div className="comunidad-empty-title">Aún no hay solicitudes</div>
-                  <div className="comunidad-empty-sub">Sé el primero en proponer una nueva funcionalidad.</div>
+                  <div className="comunidad-empty-title">{t("community.noRequestsTitle")}</div>
+                  <div className="comunidad-empty-sub">{t("community.noRequestsSub")}</div>
                 </div>
               )}
 
               {!loading && features.map(f => (
                 <div key={f.id} className={`feature-card${f.hasVoted ? " voted" : ""}`}>
-                  <button className={`feature-vote-btn${f.hasVoted ? " active" : ""}`} onClick={() => handleVote(f.id)} title={f.hasVoted ? "Quitar voto" : "Votar"}>
+                  <button className={`feature-vote-btn${f.hasVoted ? " active" : ""}`} onClick={() => handleVote(f.id)} title={f.hasVoted ? t("community.removeVote") : t("community.vote")}>
                     <ChevronUp size={16} />
                     <span className="feature-vote-count">{f.votes}</span>
                   </button>
@@ -423,8 +425,8 @@ export const ComunidadPanel: React.FC = () => {
                     <div className="feature-card-top">
                       <span className="feature-title">{f.title}</span>
                       <div className="feature-card-meta">
-                        <span className={`feature-status feature-status-${f.status}`}><Tag size={10} /> {STATUS_LABELS[f.status] ?? f.status}</span>
-                        <button className="feature-delete-btn" title="Eliminar" onClick={() => handleDeleteFeature(f.id)}><Trash2 size={13} /></button>
+                        <span className={`feature-status feature-status-${f.status}`}><Tag size={10} /> {STATUS_LABEL_KEYS[f.status] ? t(STATUS_LABEL_KEYS[f.status]) : f.status}</span>
+                        <button className="feature-delete-btn" title={t("common.delete")} onClick={() => handleDeleteFeature(f.id)}><Trash2 size={13} /></button>
                       </div>
                     </div>
                     {f.description && <p className="feature-description">{f.description}</p>}
@@ -441,7 +443,7 @@ export const ComunidadPanel: React.FC = () => {
         <div className="comunidad-content">
           <div className="equipo-header">
             <Shield size={14} className="equipo-header-icon" />
-            <span className="equipo-header-title">Gestión de roles</span>
+            <span className="equipo-header-title">{t("community.roleManagement")}</span>
           </div>
 
           {/* Add role form */}
@@ -449,7 +451,7 @@ export const ComunidadPanel: React.FC = () => {
             <div className="equipo-add-row">
               <input
                 className="input"
-                placeholder="UID de Firebase…"
+                placeholder={t("community.uidPlaceholder")}
                 value={newRoleUid}
                 onChange={e => setNewRoleUid(e.target.value)}
                 disabled={roleSaving}
@@ -460,26 +462,26 @@ export const ComunidadPanel: React.FC = () => {
                 onChange={e => setNewRoleValue(e.target.value as UserRole)}
                 disabled={roleSaving}
               >
-                {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                {ROLE_OPTIONS.map(r => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
               </select>
             </div>
             <div className="equipo-add-row">
               <input
                 className="input"
-                placeholder="Email (opcional)…"
+                placeholder={t("community.emailOptional")}
                 value={newRoleEmail}
                 onChange={e => setNewRoleEmail(e.target.value)}
                 disabled={roleSaving}
               />
               <input
                 className="input"
-                placeholder="Nombre (opcional)…"
+                placeholder={t("community.nameOptional")}
                 value={newRoleName}
                 onChange={e => setNewRoleName(e.target.value)}
                 disabled={roleSaving}
               />
               <button type="submit" className="btn btn-primary btn-sm" disabled={roleSaving || !newRoleUid.trim()}>
-                <Plus size={14} /> {roleSaving ? "Guardando…" : "Asignar"}
+                <Plus size={14} /> {roleSaving ? t("common.saving") : t("community.assign")}
               </button>
             </div>
             {roleError && <span className="feature-error">{roleError}</span>}
@@ -496,18 +498,18 @@ export const ComunidadPanel: React.FC = () => {
           ))}
 
           {!rolesLoading && roles.length === 0 && (
-            <div className="comunidad-empty" style={{ marginTop: 12 }}>No hay roles asignados aún.</div>
+            <div className="comunidad-empty" style={{ marginTop: 12 }}>{t("community.noRoles")}</div>
           )}
 
           {!rolesLoading && roles.map(r => (
             <div key={r.uid} className="equipo-role-row">
-              <span className={`equipo-role-badge role-badge-${r.role}`}>{ROLE_LABELS[r.role]}</span>
+              <span className={`equipo-role-badge role-badge-${r.role}`}>{t(ROLE_LABEL_KEYS[r.role])}</span>
               <div className="equipo-role-info">
                 <span className="equipo-role-name">{r.displayName ?? r.email ?? r.uid}</span>
                 {r.email && r.displayName && <span className="equipo-role-email">{r.email}</span>}
                 <span className="equipo-role-uid">{r.uid}</span>
               </div>
-              <button className="equipo-remove-btn" title="Quitar rol" onClick={() => handleRemoveRole(r.uid)}>
+              <button className="equipo-remove-btn" title={t("community.removeRole")} onClick={() => handleRemoveRole(r.uid)}>
                 <X size={14} />
               </button>
             </div>

@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { PlatformState, TikTokConfig, TwitchConfig, KickConfig } from "../types/models";
 import { IntegrationEvent } from "../hooks/useSignalR";
 import { api } from "../services/api";
@@ -49,30 +51,30 @@ export const PlatformConnections: React.FC<Props> = ({ tiktokEvents, twitchEvent
 
 // ── Role selector ─────────────────────────────────────────────────────────────
 
-const PLATFORM_ROLES: Record<string, { id: string; label: string }[]> = {
+const PLATFORM_ROLES: Record<string, { id: string; labelKey: string }[]> = {
   tiktok: [
-    { id: "all",        label: "Todos los usuarios" },
-    { id: "follower",   label: "Seguidores" },
-    { id: "subscriber", label: "Suscriptores" },
-    { id: "moderator",  label: "Moderadores" },
-    { id: "teamMember", label: "Team Members" },
-    { id: "list",       label: "Usuarios de la lista" },
+    { id: "all",        labelKey: "platforms.roles.all" },
+    { id: "follower",   labelKey: "platforms.roles.follower" },
+    { id: "subscriber", labelKey: "platforms.roles.subscriber" },
+    { id: "moderator",  labelKey: "platforms.roles.moderator" },
+    { id: "teamMember", labelKey: "platforms.roles.teamMember" },
+    { id: "list",       labelKey: "platforms.roles.list" },
   ],
   twitch: [
-    { id: "all",        label: "Todos los usuarios" },
-    { id: "follower",   label: "Seguidores" },
-    { id: "subscriber", label: "Suscriptores" },
-    { id: "vip",        label: "VIPs" },
-    { id: "moderator",  label: "Moderadores" },
-    { id: "list",       label: "Usuarios de la lista" },
+    { id: "all",        labelKey: "platforms.roles.all" },
+    { id: "follower",   labelKey: "platforms.roles.follower" },
+    { id: "subscriber", labelKey: "platforms.roles.subscriber" },
+    { id: "vip",        labelKey: "platforms.roles.vip" },
+    { id: "moderator",  labelKey: "platforms.roles.moderator" },
+    { id: "list",       labelKey: "platforms.roles.list" },
   ],
   kick: [
-    { id: "all",        label: "Todos los usuarios" },
-    { id: "subscriber", label: "Suscriptores" },
-    { id: "og",         label: "OGs" },
-    { id: "vip",        label: "VIPs" },
-    { id: "moderator",  label: "Moderadores" },
-    { id: "list",       label: "Usuarios de la lista" },
+    { id: "all",        labelKey: "platforms.roles.all" },
+    { id: "subscriber", labelKey: "platforms.roles.subscriber" },
+    { id: "og",         labelKey: "platforms.roles.og" },
+    { id: "vip",        labelKey: "platforms.roles.vip" },
+    { id: "moderator",  labelKey: "platforms.roles.moderator" },
+    { id: "list",       labelKey: "platforms.roles.list" },
   ],
 };
 
@@ -82,6 +84,7 @@ const AllowedUsersEditor: React.FC<{
   users: string[];
   onChange: (users: string[]) => void;
 }> = ({ users, onChange }) => {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState("");
 
   const add = () => {
@@ -98,7 +101,7 @@ const AllowedUsersEditor: React.FC<{
     <div className="allowed-users">
       <div className="allowed-users-chips">
         {users.length === 0 ? (
-          <span className="allowed-users-empty">Sin usuarios — agregalos abajo</span>
+          <span className="allowed-users-empty">{t("platforms.allowedUsersEmpty")}</span>
         ) : users.map(u => (
           <span key={u} className="allowed-user-chip">
             @{u}
@@ -108,7 +111,7 @@ const AllowedUsersEditor: React.FC<{
       </div>
       <div className="allowed-users-input">
         <input
-          type="text" placeholder="usuario (sin @)"
+          type="text" placeholder={t("platforms.userPlaceholder")}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
@@ -124,6 +127,7 @@ const RoleSelector: React.FC<{
   roles: string[];
   onChange: (roles: string[]) => void;
 }> = ({ platform, roles, onChange }) => {
+  const { t } = useTranslation();
   const defs = PLATFORM_ROLES[platform] ?? [];
   const isAll = roles.length === 0 || roles.includes("all");
 
@@ -145,7 +149,7 @@ const RoleSelector: React.FC<{
 
   return (
     <div className="role-list">
-      {defs.map(({ id, label }) => (
+      {defs.map(({ id, labelKey }) => (
         <label key={id} className={`role-item${id !== "all" && isAll ? " role-item--dim" : ""}`}>
           <input
             type="checkbox"
@@ -153,7 +157,7 @@ const RoleSelector: React.FC<{
             disabled={id !== "all" && isAll}
             onChange={() => toggle(id)}
           />
-          {label}
+          {t(labelKey)}
         </label>
       ))}
     </div>
@@ -184,31 +188,35 @@ const PlatformSection: React.FC<{
 // Format helpers for collapsed-state summaries
 
 const ROLE_SHORT: Record<string, string> = {
-  all: "Todos", follower: "Seguidores", subscriber: "Subs", moderator: "Mods",
-  vip: "VIPs", og: "OGs", teamMember: "Team", list: "Lista",
+  all: "platforms.roleShort.all", follower: "platforms.roleShort.follower",
+  subscriber: "platforms.roleShort.subscriber", moderator: "platforms.roleShort.moderator",
+  vip: "platforms.roleShort.vip", og: "platforms.roleShort.og",
+  teamMember: "platforms.roleShort.teamMember", list: "platforms.roleShort.list",
 };
 
-function formatRolesSummary(roles: string[]): string {
-  if (roles.length === 0 || roles.includes("all")) return "Todos los usuarios";
-  const labels = roles.map(r => ROLE_SHORT[r] ?? r);
+function formatRolesSummary(roles: string[], t: TFunction): string {
+  if (roles.length === 0 || roles.includes("all")) return t("platforms.rolesSummary.allUsers");
+  const labels = roles.map(r => (ROLE_SHORT[r] ? t(ROLE_SHORT[r]) : r));
   if (labels.length <= 2) return labels.join(" · ");
-  return `${labels.slice(0, 2).join(" · ")} · +${labels.length - 2}`;
+  return `${labels.slice(0, 2).join(" · ")} · ${t("platforms.rolesSummary.plusMore", { count: labels.length - 2 })}`;
 }
 
-function formatGiftsSummary(bumpEn: boolean, intEn: boolean, threshold: number, coinsPerBump: number): string {
-  if (!bumpEn && !intEn) return "Desactivado";
+function formatGiftsSummary(bumpEn: boolean, intEn: boolean, threshold: number, coinsPerBump: number, t: TFunction): string {
+  if (!bumpEn && !intEn) return t("platforms.giftsSummary.disabled");
   const parts: string[] = [];
-  if (bumpEn) parts.push(`Bump: 1/${coinsPerBump}m`);
-  if (intEn) parts.push(`Interrumpir: ${threshold}m`);
+  if (bumpEn) parts.push(t("platforms.giftsSummary.bumpSummary", { coins: coinsPerBump }));
+  if (intEn) parts.push(t("platforms.giftsSummary.interruptSummary", { threshold }));
   return parts.join(" · ");
 }
 
 // ── Shared event log ─────────────────────────────────────────────────────────
 
-const EventLog: React.FC<{ events: IntegrationEvent[]; isConnected: boolean }> = ({ events, isConnected }) => (
+const EventLog: React.FC<{ events: IntegrationEvent[]; isConnected: boolean }> = ({ events, isConnected }) => {
+  const { t } = useTranslation();
+  return (
   <div className="event-log-section">
     <div className="event-log-header">
-      <span className="event-log-title">Actividad</span>
+      <span className="event-log-title">{t("platforms.activity")}</span>
       {events.length > 0 && <span className="event-log-count">{events.length}</span>}
     </div>
     {events.length > 0 ? (
@@ -227,11 +235,12 @@ const EventLog: React.FC<{ events: IntegrationEvent[]; isConnected: boolean }> =
       </div>
     ) : (
       <p className="event-empty">
-        {isConnected ? <>Esperando comandos <code>!play</code> del chat...</> : "Sin actividad"}
+        {isConnected ? <Trans i18nKey="platforms.waitingCommands" components={{ code: <code /> }} /> : t("platforms.noActivity")}
       </p>
     )}
   </div>
-);
+  );
+};
 
 // ── Inline connect error ──────────────────────────────────────────────────────
 
@@ -247,6 +256,7 @@ const ConnectError: React.FC<{ message: string; onDismiss: () => void }> = ({ me
 const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[]; authUpdatedAt?: number }> = ({
   state, onSaved, events, authUpdatedAt,
 }) => {
+  const { t } = useTranslation();
   const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
   const cfg = state?.config as TikTokConfig | null;
@@ -313,7 +323,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   };
 
   const handleForget = async () => {
-    const ok = await confirm({ title: "¿Olvidar cuenta de TikTok?", message: "Tendrás que iniciar sesión de nuevo para volver a conectar.", confirmText: "Olvidar", danger: true });
+    const ok = await confirm({ title: t("platforms.forgetTiktokTitle"), message: t("platforms.forgetTiktokMessage"), confirmText: t("platforms.forget"), danger: true });
     if (!ok) return;
     await api.forgetPlatform("tiktok").catch(() => {});
     setTiktokAuth({ authenticated: false, username: null });
@@ -353,7 +363,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       await api.connectPlatform("tiktok");
       onSaved();
     } catch (e) {
-      setConnectError(e instanceof Error ? e.message : "Error al conectar");
+      setConnectError(e instanceof Error ? e.message : t("platforms.connectErrorFallback"));
     } finally {
       setConnecting(false);
     }
@@ -385,12 +395,12 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
           <>
             <span className="platform-account-name">@{ttUser ?? "…"}</span>
             <button className="btn btn-sm btn-disconnect platform-account-forget" onClick={handleForget}>
-              Olvidar
+              {t("platforms.forget")}
             </button>
           </>
         ) : (
           <button className="btn btn-sm btn-primary" onClick={handleLogin} disabled={authBusy} style={{ width: "100%" }}>
-            {authBusy ? "Abriendo login…" : "Iniciar sesión en TikTok"}
+            {authBusy ? t("platforms.loginOpening") : t("platforms.tiktokLogin")}
           </button>
         )}
       </div>
@@ -400,11 +410,11 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             setAutoConnect(e.target.checked);
             if (ttUser) await api.saveTikTok(ttUser, e.target.checked, giftThreshold, giftBumpEnabled, giftInterruptEnabled, coinsPerBump, commandRoles, teamMinLevel, allowedUsers).catch(() => {});
           }} />
-        Conectar al iniciar la app
+        {t("platforms.connectOnStartup")}
       </label>
 
       <div className="platform-sections">
-        <PlatformSection title="Permisos" summary={formatRolesSummary(commandRoles)}>
+        <PlatformSection title={t("platforms.permissions")} summary={formatRolesSummary(commandRoles, t)}>
           <RoleSelector
             platform="tiktok"
             roles={commandRoles}
@@ -412,7 +422,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
           />
           {commandRoles.includes("teamMember") && (
             <div className="role-sub-setting">
-              <span className="role-sub-label">Nivel mín. del Team</span>
+              <span className="role-sub-label">{t("platforms.teamMinLevel")}</span>
               <input type="number" className="gift-input" min={1} max={100} value={teamMinLevel}
                 onChange={(e) => setTeamMinLevel(Math.max(1, Number(e.target.value)))} />
             </div>
@@ -425,17 +435,17 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
           )}
         </PlatformSection>
 
-        <PlatformSection title="Regalos" summary={formatGiftsSummary(giftBumpEnabled, giftInterruptEnabled, giftThreshold, coinsPerBump)}>
+        <PlatformSection title={t("platforms.gifts")} summary={formatGiftsSummary(giftBumpEnabled, giftInterruptEnabled, giftThreshold, coinsPerBump, t)}>
           <div className="gift-settings">
             <div className="gift-row">
               <label className="gift-toggle">
                 <input type="checkbox" checked={giftBumpEnabled}
                   onChange={(e) => { setGiftBumpEnabled(e.target.checked); save({ bumpEn: e.target.checked }); }} />
-                Subir posiciones por regalos
+                {t("platforms.bumpByGifts")}
               </label>
               {giftBumpEnabled && (
                 <div className="gift-input-group">
-                  <span className="gift-input-label">Monedas/posición</span>
+                  <span className="gift-input-label">{t("platforms.coinsPerPosition")}</span>
                   <input type="number" className="gift-input" min={1} value={coinsPerBump}
                     onChange={(e) => setCoinsPerBump(Math.max(1, Number(e.target.value)))} />
                 </div>
@@ -445,11 +455,11 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
               <label className="gift-toggle">
                 <input type="checkbox" checked={giftInterruptEnabled}
                   onChange={(e) => { setGiftInterruptEnabled(e.target.checked); save({ intEn: e.target.checked }); }} />
-                Interrumpir canción por regalos
+                {t("platforms.interruptByGifts")}
               </label>
               {giftInterruptEnabled && (
                 <div className="gift-input-group">
-                  <span className="gift-input-label">Umbral (monedas)</span>
+                  <span className="gift-input-label">{t("platforms.thresholdCoins")}</span>
                   <input type="number" className="gift-input" min={1} value={giftThreshold}
                     onChange={(e) => setGiftThreshold(Math.max(1, Number(e.target.value)))} />
                 </div>
@@ -462,10 +472,10 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       <div className="platform-actions">
         {status === "disconnected" ? (
           <button className="btn btn-sm btn-connect" onClick={connect} disabled={!isAuthed || !ttUser || connecting}>
-            {connecting ? "Conectando..." : "Conectar al chat"}
+            {connecting ? t("platforms.connecting") : t("platforms.connectToChat")}
           </button>
         ) : (
-          <button className="btn btn-sm btn-disconnect" onClick={disconnect}>Detener</button>
+          <button className="btn btn-sm btn-disconnect" onClick={disconnect}>{t("platforms.stop")}</button>
         )}
       </div>
 
@@ -479,6 +489,7 @@ const TikTokCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[]; authUpdatedAt?: number }> = ({
   state, onSaved, events, authUpdatedAt,
 }) => {
+  const { t } = useTranslation();
   const [confirmModal, confirm] = useConfirm();
   const [autoConnect, setAutoConnect] = useState(state?.autoConnect ?? false);
   const cfg = state?.config as TwitchConfig | null;
@@ -507,7 +518,7 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       await api.connectPlatform("twitch");
       onSaved();
     } catch (e) {
-      setConnectError(e instanceof Error ? e.message : "Error al conectar");
+      setConnectError(e instanceof Error ? e.message : t("platforms.connectErrorFallback"));
     } finally {
       setConnecting(false);
     }
@@ -532,7 +543,7 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
   };
 
   const handleTwitchForget = async () => {
-    const ok = await confirm({ title: "¿Olvidar cuenta de Twitch?", message: "Tendrás que autenticarte de nuevo para volver a conectar.", confirmText: "Olvidar", danger: true });
+    const ok = await confirm({ title: t("platforms.forgetTwitchTitle"), message: t("platforms.forgetTwitchMessage"), confirmText: t("platforms.forget"), danger: true });
     if (!ok) return;
     await api.forgetPlatform("twitch").catch(() => {});
     setTwitchAuth({ authenticated: false, username: null });
@@ -560,14 +571,14 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       <div className="platform-account-row">
         {isAuthed ? (
           <>
-            <span className="platform-account-name">{twitchAuth?.username ?? "Conectado"}</span>
+            <span className="platform-account-name">{twitchAuth?.username ?? t("platforms.connected")}</span>
             <button className="btn btn-sm btn-disconnect platform-account-forget" onClick={handleTwitchForget}>
-              Olvidar
+              {t("platforms.forget")}
             </button>
           </>
         ) : (
           <button className="btn btn-sm btn-primary" onClick={handleTwitchOAuth} disabled={authBusy} style={{ width: "100%" }}>
-            {authBusy ? "Abriendo..." : "Conectar con Twitch"}
+            {authBusy ? t("platforms.opening") : t("platforms.connectTwitch")}
           </button>
         )}
       </div>
@@ -577,11 +588,11 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
             setAutoConnect(e.target.checked);
             await api.saveTwitch(twitchAuth?.username ?? "", twitchAuth?.username ?? "", e.target.checked, commandRoles, allowedUsers);
           }} />
-        Conectar al iniciar
+        {t("platforms.connectOnStartupShort")}
       </label>
 
       <div className="platform-sections">
-        <PlatformSection title="Permisos" summary={formatRolesSummary(commandRoles)}>
+        <PlatformSection title={t("platforms.permissions")} summary={formatRolesSummary(commandRoles, t)}>
           <RoleSelector
             platform="twitch"
             roles={commandRoles}
@@ -605,10 +616,10 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
       <div className="platform-actions">
         {status === "disconnected" || status === "error" ? (
           <button className="btn btn-sm btn-connect" onClick={connect} disabled={!isAuthed || connecting}>
-            {connecting ? "Conectando..." : "Conectar al chat"}
+            {connecting ? t("platforms.connecting") : t("platforms.connectToChat")}
           </button>
         ) : (
-          <button className="btn btn-sm btn-disconnect" onClick={disconnect}>Desconectar</button>
+          <button className="btn btn-sm btn-disconnect" onClick={disconnect}>{t("platforms.disconnect")}</button>
         )}
       </div>
 
@@ -622,6 +633,7 @@ const TwitchCard: React.FC<{ state?: PlatformState; onSaved: () => void; events:
 const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: IntegrationEvent[]; authUpdatedAt?: number }> = ({
   state, onSaved, events, authUpdatedAt,
 }) => {
+  const { t } = useTranslation();
   const [confirmModal, confirm] = useConfirm();
   const cfg = state?.config as KickConfig | null;
   const [channel, setChannel] = useState(cfg?.channel ?? "");
@@ -656,7 +668,7 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
       await api.connectPlatform("kick");
       onSaved();
     } catch (e) {
-      setConnectError(e instanceof Error ? e.message : "Error al conectar");
+      setConnectError(e instanceof Error ? e.message : t("platforms.connectErrorFallback"));
     } finally {
       setConnecting(false);
     }
@@ -683,7 +695,7 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
   };
 
   const handleKickForget = async () => {
-    const ok = await confirm({ title: "¿Olvidar cuenta de Kick?", message: "Tendrás que autenticarte de nuevo para volver a conectar.", confirmText: "Olvidar", danger: true });
+    const ok = await confirm({ title: t("platforms.forgetKickTitle"), message: t("platforms.forgetKickMessage"), confirmText: t("platforms.forget"), danger: true });
     if (!ok) return;
     await api.forgetPlatform("kick").catch(() => {});
     setKickAuth({ authenticated: false, channel: null });
@@ -711,14 +723,14 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
       <div className="platform-account-row">
         {isAuthed ? (
           <>
-            <span className="platform-account-name">{kickAuth?.channel ?? "Conectado"}</span>
+            <span className="platform-account-name">{kickAuth?.channel ?? t("platforms.connected")}</span>
             <button className="btn btn-sm btn-disconnect platform-account-forget" onClick={handleKickForget}>
-              Olvidar
+              {t("platforms.forget")}
             </button>
           </>
         ) : (
           <button className="btn btn-sm btn-primary" onClick={handleKickOAuth} disabled={authBusy} style={{ width: "100%" }}>
-            {authBusy ? "Abriendo..." : "Conectar con Kick"}
+            {authBusy ? t("platforms.opening") : t("platforms.connectKick")}
           </button>
         )}
       </div>
@@ -728,11 +740,11 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
             setAutoConnect(e.target.checked);
             await api.saveKick(channel, e.target.checked, commandRoles, allowedUsers);
           }} />
-        Conectar al iniciar
+        {t("platforms.connectOnStartupShort")}
       </label>
 
       <div className="platform-sections">
-        <PlatformSection title="Permisos" summary={formatRolesSummary(commandRoles)}>
+        <PlatformSection title={t("platforms.permissions")} summary={formatRolesSummary(commandRoles, t)}>
           <RoleSelector
             platform="kick"
             roles={commandRoles}
@@ -756,10 +768,10 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
       <div className="platform-actions">
         {status === "disconnected" || status === "error" ? (
           <button className="btn btn-sm btn-connect" onClick={connect} disabled={!isAuthed || connecting}>
-            {connecting ? "Conectando..." : "Conectar al chat"}
+            {connecting ? t("platforms.connecting") : t("platforms.connectToChat")}
           </button>
         ) : (
-          <button className="btn btn-sm btn-disconnect" onClick={disconnect}>Desconectar</button>
+          <button className="btn btn-sm btn-disconnect" onClick={disconnect}>{t("platforms.disconnect")}</button>
         )}
       </div>
 
@@ -770,17 +782,20 @@ const KickCard: React.FC<{ state?: PlatformState; onSaved: () => void; events: I
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
-const STATUS_LABELS: Record<string, string> = {
-  connected: "Conectado",
-  connecting: "Conectando...",
-  waitinglive: "Esperando tu Live",
-  disconnected: "Desconectado",
-  error: "Error",
+const STATUS_KEYS: Record<string, string> = {
+  connected: "platforms.status.connected",
+  connecting: "platforms.status.connecting",
+  waitinglive: "platforms.status.waitinglive",
+  disconnected: "platforms.status.disconnected",
+  error: "platforms.status.error",
 };
 
-const StatusBadge: React.FC<{ status: string }> = ({ status }) => (
-  <span className={`platform-status platform-status-${status}`}>
-    <span className="platform-status-dot" />
-    {STATUS_LABELS[status] ?? status}
-  </span>
-);
+const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const { t } = useTranslation();
+  return (
+    <span className={`platform-status platform-status-${status}`}>
+      <span className="platform-status-dot" />
+      {STATUS_KEYS[status] ? t(STATUS_KEYS[status]) : status}
+    </span>
+  );
+};

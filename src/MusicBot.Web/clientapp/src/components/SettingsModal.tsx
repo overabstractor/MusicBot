@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Settings, Zap, Monitor, MessageSquare, X } from "lucide-react";
 import { SettingsPanel } from "./SettingsPanel";
 import { PlatformConnections } from "./PlatformConnections";
@@ -19,17 +20,18 @@ interface Props {
   overlayToken: string;
 }
 
-const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-  { id: "settings",  label: "Ajustes",     icon: <Settings size={14} />    },
-  { id: "platforms", label: "Plataformas", icon: <Zap size={14} />         },
-  { id: "overlays",  label: "Overlays",    icon: <Monitor size={14} />     },
-  { id: "ticker",    label: "Mensajes",    icon: <MessageSquare size={14} /> },
+const TABS: { id: SettingsTab; labelKey: string; icon: React.ReactNode }[] = [
+  { id: "settings",  labelKey: "settings.tab.settings",  icon: <Settings size={14} />    },
+  { id: "platforms", labelKey: "settings.tab.platforms", icon: <Zap size={14} />         },
+  { id: "overlays",  labelKey: "settings.tab.overlays",  icon: <Monitor size={14} />     },
+  { id: "ticker",    labelKey: "settings.tab.ticker",    icon: <MessageSquare size={14} /> },
 ];
 
 export const SettingsModal: React.FC<Props> = ({
   open, onClose, settings, tiktokEvents, twitchEvents, kickEvents,
   tickerMessages, overlayToken,
 }) => {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<SettingsTab>("settings");
 
   if (!open) return null;
@@ -39,13 +41,13 @@ export const SettingsModal: React.FC<Props> = ({
       <div className="settings-modal" onClick={e => e.stopPropagation()}>
         <div className="settings-modal-header">
           <div className="settings-modal-tabs">
-            {TABS.map(t => (
+            {TABS.map(item => (
               <button
-                key={t.id}
-                className={`settings-modal-tab${tab === t.id ? " active" : ""}`}
-                onClick={() => setTab(t.id)}
+                key={item.id}
+                className={`settings-modal-tab${tab === item.id ? " active" : ""}`}
+                onClick={() => setTab(item.id)}
               >
-                {t.icon} {t.label}
+                {item.icon} {t(item.labelKey)}
               </button>
             ))}
           </div>

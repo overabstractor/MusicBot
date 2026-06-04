@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { api } from "../services/api";
 import { TickerMessage } from "../hooks/useSignalR";
 import { useConfirm } from "../hooks/useConfirm";
@@ -27,13 +29,14 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 
 const EMPTY_FORM = { text: "", intervalMinutes: 5, minChatMessages: 0, platforms: [...ALL_PLATFORMS] as Platform[], enabled: true };
 
-function platformsLabel(platforms: string[]) {
-  if (platforms.length === 0) return "Ninguna plataforma";
-  if (platforms.length === ALL_PLATFORMS.length) return "Todas las plataformas";
+function platformsLabel(platforms: string[], t: TFunction) {
+  if (platforms.length === 0) return t("ticker.noPlatforms");
+  if (platforms.length === ALL_PLATFORMS.length) return t("ticker.allPlatforms");
   return platforms.map(p => PLATFORM_LABELS[p as Platform] ?? p).join(", ");
 }
 
 export const TickerMessages: React.FC<Props> = ({ messages }) => {
+  const { t } = useTranslation();
   const [confirmModal, confirm] = useConfirm();
   const [form,       setForm]       = useState(EMPTY_FORM);
   const [editId,     setEditId]     = useState<string | null>(null);
@@ -67,8 +70,8 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
     }));
 
   const handleSave = async () => {
-    if (!form.text.trim()) { setError("Ingresa el texto del mensaje"); return; }
-    if (form.platforms.length === 0) { setError("Selecciona al menos una plataforma"); return; }
+    if (!form.text.trim()) { setError(t("ticker.errTextRequired")); return; }
+    if (form.platforms.length === 0) { setError(t("ticker.errPlatformRequired")); return; }
     setSaving(true);
     setError(null);
     try {
@@ -86,14 +89,14 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
       }
       closeModal();
     } catch (e: any) {
-      setError(e.message ?? "Error al guardar");
+      setError(e.message ?? t("ticker.saveError"));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    const ok = await confirm({ title: "¿Eliminar mensaje?", message: "Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true });
+    const ok = await confirm({ title: t("ticker.deleteTitle"), message: t("ticker.deleteMessage"), confirmText: t("common.delete"), danger: true });
     if (!ok) return;
     try { await api.deleteTicker(id); } catch {}
   };
@@ -121,20 +124,20 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
       <div className="ticker-stats-bar">
         <div className="ticker-stat">
           <span className="ticker-stat-num">{sorted.length}</span>
-          <span className="ticker-stat-label">mensajes</span>
+          <span className="ticker-stat-label">{t("ticker.statMessages")}</span>
         </div>
         <div className="ticker-stat-divider" />
         <div className="ticker-stat">
           <span className="ticker-stat-num ticker-stat-active">{activeCount}</span>
-          <span className="ticker-stat-label">activos</span>
+          <span className="ticker-stat-label">{t("ticker.statActive")}</span>
         </div>
         <div className="ticker-stat-divider" />
         <div className="ticker-stat">
           <span className="ticker-stat-num ticker-stat-inactive">{sorted.length - activeCount}</span>
-          <span className="ticker-stat-label">inactivos</span>
+          <span className="ticker-stat-label">{t("ticker.statInactive")}</span>
         </div>
         <button className="btn btn-primary btn-sm ticker-add-btn" onClick={openNew}>
-          + Nuevo mensaje
+          {t("ticker.newMessage")}
         </button>
       </div>
 
@@ -142,8 +145,8 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
       {sorted.length === 0 ? (
         <div className="ticker-empty">
           <div className="ticker-empty-icon">💬</div>
-          <div className="ticker-empty-title">Sin mensajes aún</div>
-          <div className="ticker-empty-sub">Agrega tu primer mensaje para que el bot lo envíe al chat.</div>
+          <div className="ticker-empty-title">{t("ticker.emptyTitle")}</div>
+          <div className="ticker-empty-sub">{t("ticker.emptySub")}</div>
         </div>
       ) : (
         <div className="ticker-list">
@@ -153,16 +156,16 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
 
               <div className="ticker-card-preview-area">
                 <div className="ticker-card-content">
-                  <div className="ticker-card-text">{msg.text || <em className="ticker-card-only-img">Sin texto</em>}</div>
+                  <div className="ticker-card-text">{msg.text || <em className="ticker-card-only-img">{t("ticker.noText")}</em>}</div>
                   <div className="ticker-card-meta">
                     <span className={`ticker-status-pill${msg.enabled ? " on" : " off"}`}>
-                      {msg.enabled ? "● Activo" : "○ Inactivo"}
+                      {msg.enabled ? t("ticker.active") : t("ticker.inactive")}
                     </span>
-                    <span className="ticker-card-dur">⏱ {msg.intervalMinutes === 60 ? "1 h" : `${msg.intervalMinutes} min`}</span>
+                    <span className="ticker-card-dur">⏱ {msg.intervalMinutes === 60 ? t("ticker.hour1") : t("ticker.minutes", { count: msg.intervalMinutes })}</span>
                     {msg.minChatMessages > 0 && (
-                      <span className="ticker-card-dur">💬 {msg.minChatMessages} msgs mín.</span>
+                      <span className="ticker-card-dur">💬 {t("ticker.minMsgs", { count: msg.minChatMessages })}</span>
                     )}
-                    <span className="ticker-card-platforms">{platformsLabel(msg.platforms ?? [])}</span>
+                    <span className="ticker-card-platforms">{platformsLabel(msg.platforms ?? [], t)}</span>
                   </div>
                 </div>
               </div>
@@ -172,9 +175,9 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
                   className={`btn btn-sm ${msg.enabled ? "btn-outline" : "btn-primary"}`}
                   onClick={() => handleToggle(msg)}
                 >
-                  {msg.enabled ? "Pausar" : "Activar"}
+                  {msg.enabled ? t("ticker.pause") : t("ticker.activate")}
                 </button>
-                <button className="btn btn-sm btn-outline" onClick={() => openEdit(msg)}>Editar</button>
+                <button className="btn btn-sm btn-outline" onClick={() => openEdit(msg)}>{t("common.edit")}</button>
                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(msg.id)}>✕</button>
               </div>
             </div>
@@ -185,16 +188,16 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
       {/* ── Modal ── */}
       {modalOpen && (
         <FormModal
-          title={editId ? "Editar mensaje" : "Nuevo mensaje"}
+          title={editId ? t("ticker.editTitle") : t("ticker.newTitle")}
           onClose={closeModal}
           width={480}
         >
           <div className="ticker-modal-body">
             {/* Text */}
-            <Label text="Texto del mensaje" tooltip="Mensaje que el bot enviará al chat. Se envía tal cual, sin mencionar a ningún usuario." />
+            <Label text={t("ticker.textLabel")} tooltip={t("ticker.textTip")} />
             <textarea
               className="input ticker-textarea"
-              placeholder="Ej: Usa !play [canción] para pedir canciones"
+              placeholder={t("ticker.textPlaceholder")}
               value={form.text}
               rows={3}
               autoFocus
@@ -204,21 +207,21 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
             <div className="ticker-form-row2">
               {/* Interval */}
               <div className="ticker-field ticker-field-sm">
-                <Label text="Intervalo" tooltip="Tiempo mínimo que debe pasar entre cada envío de este mensaje. El contador se reinicia tras cada envío." />
+                <Label text={t("ticker.intervalLabel")} tooltip={t("ticker.intervalTip")} />
                 <select
                   className="input settings-input-sm ticker-interval-select"
                   value={form.intervalMinutes}
                   onChange={e => setForm(f => ({ ...f, intervalMinutes: Number(e.target.value) }))}
                 >
                   {INTERVAL_OPTIONS.map(m => (
-                    <option key={m} value={m}>{m === 60 ? "1 h" : `${m} min`}</option>
+                    <option key={m} value={m}>{m === 60 ? t("ticker.hour1") : t("ticker.minutes", { count: m })}</option>
                   ))}
                 </select>
               </div>
 
               {/* Min chat messages */}
               <div className="ticker-field ticker-field-sm">
-                <Label text="Mín. mensajes" tooltip="Número mínimo de mensajes que deben haberse enviado en el chat desde el último envío de este timer. Si el chat está inactivo, el mensaje se pospone. 0 = sin mínimo." />
+                <Label text={t("ticker.minMsgLabel")} tooltip={t("ticker.minMsgTip")} />
                 <input
                   type="number"
                   className="input settings-input-sm"
@@ -227,26 +230,26 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
                   onChange={e => setForm(f => ({ ...f, minChatMessages: Math.max(0, Number(e.target.value)) }))}
                 />
                 {form.minChatMessages === 0 && (
-                  <span className="ticker-field-hint">Sin mínimo</span>
+                  <span className="ticker-field-hint">{t("ticker.noMin")}</span>
                 )}
               </div>
 
               {/* Enabled toggle */}
               <div className="ticker-field ticker-field-toggle">
-                <Label text="Estado" tooltip="Los mensajes inactivos no se envían al chat aunque haya transcurrido el intervalo." />
+                <Label text={t("ticker.statusLabel")} tooltip={t("ticker.statusTip")} />
                 <div className="ticker-toggle-row" onClick={() => setForm(f => ({ ...f, enabled: !f.enabled }))}>
                   <div className={`settings-toggle${form.enabled ? " on" : ""}`}>
                     <div className="settings-toggle-thumb" />
                   </div>
                   <span className={`ticker-toggle-label${form.enabled ? " on" : ""}`}>
-                    {form.enabled ? "Activado" : "Inactivo"}
+                    {form.enabled ? t("ticker.toggleOn") : t("ticker.toggleOff")}
                   </span>
                 </div>
               </div>
             </div>
 
             {/* Platforms */}
-            <Label text="Plataformas" tooltip="Plataformas a las que se enviará este mensaje. Solo se envía a las que estén conectadas en el momento del envío." />
+            <Label text={t("ticker.platformsLabel")} tooltip={t("ticker.platformsTip")} />
             <div className="ticker-platforms-row">
               {ALL_PLATFORMS.map(p => {
                 const selected = form.platforms.includes(p);
@@ -263,16 +266,16 @@ export const TickerMessages: React.FC<Props> = ({ messages }) => {
               })}
             </div>
             {form.platforms.length === 0 && (
-              <div className="ticker-platforms-warning">⚠ Sin plataformas seleccionadas — el mensaje no se enviará.</div>
+              <div className="ticker-platforms-warning">{t("ticker.noPlatformWarn")}</div>
             )}
 
             {error && <div className="ticker-error">{error}</div>}
 
             <div className="form-modal-actions">
               <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? "Guardando…" : editId ? "Guardar cambios" : "Agregar mensaje"}
+                {saving ? t("ticker.saving") : editId ? t("ticker.saveChanges") : t("ticker.addMessage")}
               </button>
-              <button className="btn btn-outline" onClick={closeModal}>Cancelar</button>
+              <button className="btn btn-outline" onClick={closeModal}>{t("common.cancel")}</button>
             </div>
           </div>
         </FormModal>

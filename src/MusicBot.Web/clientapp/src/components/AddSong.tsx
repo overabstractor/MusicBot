@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../services/api";
 
 interface Props {
@@ -6,6 +7,7 @@ interface Props {
 }
 
 export const AddSong: React.FC<Props> = ({ onAdded }) => {
+  const { t } = useTranslation();
   const [query,       setQuery]       = useState("");
   const [requestedBy, setRequestedBy] = useState("Admin");
   const [loading,     setLoading]     = useState(false);
@@ -24,7 +26,7 @@ export const AddSong: React.FC<Props> = ({ onAdded }) => {
         onAdded();
       }
     } catch {
-      setMessage("Error al agregar canción");
+      setMessage(t("addSong.errAdd"));
     } finally {
       setLoading(false);
     }
@@ -37,7 +39,7 @@ export const AddSong: React.FC<Props> = ({ onAdded }) => {
           <input
             type="text"
             className="input"
-            placeholder="Nombre o artista, o pegar URL (YouTube / Spotify)…"
+            placeholder={t("addSong.placeholder")}
             value={query}
             onChange={(e) => { setQuery(e.target.value); setMessage(""); }}
             disabled={loading}
@@ -46,7 +48,7 @@ export const AddSong: React.FC<Props> = ({ onAdded }) => {
           <input
             type="text"
             className="input input-sm"
-            placeholder="Solicitado por"
+            placeholder={t("addSong.requestedBy")}
             value={requestedBy}
             onChange={(e) => setRequestedBy(e.target.value)}
           />
@@ -56,7 +58,7 @@ export const AddSong: React.FC<Props> = ({ onAdded }) => {
             style={{ width: "100%" }}
             disabled={loading || !query.trim()}
           >
-            {loading ? "Agregando…" : "Agregar"}
+            {loading ? t("addSong.adding") : t("common.add")}
           </button>
         </div>
         {message && <div className="form-message">{message}</div>}

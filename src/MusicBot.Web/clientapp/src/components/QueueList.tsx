@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { QueueItem } from "../types/models";
 import { formatDuration, getPlatform } from "../utils";
 import { DownloadState } from "../hooks/useSignalR";
@@ -13,13 +14,14 @@ interface Props {
 }
 
 export const QueueList: React.FC<Props> = ({ items, onRemove, onReorder, onBan, onAddToAutoQueue, downloadStates }) => {
+  const { t } = useTranslation();
   const activeDownloads = Object.values(downloadStates ?? {});
   const [dragUri,      setDragUri]      = useState<string | null>(null);
   const [dropIndex,    setDropIndex]    = useState<number | null>(null);
   const dragIndexRef = useRef<number>(-1);
 
   if (items.length === 0 && activeDownloads.length === 0) {
-    return <div className="queue-empty">La cola está vacía</div>;
+    return <div className="queue-empty">{t('queue.empty')}</div>;
   }
 
   const handleDragStart = (uri: string, index: number) => {
@@ -54,7 +56,7 @@ export const QueueList: React.FC<Props> = ({ items, onRemove, onReorder, onBan, 
           <div className="queue-download-header">
             <span className="queue-download-icon">⬇</span>
             <div className="queue-download-song">
-              <span className="queue-download-song-label">Descargando</span>
+              <span className="queue-download-song-label">{t('queue.downloadingLabel')}</span>
               <span className="queue-download-song-title">{dl.title}</span>
             </div>
             <span className="queue-download-pct">{dl.pct}%</span>
@@ -86,7 +88,7 @@ export const QueueList: React.FC<Props> = ({ items, onRemove, onReorder, onBan, 
             onDragLeave={() => {}}
           >
             {onReorder && (
-              <span className="queue-drag-handle" title="Arrastrar para reordenar">⠿</span>
+              <span className="queue-drag-handle" title={t('queue.dragReorder')}>⠿</span>
             )}
             <span className="queue-pos">{index + 1}</span>
             {song.coverUrl && (
@@ -98,7 +100,7 @@ export const QueueList: React.FC<Props> = ({ items, onRemove, onReorder, onBan, 
               <div className="queue-song-meta">
                 {formatDuration(song.durationMs)}
                 {!song.isDownloaded && !dlState && (
-                  <span className="queue-dl-badge" title="Pendiente de descarga">⬇</span>
+                  <span className="queue-dl-badge" title={t('queue.pendingDownload')}>⬇</span>
                 )}
                 {item.requestedBy && (
                   <span className="queue-requested-by">
@@ -124,21 +126,21 @@ export const QueueList: React.FC<Props> = ({ items, onRemove, onReorder, onBan, 
                 <button
                   className="btn btn-icon btn-autoqueue-queue"
                   onClick={() => onAddToAutoQueue(song)}
-                  title="Agregar a autocola"
+                  title={t('queue.addToAutoQueue')}
                 >🎲</button>
               )}
               {onBan && (
                 <button
                   className="btn btn-icon btn-ban-queue"
                   onClick={() => onBan(song.spotifyUri, song.title, song.artist)}
-                  title="Banear canción"
+                  title={t('queue.banSong')}
                 >🚫</button>
               )}
               {onRemove && (
                 <button
                   className="btn btn-icon btn-remove-queue"
                   onClick={() => onRemove(song.spotifyUri)}
-                  title="Eliminar de la cola"
+                  title={t('queue.removeFromQueue')}
                 >✕</button>
               )}
             </div>

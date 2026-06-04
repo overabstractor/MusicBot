@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, Heart, Pin, GripVertical, Download } from "lucide-react";
 import { api } from "../services/api";
 import { PlaylistLibrary } from "../types/models";
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshKey }) => {
+  const { t } = useTranslation();
   const [playlists,    setPlaylists]    = useState<PlaylistLibrary[]>([]);
   const [newName,      setNewName]      = useState("");
   const [creating,     setCreating]     = useState(false);
@@ -50,16 +52,16 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
     setImportMsg(null);
     try {
       const userProvidedName = importName.trim();
-      const name = userProvidedName || `Lista ${Date.now()}`;
+      const name = userProvidedName || t("library.listFallbackName", { ts: Date.now() });
       const p    = await api.createPlaylist(name);
       const r    = await api.importPlaylistSongs(p.id, url, userProvidedName || undefined);
-      setImportMsg({ text: `✓ ${r.added} canciones importadas${r.name ? ` · "${r.name}"` : ""}`, err: false });
+      setImportMsg({ text: `✓ ${r.name ? t("library.songsImportedNamed", { added: r.added, name: r.name }) : t("library.songsImported", { added: r.added })}`, err: false });
       setImportUrl(""); setImportName("");
       await load();
       onSelect(p.id);
       setTimeout(() => { setShowImport(false); setImportMsg(null); }, 1800);
     } catch (err: unknown) {
-      setImportMsg({ text: err instanceof Error ? err.message : "Error al importar", err: true });
+      setImportMsg({ text: err instanceof Error ? err.message : t("library.errImport"), err: true });
     } finally {
       setImporting(false);
     }
@@ -157,15 +159,15 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
         <div className="lib-sidebar-item-info">
           <span className="lib-sidebar-item-name">{p.name}</span>
           <span className="lib-sidebar-item-meta">
-            {p.isActive && <span className="lib-active-badge">Activa · </span>}
-            {p.songCount} canciones
+            {p.isActive && <span className="lib-active-badge">{t("library.activeBadge")}</span>}
+            {p.songCount} {t("library.songsLabel")}
           </span>
         </div>
       </button>
       {!p.isSystem && (
         <button
           className={`lib-sidebar-pin-btn${p.isPinned ? " pinned" : ""}`}
-          title={p.isPinned ? "Desfijar" : "Fijar"}
+          title={p.isPinned ? t("library.unpin") : t("library.pin")}
           onClick={(e) => handleTogglePin(e, p)}
         >
           <Pin size={12} />
@@ -177,18 +179,18 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
   return (
     <div className="lib-sidebar">
       <div className="lib-sidebar-header">
-        <span className="lib-sidebar-title">Tu Librería</span>
+        <span className="lib-sidebar-title">{t("library.yourLibrary")}</span>
         <div style={{ display: "flex", gap: 4 }}>
           <button
             className={`lib-sidebar-create-btn${showImport ? " active" : ""}`}
-            title="Importar lista de YouTube"
+            title={t("library.importTitle")}
             onClick={() => { setShowImport(v => !v); setShowForm(false); setImportMsg(null); }}
           >
             <Download size={15} />
           </button>
           <button
             className={`lib-sidebar-create-btn${showForm ? " active" : ""}`}
-            title="Crear lista"
+            title={t("library.createTitle")}
             onClick={() => { setShowForm(v => !v); setShowImport(false); }}
           >
             <Plus size={16} />
@@ -200,14 +202,14 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
         <form className="lib-sidebar-create-form" onSubmit={handleCreate}>
           <input
             className="input input-sm"
-            placeholder="Nombre de la lista…"
+            placeholder={t("library.listNamePlaceholder")}
             value={newName}
             onChange={e => setNewName(e.target.value)}
             autoFocus
             disabled={creating}
           />
           <button type="submit" className="btn btn-primary btn-sm" disabled={creating || !newName.trim()}>
-            Crear
+            {t("library.create")}
           </button>
         </form>
       )}
@@ -216,7 +218,7 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
         <form className="lib-sidebar-create-form lib-sidebar-import-form" onSubmit={handleImport}>
           <input
             className="input input-sm"
-            placeholder="URL de YouTube o YouTube Music…"
+            placeholder={t("library.importUrlPlaceholder")}
             value={importUrl}
             onChange={e => setImportUrl(e.target.value)}
             autoFocus
@@ -224,7 +226,7 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
           />
           <input
             className="input input-sm"
-            placeholder="Nombre (opcional)"
+            placeholder={t("library.nameOptional")}
             value={importName}
             onChange={e => setImportName(e.target.value)}
             disabled={importing}
@@ -233,7 +235,7 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
             <span className={`lib-import-msg${importMsg.err ? " err" : ""}`}>{importMsg.text}</span>
           )}
           <button type="submit" className="btn btn-primary btn-sm" disabled={importing || !importUrl.trim()}>
-            {importing ? "Importando…" : "Importar"}
+            {importing ? t("library.importing") : t("library.import")}
           </button>
         </form>
       )}
@@ -241,13 +243,13 @@ export const LibrarySidebar: React.FC<Props> = ({ selectedId, onSelect, refreshK
       <div className="lib-sidebar-list">
         {playlists.length === 0 ? (
           <div className="lib-sidebar-empty">
-            Crea tu primera lista con el botón +
+            {t("library.emptyCreate")}
           </div>
         ) : (
           <>
             {pinned.length > 0 && (
               <>
-                <div className="lib-sidebar-section-label">Fijadas</div>
+                <div className="lib-sidebar-section-label">{t("library.pinned")}</div>
                 {pinned.map(p => renderItem(p, true))}
                 {unpinned.length > 0 && <div className="lib-sidebar-section-divider" />}
               </>

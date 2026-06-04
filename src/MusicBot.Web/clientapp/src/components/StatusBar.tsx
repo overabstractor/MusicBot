@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { IntegrationStatus } from "../hooks/useSignalR";
 
 interface Props {
@@ -21,11 +22,12 @@ function statusToDot(status: IntegrationStatus): "ok" | "warn" | "err" | "connec
 }
 
 export const StatusBar: React.FC<Props> = ({ signalRConnected, tiktokStatus, twitchStatus, kickStatus }) => {
+  const { t } = useTranslation();
   return (
     <div className="status-bar">
       <div className="status-indicator">
         <div className={`status-dot ${signalRConnected ? "ok" : "err"}`} />
-        <span>{signalRConnected ? "Overlay" : "Desconectado"}</span>
+        <span>{signalRConnected ? t("status.overlay") : t("status.disconnected")}</span>
       </div>
 
       <div className="status-indicator" title={`TikTok: ${tiktokStatus}`}>

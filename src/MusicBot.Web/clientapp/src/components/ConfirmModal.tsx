@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle } from "lucide-react";
 
 interface Props {
@@ -12,8 +13,11 @@ interface Props {
 }
 
 export const ConfirmModal: React.FC<Props> = ({
-  title, message, confirmText = "Confirmar", cancelText = "Cancelar", danger = false, onConfirm, onCancel,
+  title, message, confirmText, cancelText, danger = false, onConfirm, onCancel,
 }) => {
+  const { t } = useTranslation();
+  const resolvedConfirm = confirmText ?? t("common.confirm");
+  const resolvedCancel = cancelText ?? t("common.cancel");
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -36,9 +40,9 @@ export const ConfirmModal: React.FC<Props> = ({
           </div>
         </div>
         <div className="confirm-modal-actions">
-          <button ref={cancelRef} className="btn btn-outline confirm-modal-btn" onClick={onCancel}>{cancelText}</button>
+          <button ref={cancelRef} className="btn btn-outline confirm-modal-btn" onClick={onCancel}>{resolvedCancel}</button>
           <button className={`btn ${danger ? "btn-danger" : "btn-primary"} confirm-modal-btn`} onClick={onConfirm}>
-            {confirmText}
+            {resolvedConfirm}
           </button>
         </div>
       </div>
