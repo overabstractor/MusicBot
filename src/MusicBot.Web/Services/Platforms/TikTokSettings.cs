@@ -9,13 +9,19 @@ public class TikTokSettings
     public string UserSlug { get; set; } = string.Empty;
 
     /// <summary>
-    /// Optional signing server URL to bypass TikTok IP blocks.
-    /// EulerStream provides a free tier: https://www.eulerstream.com
-    /// Example: "https://tiktok.eulerstream.com"
+    /// Optional explicit signing-server URL. Leave EMPTY to use TikTokLiveSharp's built-in
+    /// default (https://tiktok.eulerstream.com/webcast/fetch) — this is the recommended path.
+    /// Only set this to override the signer, e.g. the in-app WebView2 proxy
+    /// ("http://127.0.0.1:3050/webcast/fetch") or a self-hosted Euler-compatible server.
     /// </summary>
     public string SigningServerUrl { get; set; } = string.Empty;
 
-    /// <summary>API key for the signing server (if required)</summary>
+    /// <summary>
+    /// Euler Stream API key. With an EMPTY <see cref="SigningServerUrl"/> this promotes signing
+    /// from the anonymous, rate-limited tier ("[429] Signing Rate Limit Reached") to the
+    /// authenticated, higher-quota tier — without needing a custom URL. Get one at
+    /// https://www.eulerstream.com. Keep it secret.
+    /// </summary>
     public string SigningServerApiKey { get; set; } = string.Empty;
 
     /// <summary>

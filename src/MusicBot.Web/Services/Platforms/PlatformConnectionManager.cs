@@ -332,7 +332,10 @@ public class PlatformConnectionManager
     private async Task TikTokLoop(Guid userId, TikTokPlatformConfig config, CancellationToken ct)
     {
         var key = Key(userId, "tiktok");
-        var hasSign = !string.IsNullOrWhiteSpace(config.SigningServerUrl);
+
+        // Resolve the Euler Stream signing tier ONCE per connection (not per WS retry).
+        // Never silently fall back to the anonymous/rate-limited tier if a key is available.
+        var signing = ResolveSigningConfig(config);
 
         // ── Tunable timings (kept low for fast recovery from transient drops) ─
         // Two backoff profiles depending on which resolve path is available:
@@ -442,8 +445,8 @@ public class PlatformConnectionManager
                 roomId: roomId,
                 skipRoomInfo: true,
                 processInitialData: false,
-                customSigningServer: hasSign ? config.SigningServerUrl : null,
-                signingServerApiKey: hasSign ? config.SigningServerApiKey : null);
+                customSigningServer: signing.Server,   // null → Euler Stream default (tiktok.eulerstream.com)
+                signingServerApiKey: signing.ApiKey);   // key → authenticated tier; null → anonymous (rate-limited)
 
             var canSendChat = !string.IsNullOrWhiteSpace(config.CookieString)
                               || AppEvents.HasTikTokWebViewSender;
@@ -451,13 +454,16 @@ public class PlatformConnectionManager
             string? tiktokRoomId = null;
             var lastEventAt = DateTime.UtcNow;
             var connectedSuccessfully = false;
+            var connectSw = System.Diagnostics.Stopwatch.StartNew(); // tiktok_connect_latency_ms
 
             client.OnConnected += (_, _) =>
             {
                 connectedSuccessfully = true;
                 wsFailCount = 0; // reset fast-retry backoff once we're actually connected
                 lastEventAt = DateTime.UtcNow;
-                _logger.LogInformation("TikTok connected to @{User}", config.Username);
+                connectSw.Stop();
+                _logger.LogInformation("TikTok connected to @{User} (signing_mode={Mode}, connect_latency_ms={Latency})",
+                    config.Username, signing.Mode, connectSw.ElapsedMilliseconds);
                 _activity.SetIgnored(config.Username, true);
                 SetStatus(key, ConnectionStatus.Connected);
 
@@ -500,8 +506,8 @@ public class PlatformConnectionManager
                 HandleTikTokGift(userId, e);
             };
 
-            _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
-                config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
+            _logger.LogInformation("TikTok connecting to @{User} (signing_mode={Mode}, server={Server}, chat-send={CanSend})",
+                config.Username, signing.Mode, signing.Server ?? "eulerstream-default", canSendChat);
 
             // Watchdog. Only role now is detecting a dead WebSocket — natural stream-end
             // is handled by the Stream_Ended ControlMessage handler above (fires within
@@ -601,6 +607,40 @@ public class PlatformConnectionManager
                 catch (OperationCanceledException) { return; }
             }
         }
+    }
+
+    /// <summary>
+    /// Resolves the TikTok signing configuration for one connection, choosing the Euler Stream
+    /// tier ONCE (mirrors OverInteractive's BuildSigningConfig). TikTokLiveSharp's built-in
+    /// default signer is https://tiktok.eulerstream.com/webcast/fetch, so a null server means
+    /// "use Euler's default"; the API key (when present) promotes the request from the anonymous,
+    /// rate-limited tier to the authenticated, higher-quota tier.
+    ///
+    /// Priority (high → low):
+    ///   1. Explicit signing-server URL (config) — escape hatch for a self-hosted signer
+    ///      (e.g. the in-app WebView2 proxy at /webcast/fetch). Mode "custom".
+    ///   2. Euler Stream API key (config/env) — authenticated tier. Mode "eulerstream-config".
+    ///   3. Shared product key (Cloudflare relay/Worker) — Mode "eulerstream-shared".
+    ///      Not yet wired: pass it via <paramref name="sharedKey"/> once the relay exposes one.
+    ///   4. Nothing — anonymous Euler default, rate-limited. Mode "eulerstream-free".
+    /// </summary>
+    private static (string? Server, string? ApiKey, string Mode) ResolveSigningConfig(
+        TikTokPlatformConfig config, string? sharedKey = null)
+    {
+        var explicitUrl = config.SigningServerUrl;
+        var configKey   = config.SigningServerApiKey;
+
+        string? apiKey; string mode;
+        if      (!string.IsNullOrWhiteSpace(configKey)) { apiKey = configKey; mode = "eulerstream-config"; }
+        else if (!string.IsNullOrWhiteSpace(sharedKey)) { apiKey = sharedKey; mode = "eulerstream-shared"; }
+        else                                            { apiKey = null;      mode = "eulerstream-free";   }
+
+        // An explicit signing-server URL wins on the server slot but keeps whatever key was
+        // resolved above (a custom Euler-compatible server may still want it; the local
+        // WebView2 proxy simply ignores it).
+        return string.IsNullOrWhiteSpace(explicitUrl)
+            ? (null, apiKey, mode)
+            : (explicitUrl, apiKey, "custom");
     }
 
     /// <summary>ResolveRoomId wrapper that never throws on transient errors — only OCE bubbles up.</summary>
