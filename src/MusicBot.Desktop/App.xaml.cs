@@ -174,8 +174,8 @@ public partial class App : SysWin.Application
             _youtubeLogin.WindowState   = SysWin.WindowState.Normal;
             _youtubeLogin.Width         = 520;
             _youtubeLogin.Height        = 720;
-            _youtubeLogin.Show();
-            _youtubeLogin.Activate();
+            CenterOnWorkArea(_youtubeLogin);
+            BringToFront(_youtubeLogin);
             return;
         }
 
@@ -190,19 +190,49 @@ public partial class App : SysWin.Application
         {
             // Window already exists — reset it to the login page (may have been in silent-restore state)
             _tiktokLogin.ResetAndShowLogin();
-            // Restore window to a visible, normal-sized state regardless of how it was created
+            // Restore window to a visible, normal-sized, centered state regardless of how it was
+            // created. It was first shown Minimized+Hidden to spin up WebView2, so CenterScreen
+            // never applied — we must re-center explicitly here or it reappears tiny, bottom-left.
             _tiktokLogin.ShowInTaskbar = true;
             _tiktokLogin.WindowState   = SysWin.WindowState.Normal;
             _tiktokLogin.Width         = 480;
             _tiktokLogin.Height        = 700;
-            _tiktokLogin.Show();
-            _tiktokLogin.Activate();
+            CenterOnWorkArea(_tiktokLogin);
+            BringToFront(_tiktokLogin);
             return;
         }
 
         _tiktokLogin = new TikTokLoginWindow { Owner = _mainWindow };
         _tiktokLogin.Show();
         _tiktokLogin.Activate();
+    }
+
+    /// <summary>
+    /// Centers a window on the primary monitor's work area (DPI-aware, in WPF units).
+    /// WPF's WindowStartupLocation="CenterScreen" only applies on the first Show(); these
+    /// login windows are first shown Minimized+Hidden to initialize WebView2, so when later
+    /// restored they keep the stale minimized placement (tiny, bottom-left corner). Calling
+    /// this on show fixes that. Requires Width/Height to be set (not Auto/NaN).
+    /// </summary>
+    private static void CenterOnWorkArea(SysWin.Window w)
+    {
+        var wa = SysWin.SystemParameters.WorkArea;
+        w.Left = wa.Left + (wa.Width  - w.Width)  / 2;
+        w.Top  = wa.Top  + (wa.Height - w.Height) / 2;
+    }
+
+    /// <summary>Makes a window visible and reliably brings it to the foreground.</summary>
+    private static void BringToFront(SysWin.Window w)
+    {
+        w.Show();
+        if (w.WindowState == SysWin.WindowState.Minimized)
+            w.WindowState = SysWin.WindowState.Normal;
+        w.Activate();
+        // Topmost toggle is the reliable way to force a window above the foreground app
+        // when Activate() alone is ignored by the OS focus rules.
+        w.Topmost = true;
+        w.Topmost = false;
+        w.Focus();
     }
 
     private Task ForgetPlatformSessionAsync(string platform)

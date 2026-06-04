@@ -8,6 +8,8 @@ interface Env {
   KICK_CLIENT_SECRET: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
+  // Shared Euler Stream signing key handed to clients that have no key of their own.
+  EULER_SIGNING_KEY: string;
 }
 
 interface TokenBody {
@@ -40,6 +42,14 @@ export default {
     // Health check — GET only
     if (url.pathname === "/ping") {
       return jsonResponse({ ok: true });
+    }
+
+    // Shared TikTok signing key (Euler Stream) — GET only.
+    // Returned to clients that have no key of their own, so they can use the
+    // authenticated signing tier instead of the anonymous, rate-limited one.
+    // Empty string when EULER_SIGNING_KEY is unset → client falls back to anonymous.
+    if (url.pathname === "/signing-key/tiktok") {
+      return jsonResponse({ key: env.EULER_SIGNING_KEY ?? "" });
     }
 
     if (request.method !== "POST") {

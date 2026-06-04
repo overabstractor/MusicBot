@@ -124,12 +124,16 @@ public class PlaylistLibraryService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<MusicBotDbContext>();
+        // Group by URL to dedupe, keep each URL's earliest position, order by that, then take max.
+        // (Doing OrderBy → Distinct → Take directly makes EF warn that Distinct erases the ordering
+        // and the Take ends up unordered; grouping keeps it deterministic and warning-free.)
         return await db.PlaylistLibrarySongs
             .Where(s => s.PlaylistId == playlistId && s.CoverUrl != null && s.CoverUrl != "")
-            .OrderBy(s => s.Position)
-            .Select(s => s.CoverUrl!)
-            .Distinct()
+            .GroupBy(s => s.CoverUrl!)
+            .Select(g => new { Url = g.Key, FirstPosition = g.Min(x => x.Position) })
+            .OrderBy(x => x.FirstPosition)
             .Take(max)
+            .Select(x => x.Url)
             .ToListAsync();
     }
 

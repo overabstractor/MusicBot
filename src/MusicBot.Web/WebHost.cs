@@ -106,6 +106,7 @@ public static class WebHost
         builder.Services.AddHostedService<SignalRBroadcastService>();
         builder.Services.AddHostedService<QueuePersistenceService>();
         builder.Services.AddSingleton<TikTokRoomResolver>();
+        builder.Services.AddSingleton<SigningKeyService>();
         builder.Services.AddSingleton<PlatformConnectionManager>();
         builder.Services.AddSingleton<TwitchAuthService>();
         builder.Services.AddSingleton<TwitchFollowerCache>();

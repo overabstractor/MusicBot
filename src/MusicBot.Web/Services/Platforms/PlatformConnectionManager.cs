@@ -52,6 +52,7 @@ public class PlatformConnectionManager
     private readonly ChatResponseService _chat;
     private readonly ChatActivityTracker _activity;
     private readonly TikTokRoomResolver _roomResolver;
+    private readonly SigningKeyService _signingKeys;
     private readonly TikTokAuthService _tikTokAuth;
     private readonly KickAuthService _kickAuth;
     private readonly TwitchFollowerCache _twitchFollowers;
@@ -62,6 +63,10 @@ public class PlatformConnectionManager
     private TwitchClient? _activeTwitchClient;
     private string? _activeTwitchChannel;
 
+    // Latches true after Euler /webcast/chat returns 401/402/403 once: the plan lacks the Premium
+    // Routes Addon, so skip Euler and go straight to the WebView2 sender on every later message.
+    private volatile bool _eulerChatDisabled;
+
     public PlatformConnectionManager(
         CommandRouterService router,
         UserContextManager userContext,
@@ -71,6 +76,7 @@ public class PlatformConnectionManager
         ChatResponseService chat,
         ChatActivityTracker activity,
         TikTokRoomResolver roomResolver,
+        SigningKeyService signingKeys,
         TikTokAuthService tikTokAuth,
         KickAuthService kickAuth,
         TwitchFollowerCache twitchFollowers,
@@ -85,6 +91,7 @@ public class PlatformConnectionManager
         _chat            = chat;
         _activity        = activity;
         _roomResolver    = roomResolver;
+        _signingKeys     = signingKeys;
         _tikTokAuth      = tikTokAuth;
         _kickAuth        = kickAuth;
         _twitchFollowers = twitchFollowers;
@@ -332,7 +339,12 @@ public class PlatformConnectionManager
     private async Task TikTokLoop(Guid userId, TikTokPlatformConfig config, CancellationToken ct)
     {
         var key = Key(userId, "tiktok");
-        var hasSign = !string.IsNullOrWhiteSpace(config.SigningServerUrl);
+
+        // Resolve the Euler Stream signing tier ONCE per connection (not per WS retry).
+        // Never silently fall back to the anonymous/rate-limited tier if a key is available.
+        // The shared key (relay/Worker) is the fallback when the user has no key of their own.
+        var sharedKey = await _signingKeys.GetSharedSigningKeyAsync(ct);
+        var signing = ResolveSigningConfig(config, sharedKey);
 
         // ── Tunable timings (kept low for fast recovery from transient drops) ─
         // Two backoff profiles depending on which resolve path is available:
@@ -442,8 +454,8 @@ public class PlatformConnectionManager
                 roomId: roomId,
                 skipRoomInfo: true,
                 processInitialData: false,
-                customSigningServer: hasSign ? config.SigningServerUrl : null,
-                signingServerApiKey: hasSign ? config.SigningServerApiKey : null);
+                customSigningServer: signing.Server,   // null → Euler Stream default (tiktok.eulerstream.com)
+                signingServerApiKey: signing.ApiKey);   // key → authenticated tier; null → anonymous (rate-limited)
 
             var canSendChat = !string.IsNullOrWhiteSpace(config.CookieString)
                               || AppEvents.HasTikTokWebViewSender;
@@ -451,20 +463,23 @@ public class PlatformConnectionManager
             string? tiktokRoomId = null;
             var lastEventAt = DateTime.UtcNow;
             var connectedSuccessfully = false;
+            var connectSw = System.Diagnostics.Stopwatch.StartNew(); // tiktok_connect_latency_ms
 
             client.OnConnected += (_, _) =>
             {
                 connectedSuccessfully = true;
                 wsFailCount = 0; // reset fast-retry backoff once we're actually connected
                 lastEventAt = DateTime.UtcNow;
-                _logger.LogInformation("TikTok connected to @{User}", config.Username);
+                connectSw.Stop();
+                _logger.LogInformation("TikTok connected to @{User} (signing_mode={Mode}, connect_latency_ms={Latency})",
+                    config.Username, signing.Mode, connectSw.ElapsedMilliseconds);
                 _activity.SetIgnored(config.Username, true);
                 SetStatus(key, ConnectionStatus.Connected);
 
                 if (canSendChat || AppEvents.HasTikTokWebViewSender)
                 {
                     _chat.RegisterSender("tiktok", async msg =>
-                        await SendTikTokChatAsync(config.CookieString, tiktokRoomId, msg));
+                        await SendTikTokChatAsync(config.CookieString, tiktokRoomId, msg, signing.ApiKey));
                     _logger.LogInformation("TikTok chat sender registered (webview={WebView}, http={Http})",
                         AppEvents.HasTikTokWebViewSender, !string.IsNullOrWhiteSpace(config.CookieString));
                 }
@@ -500,8 +515,8 @@ public class PlatformConnectionManager
                 HandleTikTokGift(userId, e);
             };
 
-            _logger.LogInformation("TikTok connecting to @{User} (signing: {Signing}, chat-send: {CanSend})",
-                config.Username, hasSign ? config.SigningServerUrl : "none", canSendChat);
+            _logger.LogInformation("TikTok connecting to @{User} (signing_mode={Mode}, server={Server}, chat-send={CanSend})",
+                config.Username, signing.Mode, signing.Server ?? "eulerstream-default", canSendChat);
 
             // Watchdog. Only role now is detecting a dead WebSocket — natural stream-end
             // is handled by the Stream_Ended ControlMessage handler above (fires within
@@ -601,6 +616,40 @@ public class PlatformConnectionManager
                 catch (OperationCanceledException) { return; }
             }
         }
+    }
+
+    /// <summary>
+    /// Resolves the TikTok signing configuration for one connection, choosing the Euler Stream
+    /// tier ONCE (mirrors OverInteractive's BuildSigningConfig). TikTokLiveSharp's built-in
+    /// default signer is https://tiktok.eulerstream.com/webcast/fetch, so a null server means
+    /// "use Euler's default"; the API key (when present) promotes the request from the anonymous,
+    /// rate-limited tier to the authenticated, higher-quota tier.
+    ///
+    /// Priority (high → low):
+    ///   1. Explicit signing-server URL (config) — escape hatch for a self-hosted signer
+    ///      (e.g. the in-app WebView2 proxy at /webcast/fetch). Mode "custom".
+    ///   2. Euler Stream API key (config/env) — authenticated tier. Mode "eulerstream-config".
+    ///   3. Shared product key (Cloudflare relay/Worker) — Mode "eulerstream-shared".
+    ///      Not yet wired: pass it via <paramref name="sharedKey"/> once the relay exposes one.
+    ///   4. Nothing — anonymous Euler default, rate-limited. Mode "eulerstream-free".
+    /// </summary>
+    private static (string? Server, string? ApiKey, string Mode) ResolveSigningConfig(
+        TikTokPlatformConfig config, string? sharedKey = null)
+    {
+        var explicitUrl = config.SigningServerUrl;
+        var configKey   = config.SigningServerApiKey;
+
+        string? apiKey; string mode;
+        if      (!string.IsNullOrWhiteSpace(configKey)) { apiKey = configKey; mode = "eulerstream-config"; }
+        else if (!string.IsNullOrWhiteSpace(sharedKey)) { apiKey = sharedKey; mode = "eulerstream-shared"; }
+        else                                            { apiKey = null;      mode = "eulerstream-free";   }
+
+        // An explicit signing-server URL wins on the server slot but keeps whatever key was
+        // resolved above (a custom Euler-compatible server may still want it; the local
+        // WebView2 proxy simply ignores it).
+        return string.IsNullOrWhiteSpace(explicitUrl)
+            ? (null, apiKey, mode)
+            : (explicitUrl, apiKey, "custom");
     }
 
     /// <summary>ResolveRoomId wrapper that never throws on transient errors — only OCE bubbles up.</summary>
@@ -1042,7 +1091,7 @@ public class PlatformConnectionManager
 
     // ── TikTok chat sender ─────────────────────────────────────────────────────
 
-    private async Task<bool> SendTikTokChatAsync(string? cookieString, string? roomId, string message)
+    private async Task<bool> SendTikTokChatAsync(string? cookieString, string? roomId, string message, string? eulerApiKey = null)
     {
         if (string.IsNullOrWhiteSpace(roomId))
         {
@@ -1050,7 +1099,25 @@ public class PlatformConnectionManager
             return false;
         }
 
-        // Primary: execute fetch() inside the authenticated WebView2 window.
+        // Preferred: POST to Euler Stream's /webcast/chat. Euler performs the X-Bogus/anti-bot
+        // signing server-side, so this is more robust than the direct HTTP path below. It still
+        // requires an authenticated session (sessionid + tt-target-idc in the cookie header) and
+        // a Premium Routes Addon on the Euler plan — otherwise it 403s and we fall back.
+        if (!_eulerChatDisabled && !string.IsNullOrWhiteSpace(eulerApiKey) && !string.IsNullOrWhiteSpace(cookieString))
+        {
+            try
+            {
+                if (await SendTikTokChatViaEulerAsync(eulerApiKey!, cookieString!, roomId!, message))
+                    return true;
+                _logger.LogWarning("TikTok Euler chat send failed — falling back to WebView/HTTP");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "TikTok Euler chat send error — falling back to WebView/HTTP");
+            }
+        }
+
+        // Fallback A: execute fetch() inside the authenticated WebView2 window.
         // TikTok's own JS SDK then adds X-Bogus, X-Gnarly, tt-ticket-guard-* automatically.
         _logger.LogDebug("TikTok send attempt — webview={WebView} hasCookie={HasCookie}",
             AppEvents.HasTikTokWebViewSender, !string.IsNullOrWhiteSpace(cookieString));
@@ -1206,6 +1273,60 @@ public class PlatformConnectionManager
             _logger.LogWarning(ex, "TikTok chat send error");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Sends a chat message via Euler Stream's <c>POST /webcast/chat</c>. Euler signs the request
+    /// server-side; we only supply the API key (<c>x-api-key</c>) and the authenticated session as
+    /// a cookie header (<c>x-cookie-header</c>, must contain sessionid + tt-target-idc). Returns
+    /// false (so the caller falls back) on 401/402/403 — i.e. the plan lacks the Premium Routes Addon.
+    /// </summary>
+    private async Task<bool> SendTikTokChatViaEulerAsync(string apiKey, string cookieString, string roomId, string message)
+    {
+        var http = _httpFactory.CreateClient();
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://tiktok.eulerstream.com/webcast/chat");
+        request.Headers.Add("x-api-key", apiKey);
+        request.Headers.Add("x-cookie-header", cookieString);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new { content = message, targetRoomId = roomId }),
+            System.Text.Encoding.UTF8, "application/json");
+
+        var response = await http.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (response.StatusCode is System.Net.HttpStatusCode.Forbidden
+                                or System.Net.HttpStatusCode.PaymentRequired
+                                or System.Net.HttpStatusCode.Unauthorized)
+        {
+            _eulerChatDisabled = true; // don't try Euler chat again this session
+            _logger.LogWarning(
+                "TikTok Euler /webcast/chat rechazado ({Status}) — el plan de Euler no cubre el envío de chat (Premium Routes Addon). Deshabilitado por esta sesión; usando WebView2.",
+                (int)response.StatusCode);
+            return false;
+        }
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("TikTok Euler chat send HTTP {Status}: {Body}",
+                (int)response.StatusCode, body.Length > 300 ? body[..300] : body);
+            return false;
+        }
+
+        // WebcastRoomChatRouteResponse: { code, data, message } — code 0 = success.
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("code", out var codeEl)
+                && codeEl.ValueKind == JsonValueKind.Number
+                && codeEl.GetDouble() != 0)
+            {
+                _logger.LogWarning("TikTok Euler chat send code≠0: {Body}", body.Length > 300 ? body[..300] : body);
+                return false;
+            }
+        }
+        catch { /* non-JSON 2xx — treat as success */ }
+
+        _logger.LogInformation("TikTok chat sent via Euler: {Message}", message);
+        return true;
     }
 
     /// <summary>Extracts a single cookie value from a browser cookie string (key=value; key2=value2).</summary>
