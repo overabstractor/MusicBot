@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { LibraryTrack } from "../types/models";
 import { formatDuration } from "../utils";
 import { api } from "../services/api";
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export const Library: React.FC<Props> = ({ refreshKey, saveDownloads = true }) => {
+  const { t } = useTranslation();
   const [tracks,  setTracks]  = useState<LibraryTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort,    setSort]    = useState<SortKey>("downloadedAt");
@@ -107,13 +109,13 @@ export const Library: React.FC<Props> = ({ refreshKey, saveDownloads = true }) =
     </th>
   );
 
-  if (loading) return <div className="lib-empty">Cargando librería...</div>;
+  if (loading) return <div className="lib-empty">{t("library.loadingLibrary")}</div>;
 
   return (
     <div className="library-panel">
       {!saveDownloads && (
         <div className="lib-temp-banner">
-          ⚠️ Modo temporal activo — los archivos se eliminan al terminar cada canción. La librería solo muestra la sesión actual.
+          ⚠️ {t("library.tempBanner")}
         </div>
       )}
       <div className="lib-toolbar">
@@ -123,7 +125,7 @@ export const Library: React.FC<Props> = ({ refreshKey, saveDownloads = true }) =
             <input
               className="lib-search-input"
               type="text"
-              placeholder="Buscar por título o artista…"
+              placeholder={t("library.searchPlaceholder")}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -132,75 +134,75 @@ export const Library: React.FC<Props> = ({ refreshKey, saveDownloads = true }) =
             )}
           </div>
           <div className="lib-stats">
-            <span>{filtered.length}{search ? ` / ${tracks.length}` : ""} canciones</span>
+            <span>{filtered.length}{search ? ` / ${tracks.length}` : ""} {t("library.songsLabel")}</span>
             <span>·</span>
-            <span>{totalPlays} reproducciones</span>
+            <span>{totalPlays} {t("library.playsLabel")}</span>
             <span>·</span>
             <span>{formatBytes(totalSize)}</span>
           </div>
         </div>
         <div className="lib-toolbar-right">
           <button className="btn btn-sm btn-outline lib-open-folder" onClick={handleOpenFolder} disabled={opening}>
-            {opening ? "Abriendo…" : "📁 Abrir carpeta"}
+            {opening ? t("library.opening") : `📁 ${t("library.openFolder")}`}
           </button>
           {!confirm ? (
             <button className="btn btn-sm btn-danger-outline" onClick={() => setConfirm(true)} disabled={tracks.length === 0}>
-              Limpiar librería
+              {t("library.clearLibrary")}
             </button>
           ) : (
             <div className="lib-confirm">
-              <span>¿Eliminar {tracks.length} canciones del disco?</span>
-              <button className="btn btn-sm btn-danger" onClick={handleClear}>Sí, eliminar</button>
-              <button className="btn btn-sm btn-secondary" onClick={() => setConfirm(false)}>Cancelar</button>
+              <span>{t("library.confirmClear", { count: tracks.length })}</span>
+              <button className="btn btn-sm btn-danger" onClick={handleClear}>{t("library.yesDelete")}</button>
+              <button className="btn btn-sm btn-secondary" onClick={() => setConfirm(false)}>{t("common.cancel")}</button>
             </div>
           )}
         </div>
       </div>
 
       {tracks.length === 0 ? (
-        <div className="lib-empty">No hay canciones descargadas.</div>
+        <div className="lib-empty">{t("library.noDownloads")}</div>
       ) : filtered.length === 0 ? (
-        <div className="lib-empty">Sin resultados para "{search}".</div>
+        <div className="lib-empty">{t("library.noResultsFor", { query: search })}</div>
       ) : (
         <div className="lib-table-wrap">
           <table className="lib-table">
             <thead>
               <tr>
                 <th className="lib-th lib-th-cover" />
-                <SortBtn col="title"         label="Canción" />
-                <SortBtn col="downloadedAt"  label="Descargado" />
-                <SortBtn col="playCount"     label="Veces solicitada" />
-                <SortBtn col="totalPlayedMs" label="Tiempo total" />
-                <SortBtn col="fileSizeBytes" label="Tamaño" />
+                <SortBtn col="title"         label={t("library.colSong")} />
+                <SortBtn col="downloadedAt"  label={t("library.colDownloaded")} />
+                <SortBtn col="playCount"     label={t("library.colRequested")} />
+                <SortBtn col="totalPlayedMs" label={t("library.colTotalTime")} />
+                <SortBtn col="fileSizeBytes" label={t("library.colSize")} />
                 <th className="lib-th" />
               </tr>
             </thead>
             <tbody>
-              {sorted.map(t => (
-                <tr key={t.id} className={`lib-row ${!t.fileExists ? "lib-row-missing" : ""}`}>
+              {sorted.map(tr => (
+                <tr key={tr.id} className={`lib-row ${!tr.fileExists ? "lib-row-missing" : ""}`}>
                   <td className="lib-td lib-td-cover">
-                    {t.coverUrl
-                      ? <img src={t.coverUrl} alt="" className="lib-cover" />
+                    {tr.coverUrl
+                      ? <img src={tr.coverUrl} alt="" className="lib-cover" />
                       : <div className="lib-cover lib-cover-placeholder">♫</div>}
                   </td>
                   <td className="lib-td lib-td-info">
-                    <div className="lib-title">{t.title}</div>
-                    <div className="lib-artist">{t.artist}</div>
-                    <div className="lib-duration">{formatDuration(t.durationMs)}</div>
-                    {!t.fileExists && <span className="lib-missing-badge">Archivo no encontrado</span>}
+                    <div className="lib-title">{tr.title}</div>
+                    <div className="lib-artist">{tr.artist}</div>
+                    <div className="lib-duration">{formatDuration(tr.durationMs)}</div>
+                    {!tr.fileExists && <span className="lib-missing-badge">{t("library.fileMissing")}</span>}
                   </td>
-                  <td className="lib-td lib-td-center">{formatDate(t.downloadedAt)}</td>
-                  <td className="lib-td lib-td-center lib-stat">{t.playCount}</td>
-                  <td className="lib-td lib-td-center">{t.totalPlayedMs > 0 ? formatDuration(t.totalPlayedMs) : "—"}</td>
-                  <td className="lib-td lib-td-center">{formatBytes(t.fileSizeBytes)}</td>
+                  <td className="lib-td lib-td-center">{formatDate(tr.downloadedAt)}</td>
+                  <td className="lib-td lib-td-center lib-stat">{tr.playCount}</td>
+                  <td className="lib-td lib-td-center">{tr.totalPlayedMs > 0 ? formatDuration(tr.totalPlayedMs) : "—"}</td>
+                  <td className="lib-td lib-td-center">{formatBytes(tr.fileSizeBytes)}</td>
                   <td className="lib-td lib-td-action">
-                    {libMsg?.id === t.id ? (
+                    {libMsg?.id === tr.id ? (
                       <span className="lib-feedback">{libMsg.text}</span>
                     ) : (
                       <div className="lib-actions">
-                        <button className="btn btn-sm btn-primary" title="Reproducir ahora" disabled={!t.fileExists} onClick={() => handlePlay(t)}>▶</button>
-                        <button className="btn btn-sm btn-outline" title="Agregar a la cola" disabled={!t.fileExists} onClick={() => handleEnqueue(t)}>+ Cola</button>
-                        <button className="btn btn-icon-danger" title="Eliminar" onClick={() => handleDelete(t.id)}>🗑</button>
+                        <button className="btn btn-sm btn-primary" title={t("library.playNow")} disabled={!tr.fileExists} onClick={() => handlePlay(tr)}>▶</button>
+                        <button className="btn btn-sm btn-outline" title={t("library.addToQueue")} disabled={!tr.fileExists} onClick={() => handleEnqueue(tr)}>+ {t("library.queueShort")}</button>
+                        <button className="btn btn-icon-danger" title={t("common.delete")} onClick={() => handleDelete(tr.id)}>🗑</button>
                       </div>
                     )}
                   </td>

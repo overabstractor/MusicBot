@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Search, X, Play, Plus, Music, ArrowLeft, Trash2, MoreHorizontal,
   Shuffle, Home, ListMusic, Download, Heart, Library, Pencil,
@@ -30,14 +31,14 @@ function formatPlaylistDuration(ms: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
-const BROWSER_TABS: { id: BrowserTab; label: string; icon: React.ReactNode }[] = [
-  { id: "home",      label: "Mi librería", icon: <Library size={13} />       },
-  { id: "autocola",  label: "Auto-cola",   icon: <Heart size={13} />         },
-  { id: "platforms", label: "Plataformas", icon: <Zap size={13} />           },
-  { id: "overlays",  label: "Overlays",    icon: <Monitor size={13} />       },
-  { id: "ticker",    label: "Mensajes",    icon: <MessageSquare size={13} /> },
-  { id: "commands",  label: "Comandos",    icon: <Terminal size={13} />      },
-  { id: "settings",  label: "Ajustes",     icon: <Settings size={13} />      },
+const BROWSER_TABS: { id: BrowserTab; i18nKey: string; icon: React.ReactNode }[] = [
+  { id: "home",      i18nKey: "browser.tabs.home",      icon: <Library size={13} />       },
+  { id: "autocola",  i18nKey: "browser.tabs.autocola",  icon: <Heart size={13} />         },
+  { id: "platforms", i18nKey: "browser.tabs.platforms", icon: <Zap size={13} />           },
+  { id: "overlays",  i18nKey: "browser.tabs.overlays",  icon: <Monitor size={13} />       },
+  { id: "ticker",    i18nKey: "browser.tabs.ticker",    icon: <MessageSquare size={13} /> },
+  { id: "commands",  i18nKey: "browser.tabs.commands",  icon: <Terminal size={13} />      },
+  { id: "settings",  i18nKey: "browser.tabs.settings",  icon: <Settings size={13} />      },
 ];
 
 interface Props {
@@ -66,6 +67,7 @@ export const MainBrowser: React.FC<Props> = ({
   playlistsRefreshKey, likedUris, onToggleLike,
   nowPlaying, settings, tiktokEvents, twitchEvents, kickEvents, tickerMessages, overlayToken, authUpdatedAt,
 }) => {
+  const { t } = useTranslation();
   const [confirmModal, confirm] = useConfirm();
   const [browserTab, setBrowserTab] = useState<BrowserTab>("home");
   // ── Global search ──────────────────────────────────────────────────────────
@@ -197,16 +199,16 @@ export const MainBrowser: React.FC<Props> = ({
       return;
     }
     setSearching(true);
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const hits = await api.search(q, 15);
         setResults(hits);
         setDropdownOpen(true);
-        setSearchMsg(hits.length === 0 ? "Sin resultados" : "");
-      } catch { setSearchMsg("Error al buscar"); }
+        setSearchMsg(hits.length === 0 ? t("common.noResults") : "");
+      } catch { setSearchMsg(t("browser.errSearch")); }
       finally { setSearching(false); }
     }, 420);
-    return () => { clearTimeout(t); setSearching(false); };
+    return () => { clearTimeout(timer); setSearching(false); };
   }, [query]);
 
   // Close dropdown on outside click
@@ -251,7 +253,7 @@ export const MainBrowser: React.FC<Props> = ({
     try {
       const tracks = await api.getPlaylistTracks(pl.playlistUrl, 200);
       setPreviewTracks(tracks);
-    } catch { flash("Error al cargar la lista", true); }
+    } catch { flash(t("browser.errLoadList"), true); }
     finally { setPreviewLoading(false); }
   };
 
@@ -259,22 +261,22 @@ export const MainBrowser: React.FC<Props> = ({
     if (!previewMeta?.playlistUrl) return;
     try {
       const r = await api.importPlaylist(previewMeta.playlistUrl, "Admin");
-      flash(`✓ ${r.added} canciones añadidas a la cola`);
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error", true); }
+      flash(`✓ ${t("browser.songsAddedToQueue", { count: r.added })}`);
+    } catch (e: unknown) { flash(e instanceof Error ? e.message : t("common.error"), true); }
   };
 
   const handleSaveToLibrary = async () => {
-    const name = saveNameInput.trim() || previewMeta?.title || "Nueva lista";
+    const name = saveNameInput.trim() || previewMeta?.title || t("browser.defaultListName");
     if (!previewMeta?.playlistUrl) return;
     setSavingLibrary(true);
     try {
       const created = await api.createPlaylist(name);
       const r = await api.importPlaylistSongs(created.id, previewMeta.playlistUrl);
-      flash(`✓ Lista "${name}" guardada con ${r.added} canciones`);
+      flash(`✓ ${t("browser.listSaved", { name, count: r.added })}`);
       setShowSaveForm(false);
       onPlaylistsChanged();
       loadHome();
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error al guardar", true); }
+    } catch (e: unknown) { flash(e instanceof Error ? e.message : t("browser.errSave"), true); }
     finally { setSavingLibrary(false); }
   };
 
@@ -282,15 +284,15 @@ export const MainBrowser: React.FC<Props> = ({
   const handleEnqueue = async (song: Song) => {
     try {
       await api.enqueueTrack(song, "Admin");
-      flash(`✓ "${song.title}" añadida a la cola`);
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error", true); }
+      flash(`✓ ${t("browser.songAddedToQueue", { title: song.title })}`);
+    } catch (e: unknown) { flash(e instanceof Error ? e.message : t("common.error"), true); }
   };
 
   const handlePlayNow = async (song: Song) => {
     try {
       await api.playNow(song, "Admin");
-      flash(`Reproduciendo "${song.title}"`);
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error", true); }
+      flash(t("browser.playingSong", { title: song.title }));
+    } catch (e: unknown) { flash(e instanceof Error ? e.message : t("common.error"), true); }
   };
 
   // ── Library create / import handlers ─────────────────────────────────────
@@ -304,7 +306,7 @@ export const MainBrowser: React.FC<Props> = ({
       onPlaylistsChanged();
       await loadHome();
       onSelectPlaylist(p.id);
-    } catch { flash("Error al crear lista", true); }
+    } catch { flash(t("browser.errCreate"), true); }
     finally { setLibCreating(false); }
   };
 
@@ -316,17 +318,17 @@ export const MainBrowser: React.FC<Props> = ({
     setLibImportMsg(null);
     try {
       const userProvidedName = libImportName.trim();
-      const name = userProvidedName || `Lista ${Date.now()}`;
+      const name = userProvidedName || t("browser.listFallbackName", { ts: Date.now() });
       const p    = await api.createPlaylist(name);
       const r    = await api.importPlaylistSongs(p.id, url, userProvidedName || undefined);
-      setLibImportMsg({ text: `✓ ${r.added} canciones importadas${r.name ? ` · "${r.name}"` : ""}`, err: false });
+      setLibImportMsg({ text: `✓ ${r.name ? t("browser.songsImportedNamed", { added: r.added, name: r.name }) : t("browser.songsImported", { added: r.added })}`, err: false });
       setLibImportUrl(""); setLibImportName("");
       onPlaylistsChanged();
       await loadHome();
       onSelectPlaylist(p.id);
       setTimeout(() => { setShowLibImport(false); setLibImportMsg(null); }, 1800);
     } catch (err: unknown) {
-      setLibImportMsg({ text: err instanceof Error ? err.message : "Error al importar", err: true });
+      setLibImportMsg({ text: err instanceof Error ? err.message : t("browser.errImport"), err: true });
     } finally {
       setLibImporting(false);
     }
@@ -341,7 +343,7 @@ export const MainBrowser: React.FC<Props> = ({
       flash(r.message);
       onPlaylistsChanged();
       loadDetail(selectedPlaylistId);
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error al reproducir", true); }
+    } catch (e: unknown) { flash(e instanceof Error ? e.message : t("browser.errPlay"), true); }
     finally { setActivating(false); }
   };
 
@@ -351,16 +353,16 @@ export const MainBrowser: React.FC<Props> = ({
       const r = await api.playSongFromPlaylist(selectedPlaylistId, spotifyUri, shufflePlaylist);
       flash(r.message);
       onPlaylistsChanged();
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error al reproducir", true); }
+    } catch (e: unknown) { flash(e instanceof Error ? e.message : t("browser.errPlay"), true); }
   };
 
   const handleDeactivate = async () => {
     try {
       await api.deactivatePlaylist();
-      flash("Lista de reproducción detenida");
+      flash(t("browser.playlistStopped"));
       onPlaylistsChanged();
       loadDetail(selectedPlaylistId!);
-    } catch { flash("Error al detener", true); }
+    } catch { flash(t("browser.errStop"), true); }
   };
 
   const handleRenamePlaylist = async () => {
@@ -372,19 +374,19 @@ export const MainBrowser: React.FC<Props> = ({
       onPlaylistsChanged();
       loadHome();
     } catch (err: unknown) {
-      flash(err instanceof Error ? err.message : "Error al renombrar", true);
+      flash(err instanceof Error ? err.message : t("browser.errRename"), true);
     }
   };
 
   const handleDeletePlaylist = async () => {
     if (!selectedPlaylistId || !playlist) return;
-    const ok = await confirm({ title: `¿Eliminar "${playlist.name}"?`, message: "Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true });
+    const ok = await confirm({ title: t("browser.confirmDeleteTitle", { name: playlist.name }), message: t("browser.confirmDeleteMsg"), confirmText: t("common.delete"), danger: true });
     if (!ok) return;
     try {
       await api.deletePlaylist(selectedPlaylistId);
       onPlaylistsChanged();
       onClearSelection();
-    } catch { flash("Error al eliminar", true); }
+    } catch { flash(t("browser.errDelete"), true); }
   };
 
   const handleRemoveSong = async (uri: string) => {
@@ -394,7 +396,7 @@ export const MainBrowser: React.FC<Props> = ({
       setSongs(s => s.filter(x => x.spotifyUri !== uri));
       setPlaylist(p => p ? { ...p, songCount: p.songCount - 1 } : p);
       onPlaylistsChanged();
-    } catch { flash("Error al quitar canción", true); }
+    } catch { flash(t("browser.errRemoveSong"), true); }
   };
 
   const handleReorderSong = async (uri: string, toIndex: number) => {
@@ -410,7 +412,7 @@ export const MainBrowser: React.FC<Props> = ({
     try {
       await api.reorderPlaylistSong(selectedPlaylistId, uri, toIndex);
     } catch {
-      flash("Error al reordenar", true);
+      flash(t("browser.errReorder"), true);
       const updated = await api.getPlaylistSongs(selectedPlaylistId).catch(() => null);
       if (updated) setSongs(updated);
     }
@@ -452,11 +454,11 @@ export const MainBrowser: React.FC<Props> = ({
     setImporting(true);
     try {
       const r = await api.importPlaylistSongs(selectedPlaylistId, importUrl.trim());
-      flash(`✓ ${r.added} canciones importadas de ${r.total}`);
+      flash(`✓ ${t("browser.songsImportedOf", { added: r.added, total: r.total })}`);
       setImportUrl("");
       loadDetail(selectedPlaylistId);
       onPlaylistsChanged();
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error al importar", true); }
+    } catch (e: unknown) { flash(e instanceof Error ? e.message : t("browser.errImport"), true); }
     finally { setImporting(false); }
   };
 
@@ -474,10 +476,10 @@ export const MainBrowser: React.FC<Props> = ({
     if (!selectedPlaylistId) return;
     try {
       await api.addPlaylistSong(selectedPlaylistId, song);
-      flash(`✓ "${song.title}" agregada`);
+      flash(`✓ ${t("browser.songAdded", { title: song.title })}`);
       loadDetail(selectedPlaylistId);
       onPlaylistsChanged();
-    } catch (e: unknown) { flash(e instanceof Error ? e.message : "Error", true); }
+    } catch (e: unknown) { flash(e instanceof Error ? e.message : t("common.error"), true); }
   };
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -497,12 +499,12 @@ export const MainBrowser: React.FC<Props> = ({
 
       {/* ── Create playlist modal ───────────────────────────── */}
       {showLibCreate && (
-        <FormModal title="Nueva lista" onClose={() => { setShowLibCreate(false); setLibCreateName(""); }}>
+        <FormModal title={t("browser.newPlaylist")} onClose={() => { setShowLibCreate(false); setLibCreateName(""); }}>
           <form onSubmit={handleLibCreate} style={{ display: "contents" }}>
-            <span className="form-modal-label">Nombre</span>
+            <span className="form-modal-label">{t("browser.name")}</span>
             <input
               className="input"
-              placeholder="Mi lista…"
+              placeholder={t("browser.myPlaylistPlaceholder")}
               value={libCreateName}
               onChange={e => setLibCreateName(e.target.value)}
               autoFocus
@@ -510,10 +512,10 @@ export const MainBrowser: React.FC<Props> = ({
             />
             <div className="form-modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => { setShowLibCreate(false); setLibCreateName(""); }}>
-                Cancelar
+                {t("common.cancel")}
               </button>
               <button type="submit" className="btn btn-primary" disabled={libCreating || !libCreateName.trim()}>
-                {libCreating ? "Creando…" : "Crear"}
+                {libCreating ? t("browser.creating") : t("browser.create")}
               </button>
             </div>
           </form>
@@ -522,21 +524,21 @@ export const MainBrowser: React.FC<Props> = ({
 
       {/* ── Import playlist modal ───────────────────────────── */}
       {showLibImport && (
-        <FormModal title="Importar lista de YouTube" onClose={() => { setShowLibImport(false); setLibImportUrl(""); setLibImportName(""); setLibImportMsg(null); }}>
+        <FormModal title={t("browser.importYoutube")} onClose={() => { setShowLibImport(false); setLibImportUrl(""); setLibImportName(""); setLibImportMsg(null); }}>
           <form onSubmit={handleLibImport} style={{ display: "contents" }}>
-            <span className="form-modal-label">URL de la lista</span>
+            <span className="form-modal-label">{t("browser.listUrl")}</span>
             <input
               className="input"
-              placeholder="https://www.youtube.com/playlist?list=…"
+              placeholder={t("browser.youtubeUrlPlaceholder")}
               value={libImportUrl}
               onChange={e => setLibImportUrl(e.target.value)}
               autoFocus
               disabled={libImporting}
             />
-            <span className="form-modal-label">Nombre (opcional)</span>
+            <span className="form-modal-label">{t("browser.nameOptional")}</span>
             <input
               className="input"
-              placeholder="Se usará el título de YouTube si se deja vacío"
+              placeholder={t("browser.importNamePlaceholder")}
               value={libImportName}
               onChange={e => setLibImportName(e.target.value)}
               disabled={libImporting}
@@ -546,10 +548,10 @@ export const MainBrowser: React.FC<Props> = ({
             )}
             <div className="form-modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => { setShowLibImport(false); setLibImportUrl(""); setLibImportName(""); setLibImportMsg(null); }}>
-                Cancelar
+                {t("common.cancel")}
               </button>
               <button type="submit" className="btn btn-primary" disabled={libImporting || !libImportUrl.trim()}>
-                {libImporting ? "Importando…" : "Importar"}
+                {libImporting ? t("browser.importing") : t("browser.import")}
               </button>
             </div>
           </form>
@@ -558,9 +560,9 @@ export const MainBrowser: React.FC<Props> = ({
 
       {/* ── Rename playlist modal ───────────────────────────── */}
       {renamingPlaylist && (
-        <FormModal title="Renombrar lista" onClose={() => setRenamingPlaylist(false)}>
+        <FormModal title={t("browser.renamePlaylist")} onClose={() => setRenamingPlaylist(false)}>
           <form onSubmit={e => { e.preventDefault(); handleRenamePlaylist(); }} style={{ display: "contents" }}>
-            <span className="form-modal-label">Nuevo nombre</span>
+            <span className="form-modal-label">{t("browser.newName")}</span>
             <input
               className="input"
               value={renameValue}
@@ -569,10 +571,10 @@ export const MainBrowser: React.FC<Props> = ({
             />
             <div className="form-modal-actions">
               <button type="button" className="btn btn-outline" onClick={() => setRenamingPlaylist(false)}>
-                Cancelar
+                {t("common.cancel")}
               </button>
               <button type="submit" className="btn btn-primary" disabled={!renameValue.trim()}>
-                Guardar
+                {t("common.save")}
               </button>
             </div>
           </form>
@@ -581,16 +583,16 @@ export const MainBrowser: React.FC<Props> = ({
 
       {/* ── Tab bar ─────────────────────────────────────────── */}
       <div className="browser-tab-bar">
-        {BROWSER_TABS.map(t => (
+        {BROWSER_TABS.map(tab => (
           <button
-            key={t.id}
-            className={`browser-tab${browserTab === t.id ? " active" : ""}`}
+            key={tab.id}
+            className={`browser-tab${browserTab === tab.id ? " active" : ""}`}
             onClick={() => {
-              setBrowserTab(t.id);
-              if (t.id === "home") { /* stay in current home sub-view */ }
+              setBrowserTab(tab.id);
+              if (tab.id === "home") { /* stay in current home sub-view */ }
             }}
           >
-            {t.icon} {t.label}
+            {tab.icon} {t(tab.i18nKey)}
           </button>
         ))}
       </div>
@@ -606,7 +608,7 @@ export const MainBrowser: React.FC<Props> = ({
       {/* ── Search bar (home tab only) ───────────────────────── */}
       {browserTab === "home" && <div className="browser-search-bar">
         {!isOnHome && (
-          <button className="browser-home-btn" onClick={goHome} title="Inicio">
+          <button className="browser-home-btn" onClick={goHome} title={t("browser.home")}>
             <Home size={16} />
           </button>
         )}
@@ -618,7 +620,7 @@ export const MainBrowser: React.FC<Props> = ({
               : <Search size={15} className="browser-search-icon" />}
             <input
               className="browser-search-input"
-              placeholder="Buscar canciones, artistas, listas…"
+              placeholder={t("browser.searchPlaceholder")}
               value={query}
               onChange={e => setQuery(e.target.value)}
               onFocus={() => { if (results != null && results.length > 0) setDropdownOpen(true); }}
@@ -650,7 +652,7 @@ export const MainBrowser: React.FC<Props> = ({
                         className={`browser-dd-filter-chip${searchFilter === f ? " active" : ""}`}
                         onClick={e => { e.stopPropagation(); setSearchFilter(f); }}
                       >
-                        {f === "all" ? "Todo" : f === "songs" ? "Canciones" : "Listas"}
+                        {f === "all" ? t("browser.filterAll") : f === "songs" ? t("browser.filterSongs") : t("browser.filterPlaylists")}
                         {f === "songs"     && <span className="browser-dd-chip-count">{songResults.length}</span>}
                         {f === "playlists" && <span className="browser-dd-chip-count">{playlistResults.length}</span>}
                       </button>
@@ -659,17 +661,17 @@ export const MainBrowser: React.FC<Props> = ({
                 )}
 
                 {searching && results == null && (
-                  <div className="browser-dd-empty">Buscando…</div>
+                  <div className="browser-dd-empty">{t("browser.searching")}</div>
                 )}
 
                 {noResults && !searching && (
-                  <div className="browser-dd-empty">Sin resultados para «{query}»</div>
+                  <div className="browser-dd-empty">{t("browser.noResultsFor", { query })}</div>
                 )}
 
                 {/* Songs */}
                 {visibleSongs.length > 0 && (
                   <>
-                    {showPlaylists && <div className="browser-dd-section-label">Canciones</div>}
+                    {showPlaylists && <div className="browser-dd-section-label">{t("browser.sectionSongs")}</div>}
                     {visibleSongs.map(song => (
                       <div key={song.spotifyUri} className="browser-dd-row" style={{ position: "relative" }}>
                         {song.coverUrl
@@ -678,7 +680,7 @@ export const MainBrowser: React.FC<Props> = ({
                         <div className="browser-dd-info">
                           <span className="browser-dd-title">{song.title}</span>
                           <span className="browser-dd-meta">
-                            <span className="browser-dd-type">Canción</span>
+                            <span className="browser-dd-type">{t("browser.typeSong")}</span>
                             {" · "}{song.artist}
                             {song.durationMs > 0 && ` · ${formatDuration(song.durationMs)}`}
                           </span>
@@ -686,17 +688,17 @@ export const MainBrowser: React.FC<Props> = ({
                         <div className="browser-dd-actions">
                           <button
                             className="browser-dd-btn"
-                            title="Más opciones"
+                            title={t("browser.moreOptions")}
                             onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === song.spotifyUri ? null : { uri: song.spotifyUri, el: e.currentTarget }); }}
                           ><MoreHorizontal size={14} /></button>
                           <button
                             className="browser-dd-play-btn"
-                            title="Reproducir ahora"
+                            title={t("browser.playNow")}
                             onClick={() => { handlePlayNow(song); setDropdownOpen(false); }}
                           ><Play size={13} fill="currentColor" /></button>
                           <button
                             className="browser-dd-add-btn"
-                            title="Añadir a cola"
+                            title={t("browser.addToQueue")}
                             onClick={() => handleEnqueue(song)}
                           ><Plus size={14} /></button>
                         </div>
@@ -716,7 +718,7 @@ export const MainBrowser: React.FC<Props> = ({
                 {/* Playlists */}
                 {visiblePls.length > 0 && (
                   <>
-                    {showSongs && <div className="browser-dd-section-label">Listas de YouTube</div>}
+                    {showSongs && <div className="browser-dd-section-label">{t("browser.sectionPlaylists")}</div>}
                     {visiblePls.map(pl => (
                       <div
                         key={pl.spotifyUri}
@@ -730,15 +732,15 @@ export const MainBrowser: React.FC<Props> = ({
                         <div className="browser-dd-info">
                           <span className="browser-dd-title">{pl.title}</span>
                           <span className="browser-dd-meta">
-                            <span className="browser-dd-type">Lista</span>
+                            <span className="browser-dd-type">{t("browser.typePlaylist")}</span>
                             {" · "}{pl.artist}
-                            {pl.playlistVideoCount ? ` · ${pl.playlistVideoCount} videos` : ""}
+                            {pl.playlistVideoCount ? ` · ${t("browser.videosCount", { count: pl.playlistVideoCount })}` : ""}
                           </span>
                         </div>
                         <div className="browser-dd-actions">
                           <button
                             className="browser-dd-add-btn"
-                            title="Ver lista"
+                            title={t("browser.viewPlaylist")}
                             onClick={e => { e.stopPropagation(); handlePreviewPlaylist(pl); }}
                           ><Play size={13} fill="currentColor" /></button>
                         </div>
@@ -756,17 +758,17 @@ export const MainBrowser: React.FC<Props> = ({
           <div className="browser-lib-actions">
             <button
               className="browser-lib-btn-import"
-              title="Importar lista de YouTube"
+              title={t("browser.importTitle")}
               onClick={() => { setShowLibImport(true); setLibImportMsg(null); }}
             >
-              <Download size={14} /> Importar
+              <Download size={14} /> {t("browser.import")}
             </button>
             <button
               className="browser-lib-btn-create"
-              title="Crear lista nueva"
+              title={t("browser.createTitle")}
               onClick={() => setShowLibCreate(true)}
             >
-              <Plus size={15} /> Nueva lista
+              <Plus size={15} /> {t("browser.newPlaylistBtn")}
             </button>
           </div>
         )}
@@ -809,16 +811,16 @@ export const MainBrowser: React.FC<Props> = ({
                         <PlaylistCover coverUrls={p.coverUrls} iconSize={28} className="browser-pl-card-cover-inner" />
                         <button
                           className="browser-playlist-play-btn"
-                          title={p.isActive ? "Ya en reproducción" : "Reproducir lista"}
+                          title={p.isActive ? t("browser.alreadyPlaying") : t("browser.playPlaylistTitle")}
                           onClick={async e => {
                             e.stopPropagation();
                             try {
                               await api.activatePlaylist(p.id);
-                              flash(`▶ Reproduciendo "${p.name}"`);
+                              flash(`▶ ${t("browser.playingPlaylist", { name: p.name })}`);
                               onPlaylistsChanged();
                               loadHome();
                             } catch (err: unknown) {
-                              flash(err instanceof Error ? err.message : "Error", true);
+                              flash(err instanceof Error ? err.message : t("common.error"), true);
                             }
                           }}
                         >
@@ -828,8 +830,8 @@ export const MainBrowser: React.FC<Props> = ({
                       <div className="browser-playlist-card-info">
                         <span className="browser-playlist-card-name">{p.name}</span>
                         <span className="browser-playlist-card-meta">
-                          {p.isActive && <span className="lib-active-badge">Activa · </span>}
-                          {p.songCount} canciones
+                          {p.isActive && <span className="lib-active-badge">{t("browser.activeBadge")}</span>}
+                          {t("browser.songsCount", { count: p.songCount })}
                           {p.totalDurationMs != null && p.totalDurationMs > 0 && (
                             <> · {formatPlaylistDuration(p.totalDurationMs)}</>
                           )}
@@ -845,8 +847,8 @@ export const MainBrowser: React.FC<Props> = ({
           {!loadingHome && playlists.length === 0 && (
             <div className="browser-empty">
               <div className="browser-empty-icon"><Music size={48} /></div>
-              <div className="browser-empty-title">Tu librería está vacía</div>
-              <div className="browser-empty-sub">Crea una lista con + o importa una desde YouTube.</div>
+              <div className="browser-empty-title">{t("browser.emptyTitle")}</div>
+              <div className="browser-empty-sub">{t("browser.emptySub")}</div>
             </div>
           )}
         </div>
@@ -856,7 +858,7 @@ export const MainBrowser: React.FC<Props> = ({
       {browserTab === "home" && view === "search-playlist" && previewMeta && (
         <div className="browser-content">
           <button className="browser-back-btn" onClick={() => { setPreviewMeta(null); setPreviewTracks(null); setDropdownOpen(true); }}>
-            <ArrowLeft size={15} /> Resultados de búsqueda
+            <ArrowLeft size={15} /> {t("browser.searchResults")}
           </button>
 
           {/* Header */}
@@ -868,12 +870,12 @@ export const MainBrowser: React.FC<Props> = ({
               }
             </div>
             <div className="browser-pl-header-info">
-              <span className="browser-pl-label">Lista de YouTube</span>
+              <span className="browser-pl-label">{t("browser.youtubePlaylist")}</span>
               <h1 className="browser-pl-name">{previewMeta.title}</h1>
               <span className="browser-pl-meta">
                 {previewMeta.artist}
-                {previewMeta.playlistVideoCount ? ` · ${previewMeta.playlistVideoCount} videos` : ""}
-                {previewTracks ? ` · ${previewTracks.length} cargadas` : ""}
+                {previewMeta.playlistVideoCount ? ` · ${t("browser.videosCount", { count: previewMeta.playlistVideoCount })}` : ""}
+                {previewTracks ? ` · ${t("browser.loadedCount", { count: previewTracks.length })}` : ""}
               </span>
             </div>
             <div className="browser-pl-header-actions">
@@ -881,14 +883,14 @@ export const MainBrowser: React.FC<Props> = ({
                 className="pl-action-btn pl-action-play"
                 onClick={handleEnqueueAllPreview}
                 disabled={!previewTracks || previewLoading}
-                title="Añadir toda la lista a la cola"
+                title={t("browser.enqueueAllTitle")}
               >
                 <Play size={22} fill="currentColor" />
               </button>
               <button
                 className="pl-action-btn pl-action-shuffle"
                 onClick={() => setShowSaveForm(v => !v)}
-                title="Guardar en librería"
+                title={t("browser.saveToLibraryTitle")}
               >
                 <Download size={16} />
               </button>
@@ -898,12 +900,12 @@ export const MainBrowser: React.FC<Props> = ({
           {/* Save to library form */}
           {showSaveForm && (
             <div className="browser-save-form">
-              <span className="browser-save-label">Nombre de la lista:</span>
+              <span className="browser-save-label">{t("browser.saveListName")}</span>
               <input
                 className="input"
                 value={saveNameInput}
                 onChange={e => setSaveNameInput(e.target.value)}
-                placeholder="Nombre…"
+                placeholder={t("browser.namePlaceholder")}
                 autoFocus
               />
               <button
@@ -911,19 +913,19 @@ export const MainBrowser: React.FC<Props> = ({
                 onClick={handleSaveToLibrary}
                 disabled={savingLibrary || !saveNameInput.trim()}
               >
-                {savingLibrary ? "Guardando…" : "Guardar"}
+                {savingLibrary ? t("browser.saving") : t("common.save")}
               </button>
-              <button className="btn btn-outline" onClick={() => setShowSaveForm(false)}>Cancelar</button>
+              <button className="btn btn-outline" onClick={() => setShowSaveForm(false)}>{t("common.cancel")}</button>
             </div>
           )}
 
           {/* Tracks */}
-          {previewLoading && <div className="lib-empty">Cargando canciones…</div>}
+          {previewLoading && <div className="lib-empty">{t("browser.loadingSongs")}</div>}
 
           {!previewLoading && previewTracks && (
             <div className="browser-pl-songs">
               {previewTracks.length === 0
-                ? <div className="lib-empty">La lista no tiene canciones disponibles.</div>
+                ? <div className="lib-empty">{t("browser.noPlaylistSongs")}</div>
                 : previewTracks.map((s, i) => {
                   const isPlaying = nowPlayingUri === s.spotifyUri;
                   return (
@@ -943,15 +945,15 @@ export const MainBrowser: React.FC<Props> = ({
                         <span className="browser-result-artist">{s.artist} · {formatDuration(s.durationMs)}</span>
                       </div>
                       <div className="browser-result-actions">
-                        <button className="pl-row-btn pl-row-btn-play" onClick={() => handlePlayNow(s)} title="Reproducir ahora">
+                        <button className="pl-row-btn pl-row-btn-play" onClick={() => handlePlayNow(s)} title={t("browser.playNow")}>
                           <Play size={15} fill="currentColor" />
                         </button>
-                        <button className="pl-row-btn" onClick={() => handleEnqueue(s)} title="Añadir a cola">
+                        <button className="pl-row-btn" onClick={() => handleEnqueue(s)} title={t("browser.addToQueue")}>
                           <Plus size={15} />
                         </button>
                         <button
                           className="pl-row-btn"
-                          title="Más opciones"
+                          title={t("browser.moreOptions")}
                           onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === s.spotifyUri + i ? null : { uri: s.spotifyUri + i, el: e.currentTarget }); }}
                         >
                           <MoreHorizontal size={15} />
@@ -978,11 +980,11 @@ export const MainBrowser: React.FC<Props> = ({
       {browserTab === "home" && view === "playlist" && (
         <div className="browser-content">
           <button className="browser-back-btn" onClick={onClearSelection}>
-            <ArrowLeft size={15} /> Volver
+            <ArrowLeft size={15} /> {t("browser.back")}
           </button>
 
           {loadingDetail ? (
-            <div className="lib-empty">Cargando…</div>
+            <div className="lib-empty">{t("common.loading")}</div>
           ) : playlist ? (
             <>
               {/* Playlist header */}
@@ -995,13 +997,13 @@ export const MainBrowser: React.FC<Props> = ({
                   />
                 </div>
                 <div className="browser-pl-header-info">
-                  <span className="browser-pl-label">Lista de reproducción</span>
+                  <span className="browser-pl-label">{t("browser.playlist")}</span>
                   <h1 className="browser-pl-name">{playlist.name}</h1>
-                  <span className="browser-pl-meta">{playlist.songCount} canciones</span>
+                  <span className="browser-pl-meta">{t("browser.songsCount", { count: playlist.songCount })}</span>
                 </div>
                 <div className="browser-pl-header-actions">
                   {playlist.isActive ? (
-                    <button className="pl-action-btn pl-action-stop" onClick={handleDeactivate} title="Detener lista">
+                    <button className="pl-action-btn pl-action-stop" onClick={handleDeactivate} title={t("browser.stopPlaylist")}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
                     </button>
                   ) : (
@@ -1009,7 +1011,7 @@ export const MainBrowser: React.FC<Props> = ({
                       className="pl-action-btn pl-action-play"
                       onClick={handlePlay}
                       disabled={activating || playlist.songCount === 0}
-                      title="Reproducir lista"
+                      title={t("browser.playPlaylistTitle")}
                     >
                       <Play size={22} fill="currentColor" />
                     </button>
@@ -1017,7 +1019,7 @@ export const MainBrowser: React.FC<Props> = ({
                   <button
                     className={`pl-action-btn pl-action-shuffle${shufflePlaylist ? " active" : ""}`}
                     onClick={() => setShufflePlaylist(v => !v)}
-                    title={shufflePlaylist ? "Aleatorio activado" : "Reproducción aleatoria"}
+                    title={shufflePlaylist ? t("browser.shuffleOn") : t("browser.shuffleRandom")}
                   >
                     <Shuffle size={16} />
                   </button>
@@ -1026,11 +1028,11 @@ export const MainBrowser: React.FC<Props> = ({
                       <button
                         className="pl-action-btn"
                         onClick={() => { setRenamingPlaylist(true); setRenameValue(playlist.name); }}
-                        title="Renombrar lista"
+                        title={t("browser.renameTitle")}
                       >
                         <Pencil size={16} />
                       </button>
-                      <button className="pl-action-btn pl-action-danger" onClick={handleDeletePlaylist} title="Eliminar lista">
+                      <button className="pl-action-btn pl-action-danger" onClick={handleDeletePlaylist} title={t("browser.deleteTitle")}>
                         <Trash2 size={16} />
                       </button>
                     </>
@@ -1043,27 +1045,27 @@ export const MainBrowser: React.FC<Props> = ({
                 <form className="form-row" onSubmit={handleImport} style={{ flex: 1 }}>
                   <input
                     className="input"
-                    placeholder="Importar lista de YouTube (URL)…"
+                    placeholder={t("browser.importUrlPlaceholder")}
                     value={importUrl}
                     onChange={e => setImportUrl(e.target.value)}
                     disabled={importing}
                     autoComplete="off"
                   />
                   <button type="submit" className="btn btn-primary" style={{ whiteSpace: "nowrap" }} disabled={importing || !importUrl.trim()}>
-                    {importing ? "Importando…" : "Importar"}
+                    {importing ? t("browser.importing") : t("browser.import")}
                   </button>
                 </form>
 
                 <form className="form-row" onSubmit={handleAddSearch} style={{ flex: 1 }}>
                   <input
                     className="input"
-                    placeholder="Buscar y agregar canción…"
+                    placeholder={t("browser.searchAddPlaceholder")}
                     value={addQuery}
                     onChange={e => setAddQuery(e.target.value)}
                     autoComplete="off"
                   />
                   <button type="submit" className="btn btn-outline" style={{ whiteSpace: "nowrap" }} disabled={addSearching || !addQuery.trim()}>
-                    {addSearching ? "…" : "Buscar"}
+                    {addSearching ? "…" : t("common.search")}
                   </button>
                 </form>
               </div>
@@ -1080,7 +1082,7 @@ export const MainBrowser: React.FC<Props> = ({
                         <span className="browser-result-title">{song.title}</span>
                         <span className="browser-result-artist">{song.artist} · {formatDuration(song.durationMs)}</span>
                       </div>
-                      <button className="pl-row-btn pl-row-btn-play" onClick={() => handleAddToPlaylist(song)} title="Agregar a lista">
+                      <button className="pl-row-btn pl-row-btn-play" onClick={() => handleAddToPlaylist(song)} title={t("browser.addToPlaylist")}>
                         <Plus size={15} />
                       </button>
                     </div>
@@ -1091,7 +1093,7 @@ export const MainBrowser: React.FC<Props> = ({
               {/* Song list */}
               <div className="browser-pl-songs">
                 {songs.length === 0 ? (
-                  <div className="lib-empty">Lista vacía. Importa o busca canciones arriba.</div>
+                  <div className="lib-empty">{t("browser.emptyList")}</div>
                 ) : songs.map((s, i) => {
                   const isPlaying    = nowPlayingUri === s.spotifyUri;
                   const isLiked      = likedUris?.has(s.spotifyUri) ?? false;
@@ -1113,7 +1115,7 @@ export const MainBrowser: React.FC<Props> = ({
                       <button
                         className="browser-song-num-btn"
                         onClick={() => handlePlaySong(s.spotifyUri)}
-                        title="Reproducir desde aquí"
+                        title={t("browser.playFromHere")}
                       >
                         <span className="browser-song-num-text">
                           {isPlaying ? <Play size={13} fill="currentColor" /> : i + 1}
@@ -1132,7 +1134,7 @@ export const MainBrowser: React.FC<Props> = ({
                         {/* Like button — always show if liked, else show on hover via CSS */}
                         <button
                           className={`pl-row-btn pl-row-like-btn${isLiked ? " liked" : ""}`}
-                          title={isLiked ? "Guardado en Liked Songs" : "Guardar en Liked Songs"}
+                          title={isLiked ? t("browser.savedInLiked") : t("browser.saveInLiked")}
                           onClick={e => {
                             e.stopPropagation();
                             if (isLiked) {
@@ -1148,7 +1150,7 @@ export const MainBrowser: React.FC<Props> = ({
                         {/* Ellipsis menu — always visible on hover */}
                         <button
                           className="pl-row-btn"
-                          title="Más opciones"
+                          title={t("browser.moreOptions")}
                           onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === s.spotifyUri ? null : { uri: s.spotifyUri, el: e.currentTarget }); setLikeMenuAnchor(null); }}
                         >
                           <MoreHorizontal size={15} />
@@ -1181,7 +1183,7 @@ export const MainBrowser: React.FC<Props> = ({
               </div>
             </>
           ) : (
-            <div className="lib-empty">Lista no encontrada</div>
+            <div className="lib-empty">{t("browser.notFound")}</div>
           )}
         </div>
       )}

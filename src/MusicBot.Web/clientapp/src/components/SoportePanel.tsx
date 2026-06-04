@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, Trash2, LifeBuoy, Clock, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Send, Inbox } from "lucide-react";
 import { communityService } from "../services/community";
 import { CommunityUser } from "../services/community/ICommunityService";
@@ -7,24 +8,24 @@ import { useConfirm } from "../hooks/useConfirm";
 import { ComunidadAuth } from "./ComunidadAuth";
 
 const CATEGORIES = [
-  { value: "general",  label: "General" },
-  { value: "bug",      label: "Error / Bug" },
-  { value: "question", label: "Pregunta" },
-  { value: "feature",  label: "Sugerencia" },
+  { value: "general",  labelKey: "support.catGeneral" },
+  { value: "bug",      labelKey: "support.catBug" },
+  { value: "question", labelKey: "support.catQuestion" },
+  { value: "feature",  labelKey: "support.catFeature" },
 ];
 
-const TICKET_STATUSES: { value: SupportTicket["status"]; label: string }[] = [
-  { value: "open",        label: "Abierto" },
-  { value: "in-progress", label: "En proceso" },
-  { value: "resolved",    label: "Resuelto" },
-  { value: "closed",      label: "Cerrado" },
+const TICKET_STATUSES: { value: SupportTicket["status"]; labelKey: string }[] = [
+  { value: "open",        labelKey: "support.statusOpen" },
+  { value: "in-progress", labelKey: "support.statusInProgress" },
+  { value: "resolved",    labelKey: "support.statusResolved" },
+  { value: "closed",      labelKey: "support.statusClosed" },
 ];
 
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; cls: string }> = {
-  open:          { label: "Abierto",    icon: <Clock size={12} />,        cls: "status-open" },
-  "in-progress": { label: "En proceso", icon: <AlertCircle size={12} />,  cls: "status-progress" },
-  resolved:      { label: "Resuelto",   icon: <CheckCircle2 size={12} />, cls: "status-resolved" },
-  closed:        { label: "Cerrado",    icon: <CheckCircle2 size={12} />, cls: "status-closed" },
+const STATUS_CONFIG: Record<string, { labelKey: string; icon: React.ReactNode; cls: string }> = {
+  open:          { labelKey: "support.statusOpen",       icon: <Clock size={12} />,        cls: "status-open" },
+  "in-progress": { labelKey: "support.statusInProgress", icon: <AlertCircle size={12} />,  cls: "status-progress" },
+  resolved:      { labelKey: "support.statusResolved",   icon: <CheckCircle2 size={12} />, cls: "status-resolved" },
+  closed:        { labelKey: "support.statusClosed",     icon: <CheckCircle2 size={12} />, cls: "status-closed" },
 };
 
 type SoporteView = "form" | "history" | "cola";
@@ -38,6 +39,7 @@ interface StaffDetailState {
 }
 
 export const SoportePanel: React.FC = () => {
+  const { t } = useTranslation();
   const [view,        setView]        = useState<SoporteView>("form");
   const [user,        setUser]        = useState<CommunityUser | null>(() => communityService.getCurrentUser());
   const [tickets,     setTickets]     = useState<SupportTicket[]>([]);
@@ -119,8 +121,8 @@ export const SoportePanel: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) { setError("El título es obligatorio"); return; }
-    if (!description.trim()) { setError("La descripción es obligatoria"); return; }
+    if (!title.trim()) { setError(t("support.titleRequired")); return; }
+    if (!description.trim()) { setError(t("support.descRequired")); return; }
     setSaving(true); setError(null);
     try {
       await communityService.createTicket(title.trim(), description.trim(), category);
@@ -128,12 +130,12 @@ export const SoportePanel: React.FC = () => {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 5000);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error al enviar el ticket");
+      setError(err instanceof Error ? err.message : t("support.submitError"));
     } finally { setSaving(false); }
   };
 
   const handleDelete = async (id: string) => {
-    const ok = await confirm({ title: "¿Eliminar ticket?", message: "Se eliminará de tu historial.", confirmText: "Eliminar", danger: true });
+    const ok = await confirm({ title: t("support.deleteTicketTitle"), message: t("support.deleteTicketMsg"), confirmText: t("common.delete"), danger: true });
     if (!ok) return;
     try {
       await communityService.deleteTicket(id);
@@ -179,8 +181,8 @@ export const SoportePanel: React.FC = () => {
   const noAuthMessage = (action: string) => (
     <div className="soporte-empty-state">
       <LifeBuoy size={40} className="soporte-empty-icon" />
-      <div className="soporte-empty-title">Inicia sesión para {action}</div>
-      <div className="soporte-empty-sub">Necesitas una cuenta de Google para usar el soporte.</div>
+      <div className="soporte-empty-title">{t("support.loginPrompt", { action })}</div>
+      <div className="soporte-empty-sub">{t("support.loginSub")}</div>
     </div>
   );
 
@@ -191,14 +193,14 @@ export const SoportePanel: React.FC = () => {
 
       <div className="soporte-header-tabs">
         <button className={`soporte-header-tab${view === "form" ? " active" : ""}`} onClick={() => setView("form")}>
-          <Plus size={13} /> Nuevo ticket
+          <Plus size={13} /> {t("support.tabNew")}
         </button>
         <button className={`soporte-header-tab${view === "history" ? " active" : ""}`} onClick={() => setView("history")}>
-          <LifeBuoy size={13} /> Mis tickets
+          <LifeBuoy size={13} /> {t("support.tabMine")}
         </button>
         {isSupport && (
           <button className={`soporte-header-tab${view === "cola" ? " active" : ""}`} onClick={() => setView("cola")}>
-            <Inbox size={13} /> Cola de soporte
+            <Inbox size={13} /> {t("support.tabQueue")}
           </button>
         )}
       </div>
@@ -206,28 +208,28 @@ export const SoportePanel: React.FC = () => {
       {/* ── NEW TICKET FORM ── */}
       {view === "form" && (
         <div className="soporte-content">
-          {!user ? noAuthMessage("enviar tickets") : (
+          {!user ? noAuthMessage(t("support.actionSubmit")) : (
             <>
               <div className="soporte-form-header">
-                <h3 className="soporte-form-title">Enviar un ticket de soporte</h3>
-                <p className="soporte-form-sub">Describe tu problema o pregunta y lo revisaremos lo antes posible.</p>
+                <h3 className="soporte-form-title">{t("support.formTitle")}</h3>
+                <p className="soporte-form-sub">{t("support.formSub")}</p>
               </div>
               {success && (
                 <div className="soporte-success">
-                  <CheckCircle2 size={16} /> Ticket enviado. Puedes verlo en "Mis tickets".
+                  <CheckCircle2 size={16} /> {t("support.ticketSent")}
                 </div>
               )}
               <form className="soporte-form" onSubmit={handleSubmit}>
-                <label className="soporte-label">Categoría</label>
+                <label className="soporte-label">{t("support.labelCategory")}</label>
                 <select className="input soporte-select" value={category} onChange={e => setCategory(e.target.value)} disabled={saving}>
-                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{t(c.labelKey)}</option>)}
                 </select>
-                <label className="soporte-label">Título</label>
-                <input className="input" placeholder="Resumen breve del problema…" value={title} onChange={e => setTitle(e.target.value)} disabled={saving} />
-                <label className="soporte-label">Descripción</label>
+                <label className="soporte-label">{t("support.labelTitle")}</label>
+                <input className="input" placeholder={t("support.titlePlaceholder")} value={title} onChange={e => setTitle(e.target.value)} disabled={saving} />
+                <label className="soporte-label">{t("support.labelDescription")}</label>
                 <textarea
                   className="input soporte-textarea"
-                  placeholder="Explica el problema con todo el detalle posible."
+                  placeholder={t("support.descPlaceholder")}
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   rows={5}
@@ -236,7 +238,7 @@ export const SoportePanel: React.FC = () => {
                 {error && <span className="soporte-error">{error}</span>}
                 <div className="soporte-form-actions">
                   <button type="submit" className="btn btn-primary" disabled={saving || !title.trim() || !description.trim()}>
-                    {saving ? "Enviando…" : "Enviar ticket"}
+                    {saving ? t("support.sending") : t("support.sendTicket")}
                   </button>
                 </div>
               </form>
@@ -248,36 +250,37 @@ export const SoportePanel: React.FC = () => {
       {/* ── USER TICKET HISTORY ── */}
       {view === "history" && (
         <div className="soporte-content">
-          {!user ? noAuthMessage("ver tus tickets") : (
+          {!user ? noAuthMessage(t("support.actionViewTickets")) : (
             <>
-              {loading && <div className="soporte-empty">Cargando…</div>}
+              {loading && <div className="soporte-empty">{t("common.loading")}</div>}
               {!loading && tickets.length === 0 && (
                 <div className="soporte-empty-state">
                   <LifeBuoy size={40} className="soporte-empty-icon" />
-                  <div className="soporte-empty-title">No has enviado ningún ticket</div>
-                  <div className="soporte-empty-sub">Cuando envíes un ticket aparecerá aquí.</div>
-                  <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setView("form")}>Crear ticket</button>
+                  <div className="soporte-empty-title">{t("support.noTicketsTitle")}</div>
+                  <div className="soporte-empty-sub">{t("support.noTicketsSub")}</div>
+                  <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setView("form")}>{t("support.createTicket")}</button>
                 </div>
               )}
 
-              {!loading && tickets.map(t => {
-                const cfg      = STATUS_CONFIG[t.status] ?? STATUS_CONFIG.open;
-                const catLabel = CATEGORIES.find(c => c.value === t.category)?.label ?? t.category;
-                const isOpen   = expandedId === t.id;
-                const replies  = threadReplies[t.id] ?? [];
-                const isLoading = threadLoading[t.id];
+              {!loading && tickets.map(ticket => {
+                const cfg      = STATUS_CONFIG[ticket.status] ?? STATUS_CONFIG.open;
+                const catEntry = CATEGORIES.find(c => c.value === ticket.category);
+                const catLabel = catEntry ? t(catEntry.labelKey) : ticket.category;
+                const isOpen   = expandedId === ticket.id;
+                const replies  = threadReplies[ticket.id] ?? [];
+                const isLoading = threadLoading[ticket.id];
 
                 return (
-                  <div key={t.id} className={`ticket-card${isOpen ? " open" : ""}`}>
-                    <div className="ticket-card-header" onClick={() => toggleExpand(t.id)}>
+                  <div key={ticket.id} className={`ticket-card${isOpen ? " open" : ""}`}>
+                    <div className="ticket-card-header" onClick={() => toggleExpand(ticket.id)}>
                       <div className="ticket-card-left">
-                        <span className={`ticket-status ${cfg.cls}`}>{cfg.icon} {cfg.label}</span>
-                        <span className="ticket-title">{t.title}</span>
+                        <span className={`ticket-status ${cfg.cls}`}>{cfg.icon} {t(cfg.labelKey)}</span>
+                        <span className="ticket-title">{ticket.title}</span>
                       </div>
                       <div className="ticket-card-right">
                         <span className="ticket-category">{catLabel}</span>
-                        <span className="ticket-date">{formatDate(t.createdAt)}</span>
-                        <button className="ticket-expand-btn" title={isOpen ? "Contraer" : "Expandir"}>
+                        <span className="ticket-date">{formatDate(ticket.createdAt)}</span>
+                        <button className="ticket-expand-btn" title={isOpen ? t("support.collapse") : t("support.expand")}>
                           {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </button>
                       </div>
@@ -285,18 +288,18 @@ export const SoportePanel: React.FC = () => {
 
                     {isOpen && (
                       <div className="ticket-card-body">
-                        <p className="ticket-description">{t.description}</p>
+                        <p className="ticket-description">{ticket.description}</p>
 
                         {/* Thread */}
-                        {isLoading && <div className="ticket-thread-loading">Cargando conversación…</div>}
+                        {isLoading && <div className="ticket-thread-loading">{t("support.loadingThread")}</div>}
 
                         {!isLoading && replies.length > 0 && (
                           <div className="ticket-thread">
                             {replies.map(r => (
                               <div key={r.id} className={`ticket-thread-msg${r.isStaff ? " staff" : " user-msg"}`}>
                                 <div className="ticket-thread-author">
-                                  {r.isStaff && <span className="ticket-thread-badge">Soporte</span>}
-                                  <span className="ticket-thread-name">{r.authorName ?? (r.isStaff ? "Soporte" : "Tú")}</span>
+                                  {r.isStaff && <span className="ticket-thread-badge">{t("support.staff")}</span>}
+                                  <span className="ticket-thread-name">{r.authorName ?? (r.isStaff ? t("support.staff") : t("support.you"))}</span>
                                   <span className="ticket-thread-date">{formatDate(r.createdAt)}</span>
                                 </div>
                                 <p className="ticket-thread-text">{r.text}</p>
@@ -306,29 +309,29 @@ export const SoportePanel: React.FC = () => {
                         )}
 
                         {/* User reply box */}
-                        {!isLoading && t.status !== "closed" && t.status !== "resolved" && (
+                        {!isLoading && ticket.status !== "closed" && ticket.status !== "resolved" && (
                           <div className="ticket-reply-box">
                             <textarea
                               className="input ticket-reply-input"
-                              placeholder="Escribe una respuesta…"
+                              placeholder={t("support.replyPlaceholder")}
                               rows={2}
-                              value={replyTexts[t.id] ?? ""}
-                              onChange={e => setReplyTexts(prev => ({ ...prev, [t.id]: e.target.value }))}
-                              disabled={sendingReply[t.id]}
+                              value={replyTexts[ticket.id] ?? ""}
+                              onChange={e => setReplyTexts(prev => ({ ...prev, [ticket.id]: e.target.value }))}
+                              disabled={sendingReply[ticket.id]}
                             />
                             <button
                               className="btn btn-primary btn-sm ticket-reply-send"
-                              onClick={() => handleUserReply(t.id)}
-                              disabled={sendingReply[t.id] || !replyTexts[t.id]?.trim()}
+                              onClick={() => handleUserReply(ticket.id)}
+                              disabled={sendingReply[ticket.id] || !replyTexts[ticket.id]?.trim()}
                             >
-                              <Send size={13} /> {sendingReply[t.id] ? "Enviando…" : "Responder"}
+                              <Send size={13} /> {sendingReply[ticket.id] ? t("support.sending") : t("support.reply")}
                             </button>
                           </div>
                         )}
 
                         <div className="ticket-card-footer">
-                          <button className="btn btn-outline btn-sm ticket-delete-btn" onClick={() => handleDelete(t.id)}>
-                            <Trash2 size={13} /> Eliminar
+                          <button className="btn btn-outline btn-sm ticket-delete-btn" onClick={() => handleDelete(ticket.id)}>
+                            <Trash2 size={13} /> {t("common.delete")}
                           </button>
                         </div>
                       </div>
@@ -344,18 +347,18 @@ export const SoportePanel: React.FC = () => {
       {/* ── STAFF QUEUE ── */}
       {view === "cola" && isSupport && (
         <div className="soporte-content soporte-staff">
-          {!user ? noAuthMessage("acceder a la cola") : (
+          {!user ? noAuthMessage(t("support.actionQueue")) : (
             staffDetail ? (
               <div className="staff-detail">
                 <button className="staff-detail-back btn btn-outline btn-sm" onClick={() => setStaffDetail(null)}>
-                  ← Volver
+                  {t("support.back")}
                 </button>
                 <div className="staff-detail-header">
                   <div className="staff-detail-meta">
                     <span className={`ticket-status ${STATUS_CONFIG[staffDetail.ticket.status]?.cls ?? "status-open"}`}>
-                      {STATUS_CONFIG[staffDetail.ticket.status]?.icon} {STATUS_CONFIG[staffDetail.ticket.status]?.label}
+                      {STATUS_CONFIG[staffDetail.ticket.status]?.icon} {STATUS_CONFIG[staffDetail.ticket.status] ? t(STATUS_CONFIG[staffDetail.ticket.status].labelKey) : ""}
                     </span>
-                    <span className="ticket-category">{CATEGORIES.find(c => c.value === staffDetail.ticket.category)?.label ?? staffDetail.ticket.category}</span>
+                    <span className="ticket-category">{(() => { const e = CATEGORIES.find(c => c.value === staffDetail.ticket.category); return e ? t(e.labelKey) : staffDetail.ticket.category; })()}</span>
                     <span className="ticket-date">{formatDate(staffDetail.ticket.createdAt)}</span>
                   </div>
                   <h3 className="staff-detail-title">{staffDetail.ticket.title}</h3>
@@ -372,7 +375,7 @@ export const SoportePanel: React.FC = () => {
                 <p className="staff-detail-description">{staffDetail.ticket.description}</p>
 
                 <div className="staff-status-row">
-                  <span className="staff-status-label">Cambiar estado:</span>
+                  <span className="staff-status-label">{t("support.changeStatus")}</span>
                   {TICKET_STATUSES.map(s => (
                     <button
                       key={s.value}
@@ -380,7 +383,7 @@ export const SoportePanel: React.FC = () => {
                       onClick={() => handleStatusChange(staffDetail.ticket.id, s.value)}
                       disabled={staffDetail.statusSaving || staffDetail.ticket.status === s.value}
                     >
-                      {s.label}
+                      {t(s.labelKey)}
                     </button>
                   ))}
                 </div>
@@ -389,8 +392,8 @@ export const SoportePanel: React.FC = () => {
                   {staffDetail.replies.map(r => (
                     <div key={r.id} className={`staff-thread-msg${r.isStaff ? " staff" : " user"}`}>
                       <div className="staff-thread-author">
-                        {r.isStaff && <span className="staff-thread-badge">Soporte</span>}
-                        <span className="staff-thread-name">{r.authorName ?? "Usuario"}</span>
+                        {r.isStaff && <span className="staff-thread-badge">{t("support.staff")}</span>}
+                        <span className="staff-thread-name">{r.authorName ?? t("support.userFallback")}</span>
                         <span className="staff-thread-date">{formatDate(r.createdAt)}</span>
                       </div>
                       <p className="staff-thread-text">{r.text}</p>
@@ -401,7 +404,7 @@ export const SoportePanel: React.FC = () => {
                 <div className="staff-reply-box">
                   <textarea
                     className="input staff-reply-input"
-                    placeholder="Escribe una respuesta…"
+                    placeholder={t("support.replyPlaceholder")}
                     rows={3}
                     value={staffDetail.replyText}
                     onChange={e => setStaffDetail(d => d ? { ...d, replyText: e.target.value } : null)}
@@ -412,36 +415,37 @@ export const SoportePanel: React.FC = () => {
                     onClick={handleStaffReply}
                     disabled={staffDetail.replying || !staffDetail.replyText.trim()}
                   >
-                    <Send size={14} /> {staffDetail.replying ? "Enviando…" : "Responder"}
+                    <Send size={14} /> {staffDetail.replying ? t("support.sending") : t("support.reply")}
                   </button>
                 </div>
               </div>
             ) : (
               <>
                 <div className="staff-queue-header">
-                  <span className="staff-queue-title">Cola de soporte</span>
-                  <span className="staff-queue-count">{tickets.length} ticket{tickets.length !== 1 ? "s" : ""}</span>
+                  <span className="staff-queue-title">{t("support.tabQueue")}</span>
+                  <span className="staff-queue-count">{t("support.ticketCount", { count: tickets.length })}</span>
                 </div>
-                {loading && <div className="soporte-empty">Cargando…</div>}
+                {loading && <div className="soporte-empty">{t("common.loading")}</div>}
                 {!loading && tickets.length === 0 && (
                   <div className="soporte-empty-state">
                     <Inbox size={40} className="soporte-empty-icon" />
-                    <div className="soporte-empty-title">No hay tickets pendientes</div>
-                    <div className="soporte-empty-sub">Cuando los usuarios envíen tickets aparecerán aquí.</div>
+                    <div className="soporte-empty-title">{t("support.noQueueTitle")}</div>
+                    <div className="soporte-empty-sub">{t("support.noQueueSub")}</div>
                   </div>
                 )}
-                {!loading && tickets.map(t => {
-                  const cfg      = STATUS_CONFIG[t.status] ?? STATUS_CONFIG.open;
-                  const catLabel = CATEGORIES.find(c => c.value === t.category)?.label ?? t.category;
+                {!loading && tickets.map(ticket => {
+                  const cfg      = STATUS_CONFIG[ticket.status] ?? STATUS_CONFIG.open;
+                  const catEntry = CATEGORIES.find(c => c.value === ticket.category);
+                  const catLabel = catEntry ? t(catEntry.labelKey) : ticket.category;
                   return (
-                    <div key={t.id} className="staff-ticket-row" onClick={() => openStaffDetail(t)}>
+                    <div key={ticket.id} className="staff-ticket-row" onClick={() => openStaffDetail(ticket)}>
                       <span className={`ticket-status ${cfg.cls}`}>{cfg.icon}</span>
                       <div className="staff-ticket-info">
-                        <span className="staff-ticket-title">{t.title}</span>
+                        <span className="staff-ticket-title">{ticket.title}</span>
                         <div className="staff-ticket-meta">
                           <span className="ticket-category">{catLabel}</span>
-                          {t.userDisplayName && <span className="staff-ticket-user">{t.userDisplayName}</span>}
-                          <span className="ticket-date">{formatDate(t.createdAt)}</span>
+                          {ticket.userDisplayName && <span className="staff-ticket-user">{ticket.userDisplayName}</span>}
+                          <span className="ticket-date">{formatDate(ticket.createdAt)}</span>
                         </div>
                       </div>
                       <ChevronDown size={14} className="staff-ticket-arrow" />

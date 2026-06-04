@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export const FormModal: React.FC<Props> = ({ title, onClose, children, width = 420 }) => {
+  const { t } = useTranslation();
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", h);
@@ -20,7 +22,7 @@ export const FormModal: React.FC<Props> = ({ title, onClose, children, width = 4
       <div className="form-modal" style={{ width: `min(${width}px, calc(100vw - 32px))` }} onClick={e => e.stopPropagation()}>
         <div className="form-modal-header">
           <span className="form-modal-title">{title}</span>
-          <button className="form-modal-close" onClick={onClose} aria-label="Cerrar">
+          <button className="form-modal-close" onClick={onClose} aria-label={t("common.close")}>
             <X size={18} />
           </button>
         </div>

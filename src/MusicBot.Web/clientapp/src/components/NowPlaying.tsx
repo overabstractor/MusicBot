@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { NowPlayingState } from "../types/models";
 import { formatDuration, getPlatform } from "../utils";
 import { api } from "../services/api";
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, downloadStates }) => {
+  const { t } = useTranslation();
   const song        = state?.spotifyTrack ?? state?.item?.song ?? null;
   const requestedBy = state?.item?.requestedBy ?? song?.requestedBy ?? null;
   const platform    = getPlatform(state?.item?.platform ?? song?.platform ?? undefined);
@@ -94,19 +96,19 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
 
   const deviceDropdown = showDevices && devicesLoaded ? (
     <div className="np-device-menu">
-      <div className="np-device-menu-title">Dispositivo de salida</div>
+      <div className="np-device-menu-title">{t('nowPlaying.outputDevice')}</div>
       {devices.map(d => (
         <button
           key={d.id}
           className={`np-device-item${activeDevice === d.id ? " active" : ""}`}
           onClick={() => handleDeviceChange(d.id)}
         >
-          {d.name}{d.isDefault ? " (predeterminado)" : ""}
+          {d.name}{d.isDefault ? ` (${t('nowPlaying.default')})` : ""}
         </button>
       ))}
       {activeDevice !== null && (
         <button className="np-device-item np-device-default" onClick={() => handleDeviceChange(null)}>
-          ↩ Usar predeterminado del sistema
+          ↩ {t('nowPlaying.useSystemDefault')}
         </button>
       )}
     </div>
@@ -116,8 +118,8 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
     <div className="np-volume np-volume-device-row">
       <button className="np-device-btn" onClick={toggleDevices}>
         🔈 {activeDevice && devicesLoaded
-          ? (devices.find(d => d.id === activeDevice)?.name ?? "Dispositivo de audio")
-          : "Dispositivo de audio"}
+          ? (devices.find(d => d.id === activeDevice)?.name ?? t('nowPlaying.audioDevice'))
+          : t('nowPlaying.audioDevice')}
       </button>
     </div>
   );
@@ -127,7 +129,7 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
       <div className="now-playing-card empty">
         {downloadState ? (
           <div className="np-downloading-empty">
-            <div className="np-downloading-empty-badge">⬇ Descargando</div>
+            <div className="np-downloading-empty-badge">⬇ {t('nowPlaying.downloading')}</div>
             <div className="np-downloading-empty-title">{downloadState.title}</div>
             <div className="np-downloading-empty-artist">{downloadState.artist}</div>
             <div className="np-downloading-empty-bar-track">
@@ -138,11 +140,11 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
             </div>
             <div className="np-downloading-empty-pct">{downloadState.pct}%</div>
             <div className="np-downloading-empty-sub">
-              {downloadState.pct === 0 ? "Buscando en YouTube..." : "Descargando audio..."}
+              {downloadState.pct === 0 ? t('nowPlaying.searchingYouTube') : t('nowPlaying.downloadingAudio')}
             </div>
           </div>
         ) : (
-          <div className="np-empty-text">No hay canción en reproducción</div>
+          <div className="np-empty-text">{t('nowPlaying.empty')}</div>
         )}
         {deviceBtn}
         {deviceDropdown}
@@ -167,7 +169,7 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
               {platform && (
                 <span className={`platform-badge ${platform.className}`}>{platform.label}</span>
               )}
-              {" "}Solicitada por <strong>{requestedBy}</strong>
+              {" "}{t('nowPlaying.requestedBy')} <strong>{requestedBy}</strong>
             </div>
           )}
           <div className="np-progress">
@@ -178,7 +180,7 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
                 </div>
                 <div className="np-time">
                   <span className="np-download-label">
-                    ⬇ {downloadState.pct === 0 ? "Buscando en YouTube..." : "Descargando..."}
+                    ⬇ {downloadState.pct === 0 ? t('nowPlaying.searchingYouTube') : t('nowPlaying.downloadingShort')}
                   </span>
                   <span className="np-download-pct">{downloadState.pct}%</span>
                 </div>
@@ -219,11 +221,11 @@ export const NowPlaying: React.FC<Props> = ({ state, onSkip, onPause, onResume, 
         </div>
         <div className="np-controls">
           {state.isPlaying ? (
-            <button className="btn btn-control" onClick={onPause} title="Pausar">⏸</button>
+            <button className="btn btn-control" onClick={onPause} title={t('nowPlaying.pause')}>⏸</button>
           ) : (
-            <button className="btn btn-control" onClick={onResume} title="Reanudar">▶</button>
+            <button className="btn btn-control" onClick={onResume} title={t('nowPlaying.resume')}>▶</button>
           )}
-          <button className="btn btn-control" onClick={onSkip} title="Saltar">⏭</button>
+          <button className="btn btn-control" onClick={onSkip} title={t('nowPlaying.skip')}>⏭</button>
         </div>
       </div>
     </div>

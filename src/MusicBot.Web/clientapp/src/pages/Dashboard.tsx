@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Sun, Moon, Power, FileText, Wrench, Music2, FolderOpen, Bot, Users, Coffee, LifeBuoy } from "lucide-react";
+import { Sun, Moon, Power, FileText, Wrench, Music2, FolderOpen, Bot, Users, Coffee, LifeBuoy, Languages } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../hooks/useTheme";
 import { MainBrowser } from "../components/MainBrowser";
 import { QueuePanel } from "../components/QueuePanel";
@@ -13,14 +14,15 @@ import { useSignalR } from "../hooks/useSignalR";
 import { useLikedSongs } from "../hooks/useLikedSongs";
 import { useConfirm } from "../hooks/useConfirm";
 import { api } from "../services/api";
+import i18n from "../i18n";
 
 type AppSection = "bot" | "comunidad" | "donaciones" | "soporte";
 
-const SECTIONS: { id: AppSection; label: string; icon: React.ReactNode }[] = [
-  { id: "bot",       label: "Manager",    icon: <Bot size={13} />      },
-  { id: "comunidad", label: "Comunidad",  icon: <Users size={13} />    },
-  { id: "soporte",   label: "Soporte",    icon: <LifeBuoy size={13} /> },
-  { id: "donaciones",label: "Donaciones", icon: <Coffee size={13} />   },
+const SECTIONS: { id: AppSection; labelKey: string; icon: React.ReactNode }[] = [
+  { id: "bot",       labelKey: "sections.manager",   icon: <Bot size={13} />      },
+  { id: "comunidad", labelKey: "sections.community", icon: <Users size={13} />    },
+  { id: "soporte",   labelKey: "sections.support",   icon: <LifeBuoy size={13} /> },
+  { id: "donaciones",labelKey: "sections.donations", icon: <Coffee size={13} />   },
 ];
 
 const OVERLAY_TOKEN = "local";
@@ -31,15 +33,16 @@ function formatDownloadReason(raw: string): string {
   const msg = prefixed ? prefixed[1] : raw;
 
   // Map known yt-dlp error patterns to friendly messages
-  if (/private video/i.test(msg))           return "El video es privado";
-  if (/video unavailable/i.test(msg))       return "El video no está disponible";
-  if (/has been removed/i.test(msg))        return "El video fue eliminado";
-  if (/not available in your country/i.test(msg)) return "No disponible en tu región";
-  if (/age.?restricted/i.test(msg))         return "El video tiene restricción de edad";
-  if (/no youtube match/i.test(msg))        return "No se encontró en YouTube";
-  if (/output file not found/i.test(msg))   return "Error al procesar el archivo de audio";
-  if (/unable to download/i.test(msg))      return "No se pudo descargar el video";
-  if (/copyright/i.test(msg))               return "Bloqueado por derechos de autor";
+  const t = i18n.t;
+  if (/private video/i.test(msg))           return t("dashboard.downloadReason.private");
+  if (/video unavailable/i.test(msg))       return t("dashboard.downloadReason.unavailable");
+  if (/has been removed/i.test(msg))        return t("dashboard.downloadReason.removed");
+  if (/not available in your country/i.test(msg)) return t("dashboard.downloadReason.region");
+  if (/age.?restricted/i.test(msg))         return t("dashboard.downloadReason.ageRestricted");
+  if (/no youtube match/i.test(msg))        return t("dashboard.downloadReason.noMatch");
+  if (/output file not found/i.test(msg))   return t("dashboard.downloadReason.processError");
+  if (/unable to download/i.test(msg))      return t("dashboard.downloadReason.downloadError");
+  if (/copyright/i.test(msg))               return t("dashboard.downloadReason.copyright");
 
   // Return first line of the message (yt-dlp errors can be multi-line)
   return msg.split("\n")[0].trim();
@@ -53,7 +56,11 @@ export const Dashboard: React.FC = () => {
     queueUpdateCount, playlistUpdateCount, downloadStates, downloadErrors, authAlerts, authUpdatedAt, dismissDownloadError, dismissAuthAlert,
   } = useSignalR(OVERLAY_TOKEN);
 
+  const { t, i18n } = useTranslation();
   const { theme, toggle: toggleTheme } = useTheme();
+  const toggleLanguage = useCallback(() => {
+    i18n.changeLanguage(i18n.resolvedLanguage === "es" ? "en" : "es");
+  }, [i18n]);
   const { likedUris, toggleLike } = useLikedSongs(playlistUpdateCount);
   const [confirmModal, confirm] = useConfirm();
 
@@ -122,22 +129,22 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const handleBan     = useCallback(async (uri: string, title: string, artist: string) => {
-    const ok = await confirm({ title: `Banear "${title}"`, message: "La canción no podrá volver a ser solicitada.", confirmText: "Banear", danger: true });
+    const ok = await confirm({ title: t("dashboard.banTitle", { title }), message: t("dashboard.banMessage"), confirmText: t("dashboard.ban"), danger: true });
     if (!ok) return;
     api.banSong(uri, title, artist).catch(console.error);
     api.removeQueueItem(uri).catch(console.error);
-  }, [confirm]);
+  }, [confirm, t]);
 
   const handleVote = useCallback(async (skip: boolean) => {
     const r = await api.vote(voteUser || "Admin", skip, "web").catch(() => null);
-    showSimMsg(r ? r.message : "Error al votar");
-  }, [voteUser]);
+    showSimMsg(r ? r.message : t("dashboard.voteError"));
+  }, [voteUser, t]);
 
   const handleGiftBump = useCallback(async () => {
-    if (!giftUser.trim()) { showSimMsg("Ingresa un usuario"); return; }
+    if (!giftUser.trim()) { showSimMsg(t("dashboard.enterUser")); return; }
     const r = await api.giftBump(giftUser.trim(), giftCoins).catch(() => null);
-    showSimMsg(r ? r.message : "Error");
-  }, [giftUser, giftCoins]);
+    showSimMsg(r ? r.message : t("common.error"));
+  }, [giftUser, giftCoins, t]);
 
   const nowPlayingUri = (nowPlaying?.spotifyTrack ?? nowPlaying?.item?.song)?.spotifyUri ?? null;
 
@@ -147,7 +154,7 @@ export const Dashboard: React.FC = () => {
       {/* ── Header ──────────────────────────────────────────── */}
       <header className="app-header">
         <div className="header-left">
-          <div className="header-brand" onClick={() => setSection("bot")} title="Manager">
+          <div className="header-brand" onClick={() => setSection("bot")} title={t("header.manager")}>
             <span className="header-logo"><Music2 size={20} /></span>
             <span className="header-title">MusicBot</span>
             {appVersion && <span className="header-version">v{appVersion}</span>}
@@ -160,7 +167,7 @@ export const Dashboard: React.FC = () => {
                 className={`header-section-btn${section === s.id ? " active" : ""}`}
                 onClick={() => setSection(s.id)}
               >
-                {s.icon} {s.label}
+                {s.icon} {t(s.labelKey)}
               </button>
             ))}
           </nav>
@@ -174,18 +181,22 @@ export const Dashboard: React.FC = () => {
             kickStatus={kickStatus}
           />
 
-          <button className="header-icon-btn" onClick={() => setQueueToolsOpen(true)} title="Herramientas de cola"><Wrench size={15} /></button>
-          <button className="theme-toggle-btn" onClick={toggleTheme} title="Cambiar tema">
+          <button className="header-icon-btn" onClick={() => setQueueToolsOpen(true)} title={t("header.queueTools")}><Wrench size={15} /></button>
+          <button className="theme-toggle-btn" onClick={toggleTheme} title={t("header.toggleTheme")}>
             {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
           </button>
-          <button className="header-icon-btn" onClick={() => api.openLog()} title="Logs"><FileText size={15} /></button>
-          <button className="header-icon-btn" onClick={() => api.openLogDir()} title="Carpeta de logs"><FolderOpen size={15} /></button>
+          <button className="header-icon-btn header-lang-btn" onClick={toggleLanguage} title={t("language.switch")}>
+            <Languages size={15} />
+            <span className="header-lang-code">{(i18n.resolvedLanguage ?? "en").toUpperCase()}</span>
+          </button>
+          <button className="header-icon-btn" onClick={() => api.openLog()} title={t("header.logs")}><FileText size={15} /></button>
+          <button className="header-icon-btn" onClick={() => api.openLogDir()} title={t("header.logsFolder")}><FolderOpen size={15} /></button>
           <button className="header-icon-btn header-icon-btn-danger"
             onClick={async () => {
-              const ok = await confirm({ title: "¿Cerrar MusicBot?", message: "La reproducción se detendrá y la aplicación se cerrará.", confirmText: "Cerrar", danger: true });
+              const ok = await confirm({ title: t("dashboard.closeTitle"), message: t("dashboard.closeMessage"), confirmText: t("header.close"), danger: true });
               if (ok) api.shutdown();
             }}
-            title="Cerrar"
+            title={t("header.close")}
           ><Power size={15} /></button>
         </div>
       </header>
@@ -195,12 +206,12 @@ export const Dashboard: React.FC = () => {
         <div className="download-error-stack">
           {downloadErrors.length > 1 && (
             <div className="download-error-toolbar">
-              <span className="download-error-count">{downloadErrors.length} errores</span>
+              <span className="download-error-count">{t("dashboard.errors", { count: downloadErrors.length })}</span>
               <button
                 className="download-error-dismiss-all"
                 onClick={() => downloadErrors.forEach(e => dismissDownloadError(e.id))}
               >
-                Limpiar todo
+                {t("dashboard.clearAll")}
               </button>
             </div>
           )}
@@ -209,7 +220,7 @@ export const Dashboard: React.FC = () => {
               <span className="download-error-icon">⚠</span>
               <div className="download-error-body">
                 <span className="download-error-text">
-                  No se pudo descargar <strong>{e.title}</strong>
+                  {t("dashboard.downloadFailed")} <strong>{e.title}</strong>
                   {e.artist ? ` · ${e.artist}` : ""}
                 </span>
                 {e.reason && (
@@ -221,7 +232,7 @@ export const Dashboard: React.FC = () => {
           ))}
           {downloadErrors.length > 3 && (
             <div className="download-error-overflow">
-              +{downloadErrors.length - 3} más
+              {t("dashboard.more", { count: downloadErrors.length - 3 })}
             </div>
           )}
         </div>

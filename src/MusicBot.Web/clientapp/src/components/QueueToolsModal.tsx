@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../services/api";
 
 interface Props {
@@ -23,6 +24,7 @@ export const QueueToolsModal: React.FC<Props> = ({
   onVote, onGiftBump,
   simMsg,
 }) => {
+  const { t } = useTranslation();
   const [url,         setUrl]         = useState("");
   const [requestedBy, setRequestedBy] = useState("Admin");
   const [loading,     setLoading]     = useState(false);
@@ -35,10 +37,10 @@ export const QueueToolsModal: React.FC<Props> = ({
     setImportMsg(null);
     try {
       const res = await api.importPlaylist(url.trim(), requestedBy);
-      setImportMsg({ text: `✓ ${res.added} canciones agregadas (${res.skipped} omitidas de ${res.total})`, ok: true });
+      setImportMsg({ text: t("queueTools.imported", { added: res.added, skipped: res.skipped, total: res.total }), ok: true });
       if (res.added > 0) setUrl("");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al importar playlist";
+      const msg = err instanceof Error ? err.message : t("queueTools.importError");
       setImportMsg({ text: msg, ok: false });
     } finally {
       setLoading(false);
@@ -52,23 +54,23 @@ export const QueueToolsModal: React.FC<Props> = ({
       <div className="modal-panel" onClick={e => e.stopPropagation()}>
 
         <div className="modal-header">
-          <span className="modal-title">Herramientas de cola</span>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Cerrar">✕</button>
+          <span className="modal-title">{t("queueTools.title")}</span>
+          <button className="modal-close-btn" onClick={onClose} aria-label={t("common.close")}>✕</button>
         </div>
 
         <div className="modal-body">
 
           {/* ── Import playlist ── */}
-          <div className="modal-section-label">Importar playlist</div>
+          <div className="modal-section-label">{t("queueTools.importLabel")}</div>
           <p className="import-playlist-hint">
-            Pega una URL de playlist de YouTube o Spotify para agregar todas sus canciones (máx. 50).
+            {t("queueTools.importHint")}
           </p>
           <form onSubmit={handleImport}>
             <div className="form-row">
               <input
                 type="text"
                 className="input"
-                placeholder="https://www.youtube.com/playlist?list=… o https://open.spotify.com/playlist/…"
+                placeholder={t("queueTools.urlPlaceholder")}
                 value={url}
                 onChange={e => setUrl(e.target.value)}
                 disabled={loading}
@@ -78,7 +80,7 @@ export const QueueToolsModal: React.FC<Props> = ({
               <input
                 type="text"
                 className="input input-sm"
-                placeholder="Solicitado por"
+                placeholder={t("queueTools.requestedBy")}
                 value={requestedBy}
                 onChange={e => setRequestedBy(e.target.value)}
               />
@@ -87,7 +89,7 @@ export const QueueToolsModal: React.FC<Props> = ({
                 className="btn btn-primary"
                 disabled={loading || !url.trim()}
               >
-                {loading ? "Importando…" : "Importar"}
+                {loading ? t("queueTools.importing") : t("queueTools.import")}
               </button>
             </div>
             {importMsg && (
@@ -100,27 +102,27 @@ export const QueueToolsModal: React.FC<Props> = ({
           <div className="modal-divider" />
 
           {/* ── Simulation ── */}
-          <div className="modal-section-label">Simulación</div>
+          <div className="modal-section-label">{t("queueTools.simLabel")}</div>
 
           <div className="admin-tool-row">
-            <span className="admin-tool-label">Simular voto</span>
+            <span className="admin-tool-label">{t("queueTools.simVote")}</span>
             <input
               className="input admin-tool-input"
               value={voteUser}
               onChange={e => onVoteUserChange(e.target.value)}
-              placeholder="Usuario"
+              placeholder={t("queueTools.user")}
             />
             <button className="btn btn-sm btn-yes" onClick={() => onVote(true)}>!si</button>
             <button className="btn btn-sm btn-no"  onClick={() => onVote(false)}>!no</button>
           </div>
 
           <div className="admin-tool-row" style={{ marginTop: 8 }}>
-            <span className="admin-tool-label">Simular regalo</span>
+            <span className="admin-tool-label">{t("queueTools.simGift")}</span>
             <input
               className="input admin-tool-input"
               value={giftUser}
               onChange={e => onGiftUserChange(e.target.value)}
-              placeholder="Usuario con canción en cola"
+              placeholder={t("queueTools.giftUserPlaceholder")}
             />
             <input
               className="input admin-tool-input-sm"
@@ -129,8 +131,8 @@ export const QueueToolsModal: React.FC<Props> = ({
               value={giftCoins}
               onChange={e => onGiftCoinsChange(Number(e.target.value))}
             />
-            <span className="admin-tool-label">monedas</span>
-            <button className="btn btn-sm btn-gift" onClick={onGiftBump}>🎁 Simular</button>
+            <span className="admin-tool-label">{t("queueTools.coins")}</span>
+            <button className="btn btn-sm btn-gift" onClick={onGiftBump}>{t("queueTools.simulate")}</button>
           </div>
 
           {simMsg && <div className="admin-tool-msg" style={{ marginTop: 8 }}>{simMsg}</div>}

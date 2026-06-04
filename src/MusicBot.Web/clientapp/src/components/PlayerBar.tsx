@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Shuffle, SkipBack, Play, Pause, SkipForward,
   List, Headphones, Volume2, Volume1, VolumeX, Heart,
@@ -29,6 +30,7 @@ export const PlayerBar: React.FC<Props> = ({
   rightPanelMode, onToggleQueue, onToggleDevices, shuffleActive, onToggleShuffle,
   likedUris, onToggleLike,
 }) => {
+  const { t } = useTranslation();
   const song     = state?.spotifyTrack ?? state?.item?.song ?? null;
   const reqBy    = state?.item?.requestedBy ?? null;
   const platform = getPlatform(state?.item?.platform ?? undefined);
@@ -138,19 +140,19 @@ export const PlayerBar: React.FC<Props> = ({
         {/* Left: controls + time */}
         <div className="pb-left">
           <div className="pb-controls">
-            <button className="pb-ctrl-btn" onClick={handlePrev} title="Reiniciar">
+            <button className="pb-ctrl-btn" onClick={handlePrev} title={t('player.restart')}>
               <SkipBack size={18} />
             </button>
             {state?.isPlaying ? (
-              <button className="pb-ctrl-btn pb-ctrl-play" onClick={onPause} title="Pausar">
+              <button className="pb-ctrl-btn pb-ctrl-play" onClick={onPause} title={t('player.pause')}>
                 <Pause size={20} fill="currentColor" />
               </button>
             ) : (
-              <button className="pb-ctrl-btn pb-ctrl-play" onClick={onResume} title="Reanudar">
+              <button className="pb-ctrl-btn pb-ctrl-play" onClick={onResume} title={t('player.resume')}>
                 <Play size={20} fill="currentColor" />
               </button>
             )}
-            <button className="pb-ctrl-btn" onClick={onSkip} title="Siguiente">
+            <button className="pb-ctrl-btn" onClick={onSkip} title={t('player.next')}>
               <SkipForward size={18} />
             </button>
           </div>
@@ -182,7 +184,7 @@ export const PlayerBar: React.FC<Props> = ({
                 <button
                   className={`pb-like-btn${likedUris?.has(song.spotifyUri) ? " liked" : ""}`}
                   onClick={() => onToggleLike({ spotifyUri: song.spotifyUri, title: song.title, artist: song.artist, coverUrl: song.coverUrl, durationMs: song.durationMs ?? 0 })}
-                  title={likedUris?.has(song.spotifyUri) ? "Quitar de favoritos" : "Añadir a favoritos"}
+                  title={likedUris?.has(song.spotifyUri) ? t('player.unlike') : t('player.like')}
                 >
                   <Heart size={15} fill={likedUris?.has(song.spotifyUri) ? "currentColor" : "none"} />
                 </button>
@@ -196,12 +198,12 @@ export const PlayerBar: React.FC<Props> = ({
                 </svg>
               </div>
               <div className="pb-info">
-                <span className="pb-title">{downloadState.title || "Descargando…"}</span>
-                <span className="pb-artist">{downloadState.pct === 0 ? "Buscando en YouTube…" : `${downloadState.pct}%`}</span>
+                <span className="pb-title">{downloadState.title || t('player.downloading')}</span>
+                <span className="pb-artist">{downloadState.pct === 0 ? t('player.searchingYouTube') : `${downloadState.pct}%`}</span>
               </div>
             </>
           ) : (
-            <span className="pb-idle">No hay canción en reproducción</span>
+            <span className="pb-idle">{t('nowPlaying.empty')}</span>
           )}
         </div>
 
@@ -210,25 +212,25 @@ export const PlayerBar: React.FC<Props> = ({
           <button
             className={`pb-side-btn${shuffleActive ? " pb-side-btn-active" : ""}`}
             onClick={onToggleShuffle}
-            title="Mezclar cola"
+            title={t('player.shuffle')}
           >
             <Shuffle size={16} />
           </button>
           <button
             className={`pb-side-btn${queueActive ? " pb-side-btn-active" : ""}`}
-            title={queueActive ? "Ocultar cola" : "Mostrar cola"}
+            title={queueActive ? t('player.hideQueue') : t('player.showQueue')}
             onClick={onToggleQueue}
           >
             <List size={16} />
           </button>
           <button
             className={`pb-side-btn${devicesActive ? " pb-side-btn-active" : ""}`}
-            title={devicesActive ? "Ocultar dispositivos" : "Dispositivos de audio"}
+            title={devicesActive ? t('player.hideDevices') : t('player.audioDevices')}
             onClick={onToggleDevices}
           >
             <Headphones size={16} />
           </button>
-          <button className="pb-side-btn" onClick={toggleMute} title="Silenciar">
+          <button className="pb-side-btn" onClick={toggleMute} title={t('player.mute')}>
             <VolumeIcon size={16} />
           </button>
           <input
@@ -236,7 +238,7 @@ export const PlayerBar: React.FC<Props> = ({
             type="range" className="pb-vol"
             min={0} max={1} step={0.02} value={volume}
             onChange={handleVolume}
-            title="Volumen (rueda del ratón para ajustar)"
+            title={t('player.volume')}
           />
         </div>
       </div>

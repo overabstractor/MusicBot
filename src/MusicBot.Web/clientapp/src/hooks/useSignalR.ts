@@ -3,6 +3,7 @@ import * as signalR from "@microsoft/signalr";
 import { NowPlayingState, SpotifyQueueState, QueueItem, QueueState } from "../types/models";
 import { resolveGoogleAuth } from "../services/community/googleAuthBus";
 import { api } from "../services/api";
+import i18n from "../i18n";
 
 const HUB_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/hub/overlay`
@@ -129,7 +130,7 @@ export function useSignalR(overlayToken: string | null) {
       setDownloadStates(prev => {
         const existing = prev[uri];
         if (existing) return { ...prev, [uri]: { ...existing, pct } };
-        return { ...prev, [uri]: { spotifyUri: uri, title: "Descargando...", artist: "", pct } };
+        return { ...prev, [uri]: { spotifyUri: uri, title: i18n.t("messages.downloading"), artist: "", pct } };
       });
       progressTimers.set(uri, setTimeout(() => drainQueue(uri), 180));
     }

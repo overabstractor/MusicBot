@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -6,10 +7,10 @@ import { ExternalLink, Trash2, Pencil } from "lucide-react";
 import { NewsItem } from "../services/community/ICommunityService";
 import { api } from "../services/api";
 
-const TAG_LABELS: Record<NewsItem["tag"], string> = {
-  novedad:   "Novedad",
-  mejora:    "Mejora",
-  arreglado: "Arreglado",
+const TAG_LABEL_KEYS: Record<NewsItem["tag"], string> = {
+  novedad:   "community.tagNovedad",
+  mejora:    "community.tagMejora",
+  arreglado: "community.tagArreglado",
 };
 
 // Open external links in system browser instead of WebView2
@@ -68,6 +69,7 @@ interface Props {
 }
 
 export const NewsCard: React.FC<Props> = ({ item, onDelete, onEdit }) => {
+  const { t } = useTranslation();
   const hasBody = !!item.body?.trim();
 
   const formattedDate = new Date(item.date).toLocaleDateString("es-ES", {
@@ -78,15 +80,15 @@ export const NewsCard: React.FC<Props> = ({ item, onDelete, onEdit }) => {
     <article className="news-card-v2">
       <div className="news-card-v2-header">
         <div className="news-card-v2-meta">
-          <span className={`news-tag news-tag-${item.tag}`}>{TAG_LABELS[item.tag]}</span>
+          <span className={`news-tag news-tag-${item.tag}`}>{t(TAG_LABEL_KEYS[item.tag])}</span>
           <span className="news-card-v2-date">{formattedDate}</span>
           {onEdit && (
-            <button className="news-admin-edit-btn" onClick={onEdit} title="Editar novedad">
+            <button className="news-admin-edit-btn" onClick={onEdit} title={t("community.editNews")}>
               <Pencil size={13} />
             </button>
           )}
           {onDelete && (
-            <button className="news-admin-delete-btn" onClick={onDelete} title="Eliminar novedad">
+            <button className="news-admin-delete-btn" onClick={onDelete} title={t("community.deleteNews")}>
               <Trash2 size={13} />
             </button>
           )}
@@ -109,7 +111,7 @@ export const NewsCard: React.FC<Props> = ({ item, onDelete, onEdit }) => {
 
       {!hasBody && item.url && (
         <button className="news-card-v2-toggle" onClick={() => api.openInBrowser(item.url!)}>
-          <ExternalLink size={14} /> Leer más
+          <ExternalLink size={14} /> {t("community.readMore")}
         </button>
       )}
     </article>

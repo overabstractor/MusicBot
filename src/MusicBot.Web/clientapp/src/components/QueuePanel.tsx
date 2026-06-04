@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Music, Volume2, RotateCcw, Headphones, MoreHorizontal, Heart, GripVertical } from "lucide-react";
 import { useConfirm } from "../hooks/useConfirm";
 import { QueueItem, NowPlayingState, HistoryItem } from "../types/models";
@@ -26,6 +27,7 @@ interface Props {
 // ── Now Playing panel ─────────────────────────────────────────────────────────
 
 const NowPlayingView: React.FC<{ nowPlaying: NowPlayingState | null }> = ({ nowPlaying }) => {
+  const { t } = useTranslation();
   const song       = nowPlaying?.spotifyTrack ?? nowPlaying?.item?.song ?? null;
   const reqBy      = nowPlaying?.item?.requestedBy ?? null;
   const platform   = getPlatform(nowPlaying?.item?.platform ?? undefined);
@@ -34,7 +36,7 @@ const NowPlayingView: React.FC<{ nowPlaying: NowPlayingState | null }> = ({ nowP
   if (!song) return (
     <div className="np-view-empty">
       <div className="np-view-empty-icon"><Music size={40} /></div>
-      <div>No hay canción en reproducción</div>
+      <div>{t('nowPlaying.empty')}</div>
     </div>
   );
 
@@ -51,7 +53,7 @@ const NowPlayingView: React.FC<{ nowPlaying: NowPlayingState | null }> = ({ nowP
           </div>
         )}
         {isPlaylist && (
-          <div className="np-view-playlist-badge">De tu lista de reproducción</div>
+          <div className="np-view-playlist-badge">{t('queue.fromPlaylist')}</div>
         )}
       </div>
       <div className="np-view-duration">{formatDuration(song.durationMs)}</div>
@@ -64,6 +66,7 @@ const NowPlayingView: React.FC<{ nowPlaying: NowPlayingState | null }> = ({ nowP
 type AudioDevice = { id: string; name: string; isDefault: boolean };
 
 const DevicesView: React.FC = () => {
+  const { t } = useTranslation();
   const [devices,  setDevices]  = useState<AudioDevice[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading,  setLoading]  = useState(true);
@@ -83,11 +86,11 @@ const DevicesView: React.FC = () => {
 
   return (
     <div className="devices-view">
-      <div className="devices-view-title">Dispositivo de audio</div>
+      <div className="devices-view-title">{t('queue.audioDevice')}</div>
       {loading ? (
-        <div className="devices-view-empty">Cargando…</div>
+        <div className="devices-view-empty">{t('common.loading')}</div>
       ) : devices.length === 0 ? (
-        <div className="devices-view-empty">No se detectaron dispositivos</div>
+        <div className="devices-view-empty">{t('queue.noDevices')}</div>
       ) : (
         <div className="devices-list">
           {devices.map(d => (
@@ -101,7 +104,7 @@ const DevicesView: React.FC = () => {
               </span>
               <div className="devices-item-info">
                 <span className="devices-item-name">{d.name}</span>
-                {d.isDefault && <span className="devices-item-default">Predeterminado</span>}
+                {d.isDefault && <span className="devices-item-default">{t('queue.default')}</span>}
               </div>
               {activeId === d.id && (
                 <span className="devices-item-check">
@@ -113,7 +116,7 @@ const DevicesView: React.FC = () => {
           {activeId !== null && (
             <button className="devices-item devices-item-reset" onClick={() => select(null)}>
               <span className="devices-item-icon"><RotateCcw size={15} /></span>
-              <span>Usar predeterminado del sistema</span>
+              <span>{t('queue.useSystemDefault')}</span>
             </button>
           )}
         </div>
@@ -125,6 +128,7 @@ const DevicesView: React.FC = () => {
 // ── History panel ─────────────────────────────────────────────────────────────
 
 const HistoryView: React.FC<{ refreshKey: number; likedUris?: Set<string>; onToggleLike?: (song: SongRef) => void }> = ({ refreshKey, likedUris, onToggleLike }) => {
+  const { t } = useTranslation();
   const [history,  setHistory]  = useState<HistoryItem[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [menuAnchor, setMenuAnchor] = useState<{ id: string; el: HTMLElement } | null>(null);
@@ -134,8 +138,8 @@ const HistoryView: React.FC<{ refreshKey: number; likedUris?: Set<string>; onTog
     api.getHistory(100).then(setHistory).catch(() => {}).finally(() => setLoading(false));
   }, [refreshKey]);
 
-  if (loading) return <div className="np-view-empty">Cargando…</div>;
-  if (history.length === 0) return <div className="np-view-empty">Sin historial</div>;
+  if (loading) return <div className="np-view-empty">{t('common.loading')}</div>;
+  if (history.length === 0) return <div className="np-view-empty">{t('queue.noHistory')}</div>;
 
   return (
     <div className="queue-items-list" style={{ position: "relative" }}>
@@ -161,7 +165,7 @@ const HistoryView: React.FC<{ refreshKey: number; likedUris?: Set<string>; onTog
                 <button
                   className={`qi-like-btn${likedUris?.has(song.spotifyUri) ? " liked" : ""}`}
                   onClick={e => { e.stopPropagation(); onToggleLike(song); }}
-                  title={likedUris?.has(song.spotifyUri) ? "Guardado en Liked Songs" : "Guardar en Liked Songs"}
+                  title={likedUris?.has(song.spotifyUri) ? t('queue.likedSaved') : t('queue.likeSave')}
                 >
                   <Heart size={13} fill={likedUris?.has(song.spotifyUri) ? "currentColor" : "none"} />
                 </button>
@@ -169,7 +173,7 @@ const HistoryView: React.FC<{ refreshKey: number; likedUris?: Set<string>; onTog
               <button
                 className="qi-menu-btn"
                 onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.id === item.id ? null : { id: item.id, el: e.currentTarget }); }}
-                title="Más opciones"
+                title={t('queue.moreOptions')}
               ><MoreHorizontal size={15} /></button>
             </div>
             {menuAnchor?.id === item.id && (
@@ -193,6 +197,7 @@ export const QueuePanel: React.FC<Props> = ({
   mode, items, nowPlaying, onRemove, onReorder, onPromoteToQueue, onShuffleBackground,
   onBan, downloadStates, queueUpdateCount, activePlaylistName, likedUris, onToggleLike,
 }) => {
+  const { t } = useTranslation();
   const [historyTab, setHistoryTab] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<{ uri: string; el: HTMLElement } | null>(null);
   const [dragUri,    setDragUri]    = useState<string | null>(null);
@@ -207,7 +212,7 @@ export const QueuePanel: React.FC<Props> = ({
   const isBgUri   = (uri: string) => bgItems.some(i => i.song.spotifyUri === uri);
 
   const handleClearUserQueue = async () => {
-    const ok = await confirm({ title: "¿Limpiar la cola?", message: "Se eliminarán todas las canciones en espera. Esta acción no se puede deshacer.", confirmText: "Limpiar", danger: true });
+    const ok = await confirm({ title: t('queue.clearTitle'), message: t('queue.clearMessage'), confirmText: t('queue.clearConfirm'), danger: true });
     if (!ok) return;
     api.clearUserQueue().catch(console.error);
   };
@@ -224,13 +229,13 @@ export const QueuePanel: React.FC<Props> = ({
           className={`queue-panel-tab${!historyTab ? " active" : ""}`}
           onClick={() => setHistoryTab(false)}
         >
-          Cola {items.length > 0 && <span className="queue-panel-badge">{items.length}</span>}
+          {t('queue.tabQueue')} {items.length > 0 && <span className="queue-panel-badge">{items.length}</span>}
         </button>
         <button
           className={`queue-panel-tab${historyTab ? " active" : ""}`}
           onClick={() => setHistoryTab(true)}
         >
-          Recientes
+          {t('queue.tabRecent')}
         </button>
       </div>
 
@@ -242,7 +247,7 @@ export const QueuePanel: React.FC<Props> = ({
           {/* Now Playing */}
           {nowSong && (
             <div className="queue-section">
-              <div className="queue-section-label-sp">Reproduciendo ahora</div>
+              <div className="queue-section-label-sp">{t('queue.nowPlayingLabel')}</div>
               <div className="queue-item-row now-playing-row">
                 {nowSong.coverUrl
                   ? <img src={nowSong.coverUrl} alt="" className="qi-cover" />
@@ -259,7 +264,7 @@ export const QueuePanel: React.FC<Props> = ({
                     <button
                       className="qi-like-btn"
                       onClick={e => { e.stopPropagation(); onToggleLike({ spotifyUri: nowSong.spotifyUri, title: nowSong.title, artist: nowSong.artist, coverUrl: nowSong.coverUrl, durationMs: nowSong.durationMs }); }}
-                      title="Guardar en Liked Songs"
+                      title={t('queue.likeSave')}
                     >
                       <Heart size={13} fill="none" />
                     </button>
@@ -278,7 +283,7 @@ export const QueuePanel: React.FC<Props> = ({
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 2V5h2v6h1.17L12 13.17 9.83 11H11zm-6 7h14v2H5z"/></svg>
                 </span>
                 <div className="qi-info">
-                  <div className="qi-title" style={{ fontSize: 12 }}>{dl.title || "Descargando…"}</div>
+                  <div className="qi-title" style={{ fontSize: 12 }}>{dl.title || t('queue.downloading')}</div>
                   <div className="queue-dl-bar">
                     <div
                       className={`queue-dl-fill${dl.pct === 0 ? " indeterminate" : ""}`}
@@ -294,9 +299,9 @@ export const QueuePanel: React.FC<Props> = ({
           {userItems.length > 0 && (
             <div className="queue-section">
               <div className="queue-section-header">
-                <span className="queue-section-label-sp">A continuación en la cola</span>
-                <button className="queue-clear-btn" onClick={handleClearUserQueue} title="Limpiar cola">
-                  Limpiar cola
+                <span className="queue-section-label-sp">{t('queue.upNext')}</span>
+                <button className="queue-clear-btn" onClick={handleClearUserQueue} title={t('queue.clearQueue')}>
+                  {t('queue.clearQueue')}
                 </button>
               </div>
               {userItems.map((item, i) => {
@@ -330,7 +335,7 @@ export const QueuePanel: React.FC<Props> = ({
                     onDragEnd={() => { setDragUri(null); setDropIndex(null); }}
                   >
                     {onReorder && (
-                      <span className="queue-drag-handle" title="Arrastrar para reordenar">
+                      <span className="queue-drag-handle" title={t('queue.dragReorder')}>
                         <GripVertical size={14} />
                       </span>
                     )}
@@ -356,7 +361,7 @@ export const QueuePanel: React.FC<Props> = ({
                         <button
                           className={`qi-like-btn${likedUris?.has(song.spotifyUri) ? " liked" : ""}`}
                           onClick={e => { e.stopPropagation(); onToggleLike(song); }}
-                          title={likedUris?.has(song.spotifyUri) ? "Guardado en Liked Songs" : "Guardar en Liked Songs"}
+                          title={likedUris?.has(song.spotifyUri) ? t('queue.likedSaved') : t('queue.likeSave')}
                         >
                           <Heart size={13} fill={likedUris?.has(song.spotifyUri) ? "currentColor" : "none"} />
                         </button>
@@ -364,7 +369,7 @@ export const QueuePanel: React.FC<Props> = ({
                       <button
                         className="qi-menu-btn"
                         onClick={e => { e.stopPropagation(); setMenuAnchor(v => v?.uri === item.song.spotifyUri ? null : { uri: item.song.spotifyUri, el: e.currentTarget }); }}
-                        title="Más opciones"
+                        title={t('queue.moreOptions')}
                       ><MoreHorizontal size={15} /></button>
                     </div>
                     {item.downloadError ? (
@@ -372,11 +377,11 @@ export const QueuePanel: React.FC<Props> = ({
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
                       </span>
                     ) : item.song.isDownloaded ? (
-                      <span className="qi-dl-ready" title="Descargada">
+                      <span className="qi-dl-ready" title={t('queue.downloaded')}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                       </span>
                     ) : !downloadStates[item.song.spotifyUri] ? (
-                      <span className="qi-dl-pending" title="Pendiente de descarga">
+                      <span className="qi-dl-pending" title={t('queue.pendingDownload')}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
                       </span>
                     ) : null}
@@ -401,11 +406,11 @@ export const QueuePanel: React.FC<Props> = ({
             <div className="queue-section">
               <div className="queue-section-header">
                 <span className="queue-section-label-sp">
-                  A continuación de: <span className="queue-section-playlist-name">{activePlaylistName ?? "Tu lista"}</span>
+                  {t('queue.upNextFrom')} <span className="queue-section-playlist-name">{activePlaylistName ?? t('queue.yourList')}</span>
                 </span>
                 {onShuffleBackground && (
-                  <button className="queue-clear-btn" onClick={onShuffleBackground} title="Aleatorizar lista de fondo">
-                    Aleatorizar
+                  <button className="queue-clear-btn" onClick={onShuffleBackground} title={t('queue.shuffleBgTitle')}>
+                    {t('queue.shuffle')}
                   </button>
                 )}
               </div>
@@ -439,7 +444,7 @@ export const QueuePanel: React.FC<Props> = ({
                     onDragEnd={() => { setDragUri(null); setDropIndex(null); }}
                   >
                     {onReorder && (
-                      <span className="queue-drag-handle" title="Arrastrar para reordenar">
+                      <span className="queue-drag-handle" title={t('queue.dragReorder')}>
                         <GripVertical size={14} />
                       </span>
                     )}
@@ -456,7 +461,7 @@ export const QueuePanel: React.FC<Props> = ({
                         <button
                           className={`qi-like-btn${likedUris?.has(song.spotifyUri) ? " liked" : ""}`}
                           onClick={e => { e.stopPropagation(); onToggleLike(song); }}
-                          title={likedUris?.has(song.spotifyUri) ? "Guardado" : "Guardar en Liked Songs"}
+                          title={likedUris?.has(song.spotifyUri) ? t('queue.saved') : t('queue.likeSave')}
                         >
                           <Heart size={13} fill={likedUris?.has(song.spotifyUri) ? "currentColor" : "none"} />
                         </button>
@@ -471,11 +476,11 @@ export const QueuePanel: React.FC<Props> = ({
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
                       </span>
                     ) : item.song.isDownloaded ? (
-                      <span className="qi-dl-ready" title="Descargada">
+                      <span className="qi-dl-ready" title={t('queue.downloaded')}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                       </span>
                     ) : !downloadStates[item.song.spotifyUri] ? (
-                      <span className="qi-dl-pending" title="Pendiente de descarga">
+                      <span className="qi-dl-pending" title={t('queue.pendingDownload')}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
                       </span>
                     ) : null}
@@ -498,9 +503,9 @@ export const QueuePanel: React.FC<Props> = ({
           {!nowSong && items.length === 0 && Object.keys(downloadStates).length === 0 && (
             <div className="queue-panel-empty">
               <div style={{ opacity: 0.2, marginBottom: 10 }}><Music size={40} /></div>
-              <div>La cola está vacía</div>
+              <div>{t('queue.empty')}</div>
               <div style={{ fontSize: 12, marginTop: 6, color: "var(--text-muted)" }}>
-                Busca canciones en el panel central para agregarlas
+                {t('queue.emptyHint')}
               </div>
             </div>
           )}
