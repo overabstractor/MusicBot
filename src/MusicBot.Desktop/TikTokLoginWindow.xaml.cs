@@ -754,30 +754,42 @@ public partial class TikTokLoginWindow : Window
     /// </summary>
     public async Task<string?> GetCurrentCookieStringAsync()
     {
-        try
+        // CookieManager.GetCookiesAsync occasionally throws a transient COM E_NOINTERFACE when it
+        // runs immediately after a WebView2 fetch() (this refresh fires right after the chat send).
+        // Retry a few times; it's non-critical — the message already sent — so a persistent failure
+        // logs at Debug instead of spamming a Warning on every message.
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            // Both the null-check and the cookie read must go through the dispatcher —
-            // this method is invoked from thread-pool callers via AppEvents.
-            var cookies = await Dispatcher.InvokeAsync(async () =>
+            try
             {
-                if (WebView.CoreWebView2 == null)
-                    return (IReadOnlyList<CoreWebView2Cookie>?)null;
-                return await WebView.CoreWebView2.CookieManager.GetCookiesAsync("https://www.tiktok.com");
-            }).Task.Unwrap();
+                // Both the null-check and the cookie read must go through the dispatcher —
+                // this method is invoked from thread-pool callers via AppEvents.
+                var cookies = await Dispatcher.InvokeAsync(async () =>
+                {
+                    if (WebView.CoreWebView2 == null)
+                        return (IReadOnlyList<CoreWebView2Cookie>?)null;
+                    return await WebView.CoreWebView2.CookieManager.GetCookiesAsync("https://www.tiktok.com");
+                }).Task.Unwrap();
 
-            if (cookies == null) return null;
+                if (cookies == null) return null;
 
-            var cookieStr = string.Join("; ", cookies
-                .Where(c => !string.IsNullOrWhiteSpace(c.Value))
-                .Select(c => $"{c.Name}={c.Value}"));
+                var cookieStr = string.Join("; ", cookies
+                    .Where(c => !string.IsNullOrWhiteSpace(c.Value))
+                    .Select(c => $"{c.Name}={c.Value}"));
 
-            return string.IsNullOrWhiteSpace(cookieStr) ? null : cookieStr;
+                return string.IsNullOrWhiteSpace(cookieStr) ? null : cookieStr;
+            }
+            catch (Exception ex) when (attempt < 2)
+            {
+                Serilog.Log.Debug(ex, "TikTok WebView: cookie read attempt {Attempt} failed — retrying", attempt + 1);
+                await Task.Delay(150);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Debug(ex, "TikTok WebView: could not read cookies for refresh (non-fatal — message already sent)");
+            }
         }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning(ex, "TikTok WebView: failed to read current cookies for refresh");
-            return null;
-        }
+        return null;
     }
 
     // ── JS Promise execution helper ───────────────────────────────────────────
