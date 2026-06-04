@@ -11,3 +11,4 @@ compatibility_date = "2025-01-01"
 #   TWITCH_CLIENT_SECRET
 #   KICK_CLIENT_ID
 #   KICK_CLIENT_SECRET
+#   EULER_SIGNING_KEY   (opcional — key compartida de Euler Stream para firmar TikTok LIVE)
